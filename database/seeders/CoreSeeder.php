@@ -11,7 +11,7 @@ use App\Models\Product;
 use App\Models\User;
 use App\Models\StockLevel;
 use App\Models\Role;
-use App\Models\Package; // <— PENTING: cuma Package, bukan Unit
+use App\Models\Package;
 
 class CoreSeeder extends Seeder
 {
@@ -199,7 +199,7 @@ class CoreSeeder extends Seeder
 
         /*
          * ===========================
-         *  PRODUCTS (sesuai tabel)
+         *  PRODUCTS
          * ===========================
          */
 
@@ -391,7 +391,10 @@ class CoreSeeder extends Seeder
          * ===========================
          */
 
-        $roleAdmin     = Role::where('slug', 'admin')->first();
+        $roleAdmin = Role::whereIn('slug', ['superadmin', 'admin'])
+            ->orderByRaw("FIELD(slug, 'superadmin', 'admin')")
+            ->first();
+
         $roleWarehouse = Role::where('slug', 'warehouse')->first();
         $roleSales     = Role::where('slug', 'sales')->first();
 
@@ -483,7 +486,7 @@ class CoreSeeder extends Seeder
         ];
 
         foreach ($allProducts as $product) {
-            if (!$product) {
+            if (! $product) {
                 continue;
             }
 

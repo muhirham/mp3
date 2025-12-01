@@ -12,43 +12,51 @@ class RoleSeeder extends Seeder
         $items = collect(config('menu.items', []));
 
         if ($items->isEmpty()) {
-            // fallback statis kalau config/menu.php belum kepasang
+            // Fallback statis kalau config/menu.php belum kepasang
             $adminKeys = [
-                'warehouses','categories','suppliers','packages','products',
-                'restock_request_ap','po','transactions','reports','users','roles',
+                'products', 'packages', 'categories', 'suppliers',
+                'stock_adjustments',
+                'warehouses', 'wh_stocklevel', 'wh_restock',
+                'goodreceived', 'wh_issue', 'wh_reconcile', 'wh_sales_reports',
+                'sales_daily', 'sales_return',
+                'po', 'restock_request_ap', 'company',
+                'users', 'roles',
             ];
 
             $warehouseKeys = [
-                'wh_stocklevel','wh_restock','wh_issue','wh_reconcile','wh_sales_reports',
+                'wh_restock', 'warehouses', 'wh_stocklevel',
+                'goodreceived', 'wh_issue', 'wh_reconcile', 'wh_sales_reports',
             ];
 
             $salesKeys = [
-                'sales_daily','sales_return',
+                'sales_daily', 'sales_return',
             ];
         } else {
-            // ambil dari registry menu
-            $adminKeys     = $items->pluck('key')->unique()->values()->all();
-            $warehouseKeys = $items->where('group', 'warehouse')->pluck('key')->unique()->values()->all();
-            $salesKeys     = $items->where('group', 'sales')->pluck('key')->unique()->values()->all();
+            // Ambil dari registry menu
+            $adminKeys = $items->pluck('key')->unique()->values()->all();
+            $warehouseKeys = $items->where('group', 'warehouse')
+                ->pluck('key')->unique()->values()->all();
+            $salesKeys = $items->where('group', 'sales')
+                ->pluck('key')->unique()->values()->all();
         }
 
         $rows = [
             [
-                'slug'       => 'admin',
+                'slug'       => 'superadmin',
                 'name'       => 'Administrator',
-                'home_route' => 'admin.dashboard',      // <- landing page admin
+                'home_route' => 'admin.dashboard',
                 'menu_keys'  => $adminKeys,
             ],
             [
                 'slug'       => 'warehouse',
                 'name'       => 'Warehouse',
-                'home_route' => 'warehouse.dashboard',  // <- landing page warehouse
+                'home_route' => 'warehouse.dashboard',
                 'menu_keys'  => $warehouseKeys,
             ],
             [
                 'slug'       => 'sales',
                 'name'       => 'Sales',
-                'home_route' => 'sales.dashboard',      // <- landing page sales
+                'home_route' => 'sales.dashboard',
                 'menu_keys'  => $salesKeys,
             ],
         ];
