@@ -13,6 +13,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use App\Models\Company;
+
 
 class GoodReceivedController extends Controller
 {
@@ -173,6 +175,11 @@ class GoodReceivedController extends Controller
 
         $suppliers = Supplier::orderBy('name')->get(['id', 'name']);
 
+        $company = Company::where('is_default', true)
+        ->where('is_active', true)
+        ->first();
+
+
         return view('admin.masterdata.goodReceived', compact(
             'pos',
             'q',
@@ -182,7 +189,8 @@ class GoodReceivedController extends Controller
             'warehouseId',
             'dateFrom',
             'dateTo',
-            'deleteRequests'
+            'deleteRequests',
+            'company'   
         ));
     }
 

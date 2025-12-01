@@ -384,22 +384,81 @@
 
         <div class="modal-body pt-0">
           {{-- HEADER --}}
-          <div class="border rounded p-3 mb-3">
-            <div class="d-flex justify-content-between align-items-start">
-              <div>
-                <div class="text-uppercase small text-muted mb-1">PO Code</div>
-                <div class="fs-5 fw-bold">{{ $po->po_code }}</div>
-                <div class="small text-muted">
-                  Terakhir diterima: {{ $lastReceiveAt }}
+        <div class="border rounded p-3 mb-3">
+          <div class="d-flex justify-content-between align-items-start">
+            {{-- Kiri: PO code + info gudang & penerima --}}
+            <div class="flex-grow-1 me-3">
+              <div class="text-uppercase small text-muted mb-1">PO Code</div>
+              <div class="fs-5 fw-bold">{{ $po->po_code }}</div>
+              <div class="small text-muted">
+                Terakhir diterima: {{ $lastReceiveAt }}
+              </div>
+
+              {{-- DEPO + penerima di bawah PO --}}
+              <div class="small mt-3">
+                <div class="fw-semibold">{{ $warehouseLabelModal }}</div>
+                <div>
+                  Diterima oleh:
+                  <strong>{{ $lastReceiver }}</strong>
                 </div>
               </div>
-              <div class="text-end small">
+            </div>
+
+            {{-- Kanan: Company profile saja --}}
+            <div class="text-end small" style="min-width:260px;">
+              @if(isset($company) && $company)
+                @php
+                  $logoSmall = $company->logo_small_path ?: $company->logo_path;
+                @endphp
+
+                @if($logoSmall)
+                  <img src="{{ asset('storage/'.$logoSmall) }}"
+                      alt="logo company"
+                      style="height: 48px; margin-bottom: 6px;">
+                @endif
+
+                <div class="fw-bold">{{ $company->name }}</div>
+
+                @if($company->address)
+                  <div>{{ $company->address }}</div>
+                @endif
+
+                @if($company->city || $company->province)
+                  <div>
+                    {{ $company->city }}
+                    @if($company->city && $company->province) - @endif
+                    {{ $company->province }}
+                  </div>
+                @endif
+
+                @if($company->phone || $company->email)
+                  <div>
+                    @if($company->phone)
+                      Tel: {{ $company->phone }}
+                    @endif
+                    @if($company->phone && $company->email)
+                      &nbsp;|&nbsp;
+                    @endif
+                    @if($company->email)
+                      {{ $company->email }}
+                    @endif
+                  </div>
+                @endif
+
+                @if($company->website)
+                  <div>{{ $company->website }}</div>
+                @endif
+
+                @if($company->tax_number)
+                  <div>NPWP: {{ $company->tax_number }}</div>
+                @endif
+              @else
                 <div class="fw-bold">{{ config('app.name', 'Inventory System') }}</div>
-                <div>{{ $warehouseLabelModal }}</div>
-                <div>Diterima oleh: <strong>{{ $lastReceiver }}</strong></div>
-              </div>
+              @endif
             </div>
           </div>
+        </div>
+
 
           {{-- INFO PO --}}
           <div class="row mb-2">
