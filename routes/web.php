@@ -17,11 +17,8 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\PreOController;
 use App\Http\Controllers\Admin\RestockApprovalController;
 use App\Http\Controllers\Admin\RoleController;
-use App\Http\Controllers\Admin\ProductStockController;
 use App\Http\Controllers\Admin\GoodReceivedController; 
 use App\Http\Controllers\Admin\StockAdjustmentController;
-
-use App\Http\Controllers\GrDeleteRequestController;
 // WAREHOUSE
 use App\Http\Controllers\Warehouse\WarehouseDashboardController;
 use App\Http\Controllers\Warehouse\SalesController as WhSalesController;
@@ -207,9 +204,7 @@ Route::middleware('auth')->group(function () {
         ->middleware('menu:goodreceived');
         
     // Halaman daftar permohonan
-    Route::get('/good-received/delete-requests',[GrDeleteRequestController::class, 'index'])
-    ->name('goodreceived.delete-requests.index')
-    ->middleware('menu:goodreceived_delete');
+
 
     // APPROVE
 

@@ -35,13 +35,6 @@ return [
             'icon'  => 'bx bx-store-alt',
         ],
         [
-            'key'   => 'stockproducts',
-            'label' => 'Stock Products',
-            'route' => 'stockproducts.index',   // nanti kamu isi routenya
-            'group' => 'inventory',
-            'icon'  => 'bx bx-archive',
-        ],
-        [
             'key'   => 'stock_adjustments',
             'label' => 'Stock Adjustments',
             'route' => 'stock-adjustments.index',
@@ -70,13 +63,6 @@ return [
             'route' => 'goodreceived.index',
             'group' => 'warehouse',
             'icon'  => 'bx bx-download',
-        ],
-        [
-            'key'   => 'goodreceived_delete',
-            'label' => 'GR Delete Requests',
-            'route' => 'goodreceived.delete-requests.index',
-            'group' => 'warehouse',
-            'icon'  => 'bx bx-trash',
         ],
         [
             'key'   => 'wh_issue',
