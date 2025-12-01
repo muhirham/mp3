@@ -19,6 +19,7 @@ use App\Http\Controllers\Admin\RestockApprovalController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\GoodReceivedController; 
 use App\Http\Controllers\Admin\StockAdjustmentController;
+use App\Http\Controllers\Admin\CompanyController;
 // WAREHOUSE
 use App\Http\Controllers\Warehouse\WarehouseDashboardController;
 use App\Http\Controllers\Warehouse\SalesController as WhSalesController;
@@ -204,6 +205,29 @@ Route::middleware('auth')->group(function () {
         ->middleware('menu:goodreceived');
         
     // Halaman daftar permohonan
+    // ================== MASTER COMPANY ==================
+
+    // Halaman list + form tambah / edit via modal
+    Route::get('/companies', [CompanyController::class, 'index'])
+        ->name('companies.index')
+        ->middleware('menu:company');
+
+    // Simpan company baru
+    Route::post('/companies', [CompanyController::class, 'store'])
+        ->name('companies.store')
+        ->middleware('menu:company');
+
+    // Update company (form di modal)
+    Route::put('/companies/{company}', [CompanyController::class, 'update'])
+        ->name('companies.update')
+        ->middleware('menu:company');
+
+    // Hapus (soft delete) company
+    Route::delete('/companies/{company}', [CompanyController::class, 'destroy'])
+        ->name('companies.destroy')
+        ->middleware('menu:company');
+
+
 
 
     // APPROVE
