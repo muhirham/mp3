@@ -3,13 +3,13 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-
 use App\Models\User;
 use App\Models\Role;
 use App\Models\Warehouse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class UserController extends Controller
@@ -48,6 +48,8 @@ class UserController extends Controller
             'username'     => ['required','alpha_dash','max:150','unique:users,username'],
             'email'        => ['required','email','max:190','unique:users,email'],
             'phone'        => ['nullable','string','max:20','unique:users,phone'],
+            'position'     => ['nullable','string','max:100'],              // << baru
+            'signature'    => ['nullable','image','mimes:jpg,jpeg,png,webp','max:2048'], // << baru
             'password'     => ['required','confirmed','min:6'],
             'roles'        => ['array','min:1'],
             'roles.*'      => ['string','exists:roles,slug'],
@@ -74,10 +76,31 @@ class UserController extends Controller
         // convert slug → role_id
         $roleIds = Role::whereIn('slug', $roleSlugs)->pluck('id')->all();
 
-        $payload = collect($data)->only(['name','username','email','phone','warehouse_id','status'])->toArray();
+        // handle upload signature (optional)
+        $signaturePath = null;
+        if ($request->hasFile('signature')) {
+            $signaturePath = $request->file('signature')->store('signatures', 'public');
+        }
+
+        // payload ke tabel users
+        $payload = collect($data)->only([
+            'name',
+            'username',
+            'email',
+            'phone',
+            'position',
+            'warehouse_id',
+            'status',
+        ])->toArray();
+
         $payload['password'] = Hash::make($data['password']);
 
+        if ($signaturePath) {
+            $payload['signature_path'] = $signaturePath;
+        }
+
         DB::transaction(function () use ($payload, $roleIds) {
+            /** @var \App\Models\User $user */
             $user = User::create($payload);
             $user->roles()->sync($roleIds);
         });
@@ -95,6 +118,8 @@ class UserController extends Controller
             'username'     => ['required','alpha_dash','max:150', Rule::unique('users','username')->ignore($user->id)],
             'email'        => ['required','email','max:190', Rule::unique('users','email')->ignore($user->id)],
             'phone'        => ['nullable','string','max:20', Rule::unique('users','phone')->ignore($user->id)],
+            'position'     => ['nullable','string','max:100'],              // << baru
+            'signature'    => ['nullable','image','mimes:jpg,jpeg,png,webp','max:2048'], // << baru
             'password'     => ['nullable','confirmed','min:6'],
             'roles'        => ['array','min:1'],
             'roles.*'      => ['string','exists:roles,slug'],
@@ -120,11 +145,33 @@ class UserController extends Controller
         // slug → id
         $roleIds = Role::whereIn('slug', $roleSlugs)->pluck('id')->all();
 
-        $payload = collect($data)->only(['name','username','email','phone','warehouse_id','status'])->toArray();
+        // handle upload signature (optional)
+        $signaturePath = $user->signature_path;
+        if ($request->hasFile('signature')) {
+            // hapus file lama kalau ada
+            if ($signaturePath) {
+                Storage::disk('public')->delete($signaturePath);
+            }
+            $signaturePath = $request->file('signature')->store('signatures', 'public');
+        }
+
+        // payload ke users
+        $payload = collect($data)->only([
+            'name',
+            'username',
+            'email',
+            'phone',
+            'position',
+            'warehouse_id',
+            'status',
+        ])->toArray();
 
         if (!empty($data['password'])) {
             $payload['password'] = Hash::make($data['password']);
         }
+
+        // tetap set signature_path (bisa null / tetap lama / baru)
+        $payload['signature_path'] = $signaturePath;
 
         DB::transaction(function () use ($user, $payload, $roleIds) {
             $user->update($payload);
@@ -140,7 +187,14 @@ class UserController extends Controller
         if ($me && $me->id === $user->id) {
             return response()->json(['error' => "You can't delete yourself."], 422);
         }
+
+        // hapus file signature kalau ada
+        if ($user->signature_path) {
+            Storage::disk('public')->delete($user->signature_path);
+        }
+
         $user->delete();
+
         return response()->json(['success' => 'User deleted.']);
     }
 
@@ -156,7 +210,14 @@ class UserController extends Controller
         $ids = array_values(array_filter($ids, fn ($id) => $id !== ($me?->id)));
 
         DB::transaction(function () use ($ids) {
-            User::whereIn('id', $ids)->delete();
+            $users = User::whereIn('id', $ids)->get();
+
+            foreach ($users as $user) {
+                if ($user->signature_path) {
+                    Storage::disk('public')->delete($user->signature_path);
+                }
+                $user->delete();
+            }
         });
 
         return response()->json(['success' => 'Selected users deleted.']);

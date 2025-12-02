@@ -17,13 +17,15 @@ class User extends Authenticatable
         'username',
         'email',
         'phone',
+        'position',        // <— baru
+        'signature_path',  // <— baru (path file tanda tangan)
         'password',
         'warehouse_id',
         'status',
-        'role', // legacy (boleh dipakai fallback)
+        'role',            // legacy (kalau masih ada kolom lama)
     ];
 
-    protected $hidden = ['password','remember_token'];
+    protected $hidden = ['password', 'remember_token'];
 
     protected $casts  = [
         'email_verified_at' => 'datetime',
@@ -49,7 +51,7 @@ class User extends Authenticatable
     public function primaryRole()
     {
         return $this->roles()
-            ->select('slug','home_route')
+            ->select('slug', 'home_route')
             ->orderByRaw("FIELD(slug,'admin','warehouse','sales')")
             ->first();
     }
