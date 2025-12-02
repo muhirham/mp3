@@ -9,6 +9,7 @@ use App\Models\User;
 
 
 
+
 class PurchaseOrder extends Model
 {
     protected $fillable = [
@@ -83,6 +84,18 @@ public function items()
     {
         // asumsi kolom di tabel purchase_orders = warehouse_id (nullable)
         return $this->belongsTo(Warehouse::class);
+    }
+
+       // Approval lapis 1: Procurement
+    public function procurementApprover()
+    {
+        return $this->belongsTo(User::class, 'approved_by_procurement');
+    }
+
+    // Approval lapis 2: CEO
+    public function ceoApprover()
+    {
+        return $this->belongsTo(User::class, 'approved_by_ceo');
     }
 
 }

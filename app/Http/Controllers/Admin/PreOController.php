@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Company;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\Supplier;
@@ -12,6 +13,7 @@ use App\Models\RestockReceipt;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Barryvdh\DomPDF\Facade\Pdf; 
 
 class PreOController extends Controller
 {
@@ -69,6 +71,10 @@ class PreOController extends Controller
 
         return view('admin.po.index', compact('pos', 'q', 'status'));
     }
+
+
+
+
 
     /** EDIT PO (manual / dari Restock Request) */
 /** EDIT PO (manual / dari Restock Request) */
@@ -801,9 +807,34 @@ public function edit(PurchaseOrder $po)
         }
     }
 
-    public function exportPdf(PurchaseOrder $po)
+        public function exportPdf(PurchaseOrder $po)
     {
-        return back()->with('info', 'Export PDF belum diaktifkan.');
+        // Company default buat kop surat
+        $company = Company::where('is_default', true)
+            ->where('is_active', true)
+            ->first();
+
+        // Load relasi yang dibutuhkan
+        $po->load([
+            'supplier',
+            'items.product',
+
+
+        ]);
+
+        // Flag draft: nanti kalau approval_status != approved, bisa kasih watermark DRAFT
+        $isDraft = $po->approval_status !== 'approved';
+
+        $pdf = Pdf::loadView('admin.po.print', [
+                'po'      => $po,
+                'company' => $company,
+                'isDraft' => $isDraft,
+            ])
+            ->setPaper('A4', 'portrait');
+
+        // Bisa stream atau download
+        return $pdf->stream('PO-'.$po->po_code.'.pdf');
+        // return $pdf->download('PO-'.$po->po_code.'.pdf');
     }
 
     public function exportExcel(PurchaseOrder $po)
