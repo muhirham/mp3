@@ -80,9 +80,8 @@
                     <th>USERNAME</th>
                     <th>EMAIL</th>
                     <th>PHONE</th>
-                    {{-- kalau sudah ada kolom POSITION tinggal aktifin baris ini
                     <th>POSITION</th>
-                    --}}
+                    <th>SIGNATURE</th>
                     <th>ROLES</th>
                     <th>WAREHOUSE</th>
                     <th>STATUS</th>
@@ -94,10 +93,11 @@
                 <tbody>
                 @forelse($users as $u)
                     @php
-                        $roleSlugs = $u->roles->pluck('slug')->all();
-                        $roleNames = $u->roles->pluck('name')->all();
-                        $roleText  = implode(', ', $roleNames);
-                        $rolesAttr = implode(',', $roleSlugs);
+                        $roleSlugs    = $u->roles->pluck('slug')->all();
+                        $roleNames    = $u->roles->pluck('name')->all();
+                        $roleText     = implode(', ', $roleNames);
+                        $rolesAttr    = implode(',', $roleSlugs);
+                        $signatureUrl = $u->signature_path ? asset('storage/'.$u->signature_path) : null;
                     @endphp
                     <tr>
                         <td><input class="form-check-input row-check" type="checkbox"></td>
@@ -106,7 +106,16 @@
                         <td>{{ $u->username }}</td>
                         <td>{{ $u->email }}</td>
                         <td>{{ $u->phone ?? '-' }}</td>
-                        {{-- <td>{{ $u->position ?? '-' }}</td> --}}
+                        <td>{{ $u->position ?? '-' }}</td>
+                        <td class="text-center">
+                            @if($signatureUrl)
+                                <a href="#" class="js-signature" data-img="{{ $signatureUrl }}" title="Lihat tanda tangan">
+                                    <img src="{{ $signatureUrl }}" alt="signature" style="height:24px;">
+                                </a>
+                            @else
+                                -
+                            @endif
+                        </td>
                         <td>{{ $roleText ?: '-' }}</td>
                         <td>{{ $u->warehouse?->warehouse_name ?? '-' }}</td>
                         <td>{{ ucfirst($u->status) }}</td>
@@ -122,7 +131,7 @@
                                    data-username="{{ $u->username }}"
                                    data-email="{{ $u->email }}"
                                    data-phone="{{ $u->phone }}"
-                                   {{-- data-position="{{ $u->position }}" --}}
+                                   data-position="{{ $u->position }}"
                                    data-roles="{{ $rolesAttr }}"
                                    data-status="{{ $u->status }}"
                                    data-warehouse_id="{{ $u->warehouse_id ?? '' }}">
@@ -140,7 +149,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="12" class="text-center text-muted">No data</td>
+                        <td colspan="14" class="text-center text-muted">No data</td>
                     </tr>
                 @endforelse
                 </tbody>
@@ -208,7 +217,7 @@
                 <div class="mb-3">
                     <label class="form-label text-white">Signature (optional)</label>
                     <input type="file" name="signature" class="form-control bg-transparent text-white border-secondary">
-                    <small class="text-white-50">Format: jpg, jpeg, png, webp. Max 2MB.</small>
+                    <small class="text-white-50">Format: jpg, jpeg, png, webp — max 2MB.</small>
                 </div>
 
                 <div class="row g-2">
@@ -318,7 +327,7 @@
                 <div class="mb-3">
                     <label class="form-label text-white">Signature (optional)</label>
                     <input type="file" name="signature" class="form-control bg-transparent text-white border-secondary">
-                    <small class="text-white-50">Biarkan kosong kalau tidak ingin mengubah tanda tangan.</small>
+                    <small class="text-white-50">Kosongkan bila tidak ingin mengubah tanda tangan.</small>
                 </div>
 
                 <div class="row g-2">
@@ -386,16 +395,22 @@
 
     /* Kecilkan tampilan tabel Users */
     #tblUsers {
-        font-size: 0.75rem; /* kira2 12px */
+        font-size: 0.75rem;
     }
-
     #tblUsers thead th,
     #tblUsers tbody td {
         white-space: nowrap;
-        padding: .35rem .5rem;
+        padding: .35rem .45rem;
     }
 
-    /* Kecilkan kontrol filter + paging */
+    /* kolom signature kecil & center */
+    #tblUsers th:nth-child(8),
+    #tblUsers td:nth-child(8) {
+        text-align: center;
+        width: 70px;
+    }
+
+    /* kontrol filter/paging kecil */
     #pageLength,
     #f_role,
     #f_status,
@@ -404,7 +419,6 @@
         height: calc(1.5em + .5rem + 2px);
         padding: .25rem .5rem;
     }
-
     .dataTables_info,
     .dataTables_paginate {
         font-size: 0.75rem;
@@ -424,7 +438,7 @@ $(function () {
     const table = $('#tblUsers').DataTable({
         order: [[1,'asc']],
         columnDefs: [
-            { targets: [0,11], orderable:false },
+            { targets: [0,13], orderable:false }, // checkbox + actions
             { targets: 1, type: 'num' }
         ],
         pageLength: 10,
@@ -437,38 +451,56 @@ $(function () {
     $('#searchUser').on('keyup', function(){ table.search(this.value).draw(); });
     $('#pageLength').on('change', function(){ table.page.len(parseInt(this.value,10)).draw(); });
 
+    // filter role (kolom ROLES sekarang index 8)
     $('#f_role').on('change', function(){
         const v = this.value;
-        table.column(6).search(v ? v : '', true, false).draw();
+        table.column(8).search(v ? v : '', true, false).draw();
     });
 
+    // filter status (kolom STATUS sekarang index 10)
     $('#f_status').on('change', function(){
         const v = this.value;
-        table.column(8).search(v ? '^'+v+'$' : '', true, false).draw();
+        table.column(10).search(v ? '^'+v+'$' : '', true, false).draw();
     });
 
     $('#checkAll').on('change', function(){
         $('#tblUsers tbody .row-check').prop('checked', this.checked);
     });
 
-    // Export CSV
+    // Preview tanda tangan (klik thumbnail)
+    $(document).on('click', '.js-signature', function(e){
+        e.preventDefault();
+        const img = this.dataset.img;
+        if (!img) return;
+        Swal.fire({
+            title: 'Signature',
+            imageUrl: img,
+            imageAlt: 'Signature',
+            imageWidth: 450,
+            showCloseButton: true,
+            showConfirmButton: false
+        });
+    });
+
+    // Export CSV (ID, Name, Username, Email, Phone, Position, Roles, Warehouse, Status, Created, Updated)
     $('#btnExportCSV').on('click', function(e){
         e.preventDefault();
-        const headers = ['ID','Name','Username','Email','Phone','Roles','Warehouse','Status','Created','Updated'];
+        const headers = ['ID','Name','Username','Email','Phone','Position','Roles','Warehouse','Status','Created','Updated'];
         let csv = headers.join(',') + '\n';
         $('#tblUsers tbody tr:visible').each(function(){
             const t = $(this).find('td');
             csv += [
-                t.eq(1).text().trim(),
-                t.eq(2).text().trim(),
-                t.eq(3).text().trim(),
-                t.eq(4).text().trim(),
-                t.eq(5).text().trim(),
-                t.eq(6).text().trim(),
-                t.eq(7).text().trim(),
-                t.eq(8).text().trim(),
-                t.eq(9).text().trim(),
-                t.eq(10).text().trim()
+                t.eq(1).text().trim(),  // ID
+                t.eq(2).text().trim(),  // Name
+                t.eq(3).text().trim(),  // Username
+                t.eq(4).text().trim(),  // Email
+                t.eq(5).text().trim(),  // Phone
+                t.eq(6).text().trim(),  // Position
+                t.eq(8).text().trim(),  // Roles
+                t.eq(9).text().trim(),  // Warehouse
+                t.eq(10).text().trim(), // Status
+                t.eq(11).text().trim(), // Created
+                t.eq(12).text().trim()  // Updated
             ].join(',') + '\n';
         });
         const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
@@ -497,7 +529,7 @@ $(function () {
     const modalEl = document.getElementById('glassEditUser');
     const modal   = modalEl ? new bootstrap.Modal(modalEl) : null;
     const form    = document.getElementById('formEditUser');
-    const baseUrl = @json(url('admin/users'));
+    const baseUrl = @json(url('users'));
 
     function toggleEditWarehouse() {
         @if($isWarehouseUser)
