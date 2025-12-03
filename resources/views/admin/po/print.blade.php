@@ -35,6 +35,7 @@
         .mt-20 { margin-top: 20px; }
 
         .small { font-size: 10px; }
+        .text-muted { color: #777; } {{-- biar class text-muted kepake --}}
 
         .draft-watermark {
             position: fixed;
@@ -70,7 +71,7 @@
             </td>
             <td style="vertical-align: top;">
                 <div style="font-size: 16px; font-weight:bold; margin-bottom: 3px;">
-                    {{ $company->name }}
+                    {{ $company->legal_name }}
                 </div>
                 @if($company->address)
                     <div>{{ $company->address }}</div>
@@ -120,39 +121,95 @@
 <table>
     <tr>
         {{-- Supplier --}}
-        <td style="width: 50%; vertical-align: top;">
+        @php
+    // fallback: kalau variabel $supplier nggak dikirim dari controller,
+    // pakai relasi $po->supplier
+    $sup = $supplier ?? ($po->supplier ?? null);
+@endphp
+
+@php
+    // Kumpulin nama supplier dari PO dan dari item-itemnya
+    $supplierNames = collect();
+    $supAddress    = null;
+    $supPhone      = null;
+    $supEmail      = null;
+
+    // 1. Kalau PO punya supplier_id, pakai itu dulu
+    if ($po->supplier) {
+        $supplierNames->push($po->supplier->name);
+        $supAddress = $po->supplier->address;
+        $supPhone   = $po->supplier->phone;
+        $supEmail   = $po->supplier->email;
+    }
+
+    // 2. Tambahin supplier dari product di item-item PO
+    $itemSuppliers = $po->items
+        ->map(fn ($it) => $it->product?->supplier)
+        ->filter(); // buang null
+
+    if ($itemSuppliers->isNotEmpty()) {
+        if ($supplierNames->isEmpty()) {
+            // kalau tadi belum ada, alamat/telepon ambil dari supplier pertama
+            $firstSup   = $itemSuppliers->first();
+            $supAddress = $firstSup->address ?? null;
+            $supPhone   = $firstSup->phone ?? null;
+            $supEmail   = $firstSup->email ?? null;
+        }
+
+        $supplierNames = $supplierNames
+            ->merge($itemSuppliers->pluck('name'))
+            ->filter()
+            ->unique()
+            ->values();
+    }
+
+    // 3. Label tampilannya
+    if ($supplierNames->isEmpty()) {
+        $supplierLabel = '-';
+    } elseif ($supplierNames->count() === 1) {
+        $supplierLabel = $supplierNames->first();
+    } else {
+        $supplierLabel = $supplierNames->first().' + '.($supplierNames->count() - 1).' supplier';
+    }
+@endphp
+
+        <td style="width:50%; vertical-align:top;">
             <table>
                 <tr>
-                    <td style="width: 30%;"><strong>Supplier</strong></td>
-                    <td style="width: 5%;">:</td>
-                    <td>{{ $supplier->name ?? '-' }}</td>
+                    <td style="width:30%;"><strong>Supplier</strong></td>
+                    <td style="width:5%;">:</td>
+                    <td>{{ $supplierLabel }}</td>
                 </tr>
-                @if($supplier?->address)
+
+                @if(!empty($supAddress))
                     <tr>
                         <td><strong>Alamat</strong></td>
                         <td>:</td>
-                        <td>{{ $supplier->address }}</td>
+                        <td>{{ $supAddress }}</td>
                     </tr>
                 @endif
-                @if($supplier?->phone || $supplier?->email)
+
+                @if(!empty($supPhone) || !empty($supEmail))
                     <tr>
                         <td><strong>Kontak</strong></td>
                         <td>:</td>
                         <td>
-                            @if($supplier?->phone)
-                                {{ $supplier->phone }}
+                            @if(!empty($supPhone))
+                                {{ $supPhone }}
                             @endif
-                            @if($supplier?->phone && $supplier?->email)
+                            @if(!empty($supPhone) && !empty($supEmail))
                                 &nbsp;|&nbsp;
                             @endif
-                            @if($supplier?->email)
-                                {{ $supplier->email }}
+                            @if(!empty($supEmail))
+                                {{ $supEmail }}
                             @endif
                         </td>
                     </tr>
                 @endif
             </table>
         </td>
+
+
 
         {{-- Info PO --}}
         <td style="width: 50%; vertical-align: top;">
@@ -208,16 +265,13 @@
             <th style="width: 5%;">No</th>
             <th>Nama Barang</th>
             <th style="width: 10%;">Qty</th>
-            <th style="width: 10%;">Satuan</th>
             <th style="width: 15%;" class="text-right">Harga Satuan</th>
             <th style="width: 15%;" class="text-right">Discount</th>
             <th style="width: 15%;" class="text-right">Subtotal</th>
         </tr>
     </thead>
     <tbody>
-        @php
-            $rowNo = 1;
-        @endphp
+        @php $rowNo = 1; @endphp
         @foreach($po->items as $item)
             @php
                 $product   = $item->product;
@@ -235,14 +289,14 @@
                     {{ $product->name ?? '-' }}<br>
                     <span class="small text-muted">
                         {{ $product->product_code ?? '' }}
+                        @if($product?->unit)
+                            &nbsp;|&nbsp;Unit: {{ $product->unit }}
+                        @endif
                     </span>
                 </td>
                 <td class="text-center">{{ $item->qty_ordered }}</td>
-                <td class="text-center">
-                    {{ $product->unit ?? '-' ?? '' }}
-                </td>
                 <td class="text-right">{{ $formatRupiah($item->unit_price) }}</td>
-                <td class="text-right">{{ $discountLabel }}</td>
+                <td class="text-right">{{ $discountLabel ?: '-' }}</td>
                 <td class="text-right">{{ $formatRupiah($item->line_total) }}</td>
             </tr>
         @endforeach
@@ -295,15 +349,15 @@
         <td class="text-center" style="width: 33%;">
             <div class="small">Dibuat oleh</div>
             <div style="height: 50px; margin-top: 5px; margin-bottom: 5px;">
-                @if($sign($po->creator))
-                    <img src="{{ $sign($po->creator) }}" style="height:45px;">
+                @if($sign($po->user))
+                    <img src="{{ $sign($po->user) }}" style="height:45px;">
                 @endif
             </div>
             <div style="font-weight:bold;">
-                {{ $po->creator->name ?? '________________' }}
+                {{ $po->user->name ?? '________________' }}
             </div>
             <div class="small">
-                {{ $po->creator->position ?? 'Pembuat PO' }}
+                {{ $po->user->position ?? 'Pembuat PO' }}
             </div>
         </td>
 

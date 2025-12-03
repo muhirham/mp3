@@ -178,8 +178,13 @@ Route::middleware('auth')->group(function () {
     Route::post('/po/{po}/cancel',    [PreOController::class,'cancel'])
         ->name('po.cancel')
         ->middleware('menu:po');
+        
+        Route::post('/{po}/approve',      [PreOController::class, 'approve'])
+        ->name('po.approve')
+        ->middleware('menu:po');
 
     // === Goods Received dari PO MANUAL (1 GR per PO) ===
+
     
     Route::get('/po/{po}/pdf',        [PreOController::class,'exportPdf'])
     ->name('po.pdf')

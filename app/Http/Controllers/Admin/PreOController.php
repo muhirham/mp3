@@ -19,298 +19,329 @@ class PreOController extends Controller
 {
     /** LIST PO */
     public function index(Request $request)
-    {
-        $q      = trim($request->get('q', ''));
-        $status = $request->get('status');
+        {
+            $q      = trim($request->get('q', ''));
+            $status = $request->get('status');
 
-        $perPage = 10;
+            $perPage = 10;
 
-        $pos = PurchaseOrder::with([
-                'supplier',
+            $me    = auth()->user();
+            $roles = $me?->roles ?? collect();
+
+            $isProcurement = $roles->contains('slug', 'procurement') || $roles->contains('slug', 'superadmin');
+            $isCeo         = $roles->contains('slug', 'ceo') || $roles->contains('slug', 'superadmin');
+
+            $pos = PurchaseOrder::with([
+                    'supplier',
+                    'items.product.supplier',
+                    'items.warehouse',
+                    'restockReceipts',
+                    'user',
+                    'procurementApprover',
+                    'ceoApprover',
+                ])
+                ->withCount('items')
+                ->when($q, function ($qq) use ($q) {
+                    $qq->where('po_code', 'like', "%{$q}%");
+                })
+                ->when($status, fn ($qq) => $qq->where('status', $status))
+                ->orderByDesc('id')
+                ->paginate($perPage)
+                ->appends($request->query());
+
+            // default gr_count = 0
+            $pos->getCollection()->each(function ($po) {
+                $po->gr_count = 0;
+            });
+
+            if (
+                Schema::hasTable('restock_receipts') &&
+                Schema::hasColumn('restock_receipts', 'purchase_order_id')
+            ) {
+                $poIds = $pos->pluck('id')->all();
+
+                if (! empty($poIds)) {
+                    $grCounts = DB::table('restock_receipts')
+                        ->select('purchase_order_id', DB::raw('COUNT(*) as c'))
+                        ->whereIn('purchase_order_id', $poIds)
+                        ->groupBy('purchase_order_id')
+                        ->pluck('c', 'purchase_order_id');
+
+                    $pos->getCollection()->transform(function ($po) use ($grCounts) {
+                        $po->gr_count = (int) ($grCounts[$po->id] ?? 0);
+                        return $po;
+                    });
+                }
+            }
+
+            // AJAX lu sekarang narik full view dan ngambil #po-table-wrapper sendiri,
+            // jadi gak perlu return partial _table lagi.
+
+            return view('admin.po.index', compact(
+                'pos',
+                'q',
+                'status',
+                'isProcurement',
+                'isCeo'
+            ));
+    }
+        /** EDIT PO (manual / dari Restock Request) */
+    public function edit(PurchaseOrder $po)
+        {
+            $po->load([
                 'items.product.supplier',
-                'items.warehouse',          // <<=== tambah warehouse
-                'restockReceipts',
-            ])
-            ->withCount('items')
-            ->when($q, function ($qq) use ($q) {
-                $qq->where('po_code', 'like', "%{$q}%");
-            })
-            ->when($status, fn ($qq) => $qq->where('status', $status))
-            ->orderByDesc('id')
-            ->paginate($perPage)
-            ->appends($request->query());
+                'items.warehouse',
+                'supplier',
+            ]);
 
-        // default gr_count = 0
-        $pos->getCollection()->each(function ($po) {
-            $po->gr_count = 0;
-        });
+            $suppliers  = Supplier::orderBy('name')->get(['id', 'name']);
+            $warehouses = Warehouse::orderBy('warehouse_name')->get(['id', 'warehouse_name']);
 
-        if (
-            Schema::hasTable('restock_receipts') &&
-            Schema::hasColumn('restock_receipts', 'purchase_order_id')
-        ) {
-            $poIds = $pos->pluck('id')->all();
+            $cols = ['id', 'product_code', 'name', 'supplier_id'];
+            if (Schema::hasColumn('products', 'purchase_price')) $cols[] = 'purchase_price';
+            if (Schema::hasColumn('products', 'buy_price'))      $cols[] = 'buy_price';
+            if (Schema::hasColumn('products', 'cost_price'))     $cols[] = 'cost_price';
+            if (Schema::hasColumn('products', 'selling_price'))  $cols[] = 'selling_price';
 
-            if (!empty($poIds)) {
-                $grCounts = DB::table('restock_receipts')
-                    ->select('purchase_order_id', DB::raw('COUNT(*) as c'))
-                    ->whereIn('purchase_order_id', $poIds)
-                    ->groupBy('purchase_order_id')
-                    ->pluck('c', 'purchase_order_id');
+            $products = Product::with('supplier:id,name')
+                ->orderBy('name')
+                ->get($cols);
 
-                $pos->getCollection()->transform(function ($po) use ($grCounts) {
-                    $po->gr_count = (int) ($grCounts[$po->id] ?? 0);
-                    return $po;
-                });
-            }
+            $isFromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
+            $isLocked      = $this->poIsLocked($po);
+
+            return view('admin.po.edit', compact(
+                'po',
+                'suppliers',
+                'warehouses',
+                'products',
+                'isFromRequest',
+                'isLocked'
+            ));
         }
 
-        if ($request->ajax()) {
-            return view('admin.po._table', compact('pos', 'q', 'status'));
-        }
-
-        return view('admin.po.index', compact('pos', 'q', 'status'));
-    }
-
-
-
-
-
-    /** EDIT PO (manual / dari Restock Request) */
-/** EDIT PO (manual / dari Restock Request) */
-public function edit(PurchaseOrder $po)
-{
-    // load relasi lengkap
-    $po->load([
-        'items.product.supplier',
-        'items.warehouse',
-        'supplier'
-    ]);
-
-    $suppliers  = Supplier::orderBy('name')->get(['id', 'name']);
-    $warehouses = Warehouse::orderBy('warehouse_name')->get(['id', 'warehouse_name']);
-
-    // siapkan kolom dinamis buat harga
-    $cols = ['id', 'product_code', 'name', 'supplier_id'];
-    if (Schema::hasColumn('products', 'purchase_price')) $cols[] = 'purchase_price';
-    if (Schema::hasColumn('products', 'buy_price'))      $cols[] = 'buy_price';
-    if (Schema::hasColumn('products', 'cost_price'))     $cols[] = 'cost_price';
-    if (Schema::hasColumn('products', 'selling_price'))  $cols[] = 'selling_price';
-
-    $products = Product::with('supplier:id,name')
-        ->orderBy('name')
-        ->get($cols);
-
-    // PO dari Request Restock atau manual?
-    $isFromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
-
-    // FLAG LOCK: sekarang pakai helper poIsLocked()
-    $isLocked = $this->poIsLocked($po);
-
-    return view('admin.po.edit', compact(
-        'po',
-        'suppliers',
-        'warehouses',
-        'products',
-        'isFromRequest',
-        'isLocked'
-    ));
-}
-
-
-
-        /** SIMPAN PERUBAHAN PO */
+                /** SIMPAN PERUBAHAN PO */
     public function update(Request $request, PurchaseOrder $po)
-    {
-        // kalau sudah locked (ORDERED + punya GR), tidak boleh diubah
-        if ($this->poIsLocked($po)) {
-            return back()->with(
-                'error',
-                'PO sudah ORDERED dan memiliki Goods Received, tidak dapat diubah.'
-            );
-        }
-
-        // === INFO AWAL: apakah PO ini awalnya FROM REQUEST? ===
-        $wasFromRequest = $po->items()
-            ->whereNotNull('request_id')
-            ->exists();
-
-        // simpan semua request_id lama (untuk ngecek mana item yang dihapus)
-        $oldRequestIds = [];
-        if (
-            $wasFromRequest &&
-            Schema::hasTable('purchase_order_items') &&
-            Schema::hasColumn('purchase_order_items', 'request_id') &&
-            Schema::hasTable('request_restocks')
-        ) {
-            $oldRequestIds = DB::table('purchase_order_items')
-                ->where('purchase_order_id', $po->id)
-                ->whereNotNull('request_id')
-                ->pluck('request_id')
-                ->unique()
-                ->all();
-        }
-
-        // === VALIDASI INPUT ===
-        $validated = $request->validate([
-            'supplier_id'           => ['nullable', 'exists:suppliers,id'],
-            'notes'                 => ['nullable', 'string'],
-
-            'items'                 => ['array'],
-            'items.*.id'            => ['nullable', 'integer', 'exists:purchase_order_items,id'],
-            'items.*.product_id'    => ['required', 'exists:products,id'],
-            'items.*.warehouse_id'  => ['nullable', 'exists:warehouses,id'],
-            'items.*.qty'           => ['required', 'integer', 'min:1'],
-            'items.*.unit_price'    => ['nullable', 'numeric', 'min:0'],
-            'items.*.discount_type' => ['nullable', 'in:percent,amount'],
-            'items.*.discount_value'=> ['nullable', 'numeric', 'min:0'],
-            'items.*.request_id'    => ['nullable', 'integer'],
-        ]);
-
-        DB::transaction(function () use ($validated, $po, $wasFromRequest) {
-            $po->supplier_id = $validated['supplier_id'] ?? null;
-            $po->notes       = $validated['notes'] ?? null;
-
-            $itemsInput    = $validated['items'] ?? [];
-
-            // === HARGA DEFAULT (buy / sell) ===
-            $productIds = collect($itemsInput)->pluck('product_id')->filter()->unique()->all();
-            $productPrices = collect();
-
-            if ($productIds) {
-                $cols = ['id'];
-                if (Schema::hasColumn('products', 'purchase_price')) $cols[] = 'purchase_price';
-                if (Schema::hasColumn('products', 'buy_price'))      $cols[] = 'buy_price';
-                if (Schema::hasColumn('products', 'cost_price'))     $cols[] = 'cost_price';
-                if (Schema::hasColumn('products', 'selling_price'))  $cols[] = 'selling_price';
-
-                $rows = Product::whereIn('id', $productIds)->get($cols);
-
-                $productPrices = $rows->mapWithKeys(function ($p) use ($wasFromRequest) {
-                    $buy  = (float)($p->purchase_price ?? $p->buy_price ?? $p->cost_price ?? 0);
-                    $sell = (float)($p->selling_price ?? 0);
-
-                    // FROM REQUEST  → pakai harga JUAL (kalau ada), fallback ke BUY
-                    // MANUAL        → pakai harga BELI, fallback ke SELL
-                    $price = $wasFromRequest
-                        ? ($sell ?: $buy)
-                        : ($buy  ?: $sell);
-
-                    return [$p->id => $price];
-                });
-            }
-
-            $existing = $po->items()->get()->keyBy('id');
-            $keepIds  = [];
-
-            $subtotal      = 0;
-            $discountTotal = 0;
-
-            foreach ($itemsInput as $row) {
-                if (empty($row['product_id']) || empty($row['qty'])) {
-                    continue;
-                }
-
-                // ambil / buat item baru
-                if (!empty($row['id']) && $existing->has($row['id'])) {
-                    $item = $existing->get($row['id']);
-                } else {
-                    $item = new PurchaseOrderItem();
-                    $item->purchase_order_id = $po->id;
-                }
-
-                $item->product_id  = $row['product_id'];
-                $item->qty_ordered = (int)($row['qty'] ?? 0);
-
-                // === WAREHOUSE ===
-                if ($wasFromRequest) {
-                    // FROM REQUEST → warehouse dari input (boleh dipilih untuk item tambahan)
-                    $item->warehouse_id = $row['warehouse_id'] ?? null;
-                } else {
-                    // PO MANUAL → TIDAK diikat ke warehouse, dianggap CENTRAL
-                    $item->warehouse_id = null;
-                }
-
-                // === HARGA ===
-                $rawPrice = array_key_exists('unit_price', $row) ? $row['unit_price'] : null;
-
-                if ($rawPrice === null || $rawPrice === '') {
-                    $price = (float)($productPrices[$row['product_id']] ?? 0);
-                } else {
-                    $price = (float)$rawPrice;
-                }
-
-                $item->unit_price = $price;
-
-                // === DISKON ===
-                $item->discount_type  = $row['discount_type'] ?: null;
-                $item->discount_value = (float)($row['discount_value'] ?? 0);
-
-                // request_id (kalau awalnya dari RF)
-                if (!empty($row['request_id']) || $item->request_id) {
-                    $item->request_id = $row['request_id'] ?? $item->request_id;
-                }
-
-                // HITUNG LINE TOTAL
-                $lineTotal = $item->qty_ordered * $item->unit_price;
-
-                if ($item->discount_type === 'percent') {
-                    $disc = $lineTotal * min(max($item->discount_value, 0), 100) / 100;
-                } elseif ($item->discount_type === 'amount') {
-                    $disc = min($item->discount_value, $lineTotal);
-                } else {
-                    $disc = 0;
-                }
-
-                $item->line_total = max($lineTotal - $disc, 0);
-                $item->save();
-
-                $keepIds[]      = $item->id;
-                $subtotal      += $lineTotal;
-                $discountTotal += $disc;
-            }
-
-            // hapus item yang nggak ada di form lagi
-            if (count($keepIds)) {
-                $po->items()->whereNotIn('id', $keepIds)->delete();
-            } else {
-                $po->items()->delete();
-            }
-
-            $po->subtotal       = $subtotal;
-            $po->discount_total = $discountTotal;
-            $po->grand_total    = $subtotal - $discountTotal;
-            $po->save();
-        });
-
-        // reload relasi items setelah transaksi selesai
-        $po->load('items');
-
-        // === SYNC KE REQUEST RESTOCK (update qty/harga, tambah item, note "cancelled" untuk yang dihapus) ===
-        $this->syncRequestsFromPo($po, $wasFromRequest, $oldRequestIds);
-
-        return back()->with('success', 'PO berhasil disimpan.');
-    }
-
-
-    /** SET PO → ORDERED  */
-/** SET PO → ORDERED  */
-        public function order(PurchaseOrder $po)
         {
             if ($this->poIsLocked($po)) {
-                return redirect()
-                    ->route('po.index')
-                    ->with('info', 'PO sudah ORDERED dan memiliki Goods Received, tidak dapat diubah statusnya.');
+                return back()->with(
+                    'error',
+                    'PO sudah ORDERED dan memiliki Goods Received, tidak dapat diubah.'
+                );
             }
 
-            $fromRequest = $po->items()->whereNotNull('request_id')->exists();
+            $wasFromRequest = $po->items()
+                ->whereNotNull('request_id')
+                ->exists();
 
-            // ===== PO DARI RESTOCK REQUEST =====
-            if ($fromRequest) {
-                if ($po->status === 'ordered') {
+            $oldRequestIds = [];
+            if (
+                $wasFromRequest &&
+                Schema::hasTable('purchase_order_items') &&
+                Schema::hasColumn('purchase_order_items', 'request_id') &&
+                Schema::hasTable('request_restocks')
+            ) {
+                $oldRequestIds = DB::table('purchase_order_items')
+                    ->where('purchase_order_id', $po->id)
+                    ->whereNotNull('request_id')
+                    ->pluck('request_id')
+                    ->unique()
+                    ->all();
+            }
+
+            $validated = $request->validate([
+                'supplier_id'           => ['nullable', 'exists:suppliers,id'],
+                'notes'                 => ['nullable', 'string'],
+
+                'items'                 => ['array'],
+                'items.*.id'            => ['nullable', 'integer', 'exists:purchase_order_items,id'],
+                'items.*.product_id'    => ['required', 'exists:products,id'],
+                'items.*.warehouse_id'  => ['nullable', 'exists:warehouses,id'],
+                'items.*.qty'           => ['required', 'integer', 'min:1'],
+                'items.*.unit_price'    => ['nullable', 'numeric', 'min:0'],
+                'items.*.discount_type' => ['nullable', 'in:percent,amount'],
+                'items.*.discount_value'=> ['nullable', 'numeric', 'min:0'],
+                'items.*.request_id'    => ['nullable', 'integer'],
+            ]);
+
+            DB::transaction(function () use ($validated, $po, $wasFromRequest) {
+                $po->supplier_id = $validated['supplier_id'] ?? null;
+                $po->notes       = $validated['notes'] ?? null;
+
+                $itemsInput = $validated['items'] ?? [];
+
+                $productIds = collect($itemsInput)->pluck('product_id')->filter()->unique()->all();
+                $productPrices = collect();
+
+                if ($productIds) {
+                    $cols = ['id'];
+                    if (Schema::hasColumn('products', 'purchase_price')) $cols[] = 'purchase_price';
+                    if (Schema::hasColumn('products', 'buy_price'))      $cols[] = 'buy_price';
+                    if (Schema::hasColumn('products', 'cost_price'))     $cols[] = 'cost_price';
+                    if (Schema::hasColumn('products', 'selling_price'))  $cols[] = 'selling_price';
+
+                    $rows = Product::whereIn('id', $productIds)->get($cols);
+
+                    $productPrices = $rows->mapWithKeys(function ($p) use ($wasFromRequest) {
+                        $buy  = (float) ($p->purchase_price ?? $p->buy_price ?? $p->cost_price ?? 0);
+                        $sell = (float) ($p->selling_price ?? 0);
+
+                        $price = $wasFromRequest
+                            ? ($sell ?: $buy)
+                            : ($buy ?: $sell);
+
+                        return [$p->id => $price];
+                    });
+                }
+
+                $existing = $po->items()->get()->keyBy('id');
+                $keepIds  = [];
+
+                $subtotal      = 0;
+                $discountTotal = 0;
+
+                foreach ($itemsInput as $row) {
+                    if (empty($row['product_id']) || empty($row['qty'])) {
+                        continue;
+                    }
+
+                    if (! empty($row['id']) && $existing->has($row['id'])) {
+                        $item = $existing->get($row['id']);
+                    } else {
+                        $item = new PurchaseOrderItem();
+                        $item->purchase_order_id = $po->id;
+                    }
+
+                    $item->product_id  = $row['product_id'];
+                    $item->qty_ordered = (int) ($row['qty'] ?? 0);
+
+                    if ($wasFromRequest) {
+                        $item->warehouse_id = $row['warehouse_id'] ?? null;
+                    } else {
+                        $item->warehouse_id = null;
+                    }
+
+                    $rawPrice = array_key_exists('unit_price', $row) ? $row['unit_price'] : null;
+
+                    if ($rawPrice === null || $rawPrice === '') {
+                        $price = (float) ($productPrices[$row['product_id']] ?? 0);
+                    } else {
+                        $price = (float) $rawPrice;
+                    }
+
+                    $item->unit_price = $price;
+
+                    $item->discount_type  = $row['discount_type'] ?: null;
+                    $item->discount_value = (float) ($row['discount_value'] ?? 0);
+
+                    if (! empty($row['request_id']) || $item->request_id) {
+                        $item->request_id = $row['request_id'] ?? $item->request_id;
+                    }
+
+                    $lineTotal = $item->qty_ordered * $item->unit_price;
+
+                    if ($item->discount_type === 'percent') {
+                        $disc = $lineTotal * min(max($item->discount_value, 0), 100) / 100;
+                    } elseif ($item->discount_type === 'amount') {
+                        $disc = min($item->discount_value, $lineTotal);
+                    } else {
+                        $disc = 0;
+                    }
+
+                    $item->line_total = max($lineTotal - $disc, 0);
+                    $item->save();
+
+                    $keepIds[]      = $item->id;
+                    $subtotal      += $lineTotal;
+                    $discountTotal += $disc;
+                }
+
+                if (count($keepIds)) {
+                    $po->items()->whereNotIn('id', $keepIds)->delete();
+                } else {
+                    $po->items()->delete();
+                }
+
+                $po->subtotal       = $subtotal;
+                $po->discount_total = $discountTotal;
+                $po->grand_total    = $subtotal - $discountTotal;
+                $po->save();
+            });
+
+            $po->load('items');
+
+            $this->syncRequestsFromPo($po, $wasFromRequest, $oldRequestIds);
+
+            return back()->with('success', 'PO berhasil disimpan.');
+        }
+            /** SET PO → ORDERED  */
+        /** SET PO → ORDERED  */
+        public function order(PurchaseOrder $po)
+            {
+                // WAJIB sudah approved baru boleh ORDERED
+                if ($po->approval_status !== 'approved') {
+                    return redirect()
+                        ->route('po.edit', $po->id)
+                        ->with('error', 'PO belum selesai di-approve, tidak bisa di-set ORDERED.');
+                }
+
+                if ($this->poIsLocked($po)) {
                     return redirect()
                         ->route('po.index')
-                        ->with('info', 'PO dari Restock Request sudah berstatus ORDERED.');
+                        ->with('info', 'PO sudah ORDERED dan memiliki Goods Received, tidak dapat diubah statusnya.');
+                }
+
+                $fromRequest = $po->items()->whereNotNull('request_id')->exists();
+
+                // ===== PO DARI RESTOCK REQUEST =====
+                if ($fromRequest) {
+                    if ($po->status === 'ordered') {
+                        return redirect()
+                            ->route('po.index')
+                            ->with('info', 'PO dari Restock Request sudah berstatus ORDERED.');
+                    }
+
+                    $po->status = 'ordered';
+                    if (Schema::hasColumn('purchase_orders', 'ordered_at')) {
+                        $po->ordered_at = now();
+                    }
+                    $po->save();
+
+                    $po->load('items');
+                    $this->syncRequestsFromPo($po, true, []);
+
+                    if (
+                        Schema::hasTable('purchase_order_items') &&
+                        Schema::hasColumn('purchase_order_items', 'request_id') &&
+                        Schema::hasTable('request_restocks') &&
+                        Schema::hasColumn('request_restocks', 'status')
+                    ) {
+                        $requestIds = $po->items()
+                            ->whereNotNull('request_id')
+                            ->pluck('request_id')
+                            ->unique()
+                            ->all();
+
+                        if (! empty($requestIds)) {
+                            DB::table('request_restocks')
+                                ->whereIn('id', $requestIds)
+                                ->update([
+                                    'status'     => 'ordered',
+                                    'updated_at' => now(),
+                                ]);
+                        }
+                    }
+
+                    return redirect()
+                        ->route('po.index')
+                        ->with('success', 'PO dari Restock Request diset ORDERED. Stok akan berpindah saat proses Goods Received.');
+                }
+
+                // ===== PO MANUAL =====
+                if (in_array($po->status, ['ordered', 'completed', 'cancelled'], true)) {
+                    return redirect()
+                        ->route('po.index')
+                        ->with('info', 'Status PO manual saat ini: ' . strtoupper($po->status) . '.');
                 }
 
                 $po->status = 'ordered';
@@ -319,11 +350,24 @@ public function edit(PurchaseOrder $po)
                 }
                 $po->save();
 
-                // sinkron lagi (tanpa info requestId lama; cuma update qty/harga + item baru)
-                $po->load('items');
-                $this->syncRequestsFromPo($po, true, []);
+                return redirect()
+                    ->route('po.index')
+                    ->with('success', 'PO manual diset ORDERED. Buat Goods Received ketika barang datang.');
+            }
 
-                // optional: kalau lu memang mau status RF ikut jadi 'ordered'
+        public function cancel(PurchaseOrder $po)
+        {
+            if ($this->poIsLocked($po)) {
+                return back()->with('error', 'PO sudah ORDERED/COMPLETED, tidak dapat dibatalkan.');
+            }
+
+            DB::transaction(function () use ($po) {
+                $po->status = 'cancelled';
+                if (Schema::hasColumn('purchase_orders', 'cancelled_at')) {
+                    $po->cancelled_at = now();
+                }
+                $po->save();
+
                 if (
                     Schema::hasTable('purchase_order_items') &&
                     Schema::hasColumn('purchase_order_items', 'request_id') &&
@@ -336,95 +380,33 @@ public function edit(PurchaseOrder $po)
                         ->unique()
                         ->all();
 
-                    if (!empty($requestIds)) {
+                    if (! empty($requestIds)) {
                         DB::table('request_restocks')
                             ->whereIn('id', $requestIds)
                             ->update([
-                                'status'     => 'ordered',
+                                'status'     => 'cancelled',
                                 'updated_at' => now(),
                             ]);
                     }
                 }
+            });
 
-                return redirect()
-                    ->route('po.index')
-                    ->with('success', 'PO dari Restock Request diset ORDERED. Stok akan berpindah saat proses Goods Received.');
-            }
-
-            // ===== PO MANUAL =====
-            if (in_array($po->status, ['ordered', 'completed', 'cancelled'], true)) {
-                return redirect()
-                    ->route('po.index')
-                    ->with('info', 'Status PO manual saat ini: ' . strtoupper($po->status) . '.');
-            }
-
-            $po->status = 'ordered';
-            if (Schema::hasColumn('purchase_orders', 'ordered_at')) {
-                $po->ordered_at = now();
-            }
-            $po->save();
-
-            return redirect()
-                ->route('po.index')
-                ->with('success', 'PO manual diset ORDERED. Buat Goods Received ketika barang datang.');
+            return back()->with('success', 'PO dibatalkan dan request ikut CANCELLED.');
         }
-
-
-
-    public function cancel(PurchaseOrder $po)
-    {
-        if ($this->poIsLocked($po)) {
-            return back()->with('error', 'PO sudah ORDERED/COMPLETED, tidak dapat dibatalkan.');
-        }
-
-        DB::transaction(function () use ($po) {
-            $po->status = 'cancelled';
-            if (Schema::hasColumn('purchase_orders', 'cancelled_at')) {
-                $po->cancelled_at = now();
-            }
-            $po->save();
-
-            if (
-                Schema::hasTable('purchase_order_items') &&
-                Schema::hasColumn('purchase_order_items', 'request_id') &&
-                Schema::hasTable('request_restocks') &&
-                Schema::hasColumn('request_restocks', 'status')
-            ) {
-                $requestIds = $po->items()
-                    ->whereNotNull('request_id')
-                    ->pluck('request_id')
-                    ->unique()
-                    ->all();
-
-                if (!empty($requestIds)) {
-                    DB::table('request_restocks')
-                        ->whereIn('id', $requestIds)
-                        ->update([
-                            'status'     => 'cancelled',
-                            'updated_at' => now(),
-                        ]);
-                }
-            }
-        });
-
-        return back()->with('success', 'PO dibatalkan dan request ikut CANCELLED.');
-    }
-
-
-    /** Create PO manual (draft kosong) */
     public function store(Request $r)
     {
         $code = $this->generateManualPoCode();
 
         $po = PurchaseOrder::create([
-            'po_code'        => $code,
-            'supplier_id'    => null,
-            'ordered_by'     => auth()->id(),
-            'status'         => 'draft',
-            'subtotal'       => 0,
-            'discount_total' => 0,
-            'grand_total'    => 0,
-            'notes'          => null,
+            'po_code'         => $code,
+            'supplier_id'     => null,
+            'ordered_by'      => auth()->id(),
+            'status'          => 'draft',
+            'approval_status' => 'waiting_procurement', // start approval di Procurement
+            'subtotal'        => 0,
+            'discount_total'  => 0,
+            'grand_total'     => 0,
+            'notes'           => null,
         ]);
 
         return redirect()
@@ -451,7 +433,7 @@ public function edit(PurchaseOrder $po)
 
     protected function getCentralWarehouseId(): ?int
     {
-        if (!Schema::hasTable('warehouses')) {
+        if (! Schema::hasTable('warehouses')) {
             return null;
         }
 
@@ -465,7 +447,7 @@ public function edit(PurchaseOrder $po)
 
         $id = $query->value('id');
 
-        if (!$id) {
+        if (! $id) {
             $id = Warehouse::orderBy('id')->value('id');
         }
 
@@ -474,13 +456,10 @@ public function edit(PurchaseOrder $po)
 
     protected function poIsLocked(PurchaseOrder $po): bool
     {
-        // 1) Begitu status sudah ORDERED / COMPLETED / CANCELLED → PO dikunci
         if (in_array($po->status, ['ordered', 'completed', 'cancelled'], true)) {
             return true;
         }
 
-        // 2) Fallback: kalau entah gimana sudah ada GR tapi status belum diupdate,
-        //    kita kunci juga supaya aman.
         if (
             Schema::hasTable('restock_receipts') &&
             Schema::hasColumn('restock_receipts', 'purchase_order_id')
@@ -807,22 +786,80 @@ public function edit(PurchaseOrder $po)
         }
     }
 
-        public function exportPdf(PurchaseOrder $po)
+    public function approve(Request $r, PurchaseOrder $po)
+        {
+            $user  = auth()->user();
+            $roles = $user?->roles ?? collect();
+
+            $isProcurement = $roles->contains('slug', 'procurement') || $roles->contains('slug', 'superadmin');
+            $isCeo         = $roles->contains('slug', 'ceo') || $roles->contains('slug', 'superadmin');
+
+            $total = (float) $po->grand_total;
+
+            // Normalisasi kalau approval_status masih null
+            if (! $po->approval_status) {
+                $po->approval_status = 'waiting_procurement';
+            }
+
+            // Tahap 1: Procurement
+            if ($po->approval_status === 'waiting_procurement') {
+                if (! $isProcurement) {
+                    abort(403, 'Anda tidak berhak meng-approve tahap Procurement.');
+                }
+
+                $po->approved_by_procurement = $user->id;
+                $po->approved_at_procurement = now();
+
+                // RULE:
+                //  - total <= 1.000.000  → beres di Procurement
+                //  - total  > 1.000.000  → lanjut ke CEO
+                if ($total <= 1000000) {
+                    $po->approval_status = 'approved';
+                } else {
+                    $po->approval_status = 'waiting_ceo';
+                }
+
+                $po->save();
+
+                $msg = $po->approval_status === 'approved'
+                    ? 'PO disetujui Procurement (final).'
+                    : 'PO disetujui Procurement, menunggu approval CEO.';
+
+                return back()->with('success', $msg);
+            }
+
+            // Tahap 2: CEO
+            if ($po->approval_status === 'waiting_ceo') {
+                if (! $isCeo) {
+                    abort(403, 'Anda tidak berhak meng-approve tahap CEO.');
+                }
+
+                $po->approved_by_ceo = $user->id;
+                $po->approved_at_ceo = now();
+                $po->approval_status = 'approved';
+                $po->save();
+
+                return back()->with('success', 'PO disetujui CEO (final).');
+            }
+
+            return back()->with('info', 'PO ini sudah tidak dalam status menunggu approval.');
+        }
+
+    /** PRINT PDF PO */
+    public function exportPdf(PurchaseOrder $po)
     {
-        // Company default buat kop surat
         $company = Company::where('is_default', true)
             ->where('is_active', true)
             ->first();
 
-        // Load relasi yang dibutuhkan
         $po->load([
             'supplier',
             'items.product',
-
-
+            'user',
+            'procurementApprover',
+            'ceoApprover',
         ]);
 
-        // Flag draft: nanti kalau approval_status != approved, bisa kasih watermark DRAFT
         $isDraft = $po->approval_status !== 'approved';
 
         $pdf = Pdf::loadView('admin.po.print', [
@@ -832,9 +869,7 @@ public function edit(PurchaseOrder $po)
             ])
             ->setPaper('A4', 'portrait');
 
-        // Bisa stream atau download
-        return $pdf->stream('PO-'.$po->po_code.'.pdf');
-        // return $pdf->download('PO-'.$po->po_code.'.pdf');
+        return $pdf->stream('PO-' . $po->po_code . '.pdf');
     }
 
     public function exportExcel(PurchaseOrder $po)
