@@ -19,22 +19,21 @@ class PurchaseOrder extends Model
         'subtotal',
         'discount_total',
         'grand_total',
-        'notes',
+        'notes',           // dipakai juga buat alasan reject
         'ordered_at',
 
-        // approval 2 lapis
-        'approval_status',           // waiting_procurement | waiting_ceo | approved | rejected | dll
+        'approval_status',
         'approved_by_procurement',
-        'approved_at_procurement',
         'approved_by_ceo',
+        'approved_at_procurement',
         'approved_at_ceo',
     ];
 
     protected $casts = [
-        'ordered_at'             => 'datetime',
-        'approved_at_procurement'=> 'datetime',
-        'approved_at_ceo'        => 'datetime',
+        'ordered_at' => 'datetime',
     ];
+
+    // ===== RELATION =====
 
     public function items()
     {
@@ -46,8 +45,13 @@ class PurchaseOrder extends Model
         return $this->belongsTo(Supplier::class);
     }
 
-    // user yang create PO
+    // creator PO
     public function user()
+    {
+        return $this->belongsTo(User::class, 'ordered_by');
+    }
+
+    public function creator()
     {
         return $this->belongsTo(User::class, 'ordered_by');
     }
@@ -59,27 +63,26 @@ class PurchaseOrder extends Model
 
     public function warehouse()
     {
-        // asumsi ada kolom warehouse_id (nullable) di purchase_orders
         return $this->belongsTo(Warehouse::class);
     }
 
-    // Approval lapis 1: Procurement
     public function procurementApprover()
     {
         return $this->belongsTo(User::class, 'approved_by_procurement');
     }
 
-    // Approval lapis 2: CEO
     public function ceoApprover()
     {
         return $this->belongsTo(User::class, 'approved_by_ceo');
     }
 
+    // ===== LOGIC =====
+
     // Hitung ulang total berdasarkan items
     public function recalcTotals(): void
     {
-        $sub = 0;
-        $disc = 0;
+        $sub   = 0;
+        $disc  = 0;
         $grand = 0;
 
         foreach ($this->items as $it) {
@@ -88,12 +91,11 @@ class PurchaseOrder extends Model
 
             if ($it->discount_type === 'percent') {
                 $lineDisc = $lineSub * ((float) $it->discount_value / 100);
-            }
-            if ($it->discount_type === 'amount') {
+            } elseif ($it->discount_type === 'amount') {
                 $lineDisc = (float) $it->discount_value;
             }
 
-            $lineTot       = max(0, $lineSub - $lineDisc);
+            $lineTot        = max(0, $lineSub - $lineDisc);
             $it->line_total = $lineTot;
             $it->save();
 
@@ -123,5 +125,20 @@ class PurchaseOrder extends Model
         }
 
         return $this->status;
+    }
+
+    public function isInApprovalFlow(): bool
+    {
+        return in_array($this->approval_status, ['waiting_procurement', 'waiting_ceo'], true);
+    }
+
+    public function isFullyApproved(): bool
+    {
+        return $this->approval_status === 'approved';
+    }
+
+    public function isRejected(): bool
+    {
+        return $this->approval_status === 'rejected';
     }
 }

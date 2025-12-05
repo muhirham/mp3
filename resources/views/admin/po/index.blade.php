@@ -1,6 +1,17 @@
 @extends('layouts.home')
 
 @section('content')
+
+@php
+    $me    = auth()->user();
+    $roles = $me?->roles ?? collect();
+
+    // kalau controller sudah kirim $isSuperadmin / $isProcurement / $isCeo, pakai itu
+    $isSuperadmin  = $isSuperadmin  ?? $roles->contains('slug', 'superadmin');
+    $isProcurement = $isProcurement ?? $roles->contains('slug', 'procurement');
+    $isCeo         = $isCeo         ?? $roles->contains('slug', 'ceo');
+@endphp
+
 <div class="container-xxl flex-grow-1 container-p-y">
 
   <div class="card">
@@ -8,7 +19,7 @@
       <h5 class="mb-0 fw-bold">Purchase Orders</h5>
 
       <div class="d-flex flex-wrap gap-2 ms-auto">
-        {{-- Search PO --}}
+        {{-- Search PO (akan di-handle AJAX, tidak perlu tekan enter) --}}
         <form class="d-flex gap-2" id="po-search-form" method="get">
           <input id="po-search"
                  class="form-control"
@@ -60,13 +71,17 @@
           <tbody>
             @forelse($pos as $po)
               @php
-                $hasGr = $po->restockReceipts->count() > 0;
+                // cek GR
+                $hasGr = (int)($po->gr_count ?? 0) > 0;
 
-                $canReceive = !$hasGr
-                              && in_array($po->status, ['ordered'])
+                // GR HANYA SUPERADMIN & PO SUDAH APPROVED
+                $canReceive = $isSuperadmin
+                              && !$hasGr
+                              && $po->status === 'ordered'
+                              && $po->approval_status === 'approved'
                               && $po->items_count > 0;
 
-                // summary supplier
+                // ==== SUMMARY SUPPLIER ====
                 $supplierNames = collect();
 
                 if (!empty($po->supplier?->name)) {
@@ -90,12 +105,14 @@
                     $supplierLabel = $supplierNames->first().' + '.($supplierNames->count() - 1).' supplier';
                 }
 
-                // SUMMARY WAREHOUSE
+                // ==== SUMMARY WAREHOUSE ====
                 $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
 
                 if (!$fromRequest) {
+                    // PO manual dari pusat → selalu Central Stock
                     $warehouseLabel = 'Central Stock';
                 } else {
+                    // PO dari Request Restock → ambil nama warehouse dari item
                     $warehouseNames = collect();
 
                     foreach ($po->items as $it) {
@@ -118,9 +135,12 @@
                     }
                 }
 
-                // APPROVAL STATUS
-                $approvalStatus = $po->approval_status ?? 'waiting_procurement';
-                if ($approvalStatus === 'waiting_procurement') {
+                // ==== APPROVAL STATUS ====
+                $approvalStatus = $po->approval_status ?: 'draft';
+
+                if ($approvalStatus === 'draft') {
+                    $approvalBadge = '<span class="badge bg-label-secondary">Draft</span>';
+                } elseif ($approvalStatus === 'waiting_procurement') {
                     $approvalBadge = '<span class="badge bg-label-warning">Waiting Procurement</span>';
                 } elseif ($approvalStatus === 'waiting_ceo') {
                     $approvalBadge = '<span class="badge bg-label-info">Waiting CEO</span>';
@@ -164,7 +184,7 @@
                   <div class="btn-group">
                     <a class="btn btn-sm btn-primary" href="{{ route('po.edit',$po->id) }}">Open</a>
 
-                    {{-- Tombol Receive (GR) --}}
+                    {{-- Tombol Receive (GR) hanya SUPERADMIN & PO APPROVED --}}
                     @if($canReceive)
                       <button type="button"
                               class="btn btn-sm btn-success"
@@ -175,7 +195,7 @@
                     @endif
 
                     {{-- APPROVAL Procurement --}}
-                    @if(($isProcurement ?? false) && in_array($approvalStatus, [null, 'waiting_procurement']))
+                    @if($isProcurement && in_array($approvalStatus, [null, 'draft', 'waiting_procurement']))
                       <form method="POST"
                             action="{{ route('po.approve', $po->id) }}"
                             class="d-inline form-approve">
@@ -187,7 +207,7 @@
                     @endif
 
                     {{-- APPROVAL CEO --}}
-                    @if(($isCeo ?? false) && $approvalStatus === 'waiting_ceo')
+                    @if($isCeo && $approvalStatus === 'waiting_ceo')
                       <form method="POST"
                             action="{{ route('po.approve', $po->id) }}"
                             class="d-inline form-approve">
@@ -220,14 +240,17 @@
         </div>
       @endif
 
-      {{-- ======= MODAL GR PER PO (pake punyamu yang lama) ======= --}}
+      {{-- ======= MODAL GR PER PO (di dalam wrapper) ======= --}}
       @foreach($pos as $po)
         @php
           $hasGr      = (int)($po->gr_count ?? 0) > 0;
-          $canReceive = !$hasGr
-                        && in_array($po->status, ['ordered'])
+          $canReceive = $isSuperadmin
+                        && !$hasGr
+                        && $po->status === 'ordered'
+                        && $po->approval_status === 'approved'
                         && $po->items_count > 0;
 
+          // summary supplier sama seperti di tabel
           $supplierNames = collect();
           if (!empty($po->supplier?->name)) {
               $supplierNames->push($po->supplier->name);
@@ -247,15 +270,149 @@
           } else {
               $supplierLabel = $supplierNames->first().' + '.($supplierNames->count() - 1).' supplier';
           }
+
+          // summary warehouse untuk modal
+          $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
+          if (!$fromRequest) {
+              $whLabel = 'Central Stock';
+          } else {
+              $whNames = collect();
+              foreach ($po->items as $it) {
+                  if ($it->warehouse) {
+                      $whNames->push($it->warehouse->warehouse_name ?? $it->warehouse->name);
+                  }
+              }
+              $whNames = $whNames->filter()->unique()->values();
+              if ($whNames->isEmpty()) {
+                  $whLabel = '-';
+              } elseif ($whNames->count() === 1) {
+                  $whLabel = $whNames->first();
+              } else {
+                  $whLabel = $whNames->first().' + '.($whNames->count() - 1).' wh';
+              }
+          }
         @endphp
 
         @if($canReceive)
           <div class="modal fade mdl-gr-po" id="mdlGR-{{ $po->id }}" tabindex="-1" aria-hidden="true">
-            {{-- ... ISI MODAL GR PUNYAMU TADI, GUA NGGAK UBAH ... --}}
-            {{-- (biarin sama persis dengan yang sudah lu kirim) --}}
+            <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h5 class="modal-title">Goods Received – {{ $po->po_code }}</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                {{-- route lama: po.gr.store --}}
+                <form action="{{ route('po.gr.store', $po) }}"
+                      method="POST"
+                      enctype="multipart/form-data">
+                  @csrf
+                  <div class="modal-body">
+                    <p class="mb-3">
+                      Supplier: <strong>{{ $supplierLabel }}</strong><br>
+                      Warehouse: <strong>{{ $whLabel }}</strong>
+                    </p>
+
+                    <div class="table-responsive">
+                      <table class="table table-sm align-middle">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>Product</th>
+                            <th>Qty Ordered</th>
+                            <th>Qty Received</th>
+                            <th>Qty Remaining</th>
+                            <th>Qty Good</th>
+                            <th>Qty Damaged</th>
+                            <th>Notes</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          @foreach($po->items as $i => $item)
+                            @php
+                              $ordered   = (int)($item->qty_ordered ?? 0);
+                              $received  = (int)($item->qty_received ?? 0);
+                              $remaining = max(0, $ordered - $received);
+                              $key       = $item->id;
+                            @endphp
+                            <tr>
+                              <td>{{ $i + 1 }}</td>
+                              <td>
+                                {{ $item->product->name ?? '-' }}<br>
+                                <small class="text-muted">{{ $item->product->product_code ?? '' }}</small>
+                              </td>
+                              <td>{{ $ordered }}</td>
+                              <td>{{ $received }}</td>
+                              <td class="js-remaining"
+                                  data-remaining="{{ $remaining }}">
+                                  {{ $remaining }}
+                              </td>
+
+                              <td style="width:120px">
+                                <input type="number"
+                                       class="form-control form-control-sm js-qty-good"
+                                       name="receives[{{ $key }}][qty_good]"
+                                       min="0"
+                                       value="{{ $remaining }}">
+                              </td>
+                              <td style="width:120px">
+                                <input type="number"
+                                       class="form-control form-control-sm js-qty-damaged"
+                                       name="receives[{{ $key }}][qty_damaged]"
+                                       min="0"
+                                       value="0">
+                              </td>
+                              <td style="width:180px">
+                                <input type="text"
+                                       class="form-control form-control-sm"
+                                       name="receives[{{ $key }}][notes]"
+                                       placeholder="Catatan (opsional)">
+                                <small class="text-danger small js-row-msg"></small>
+                              </td>
+                            </tr>
+                          @endforeach
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <small class="text-muted d-block mb-3">
+                      Qty Good + Qty Damaged tidak boleh lebih besar dari Qty Remaining.
+                    </small>
+
+                    {{-- FOTO GOOD --}}
+                    <div class="mb-3">
+                      <label class="form-label">Upload foto barang bagus (opsional)</label>
+                      <input type="file" name="photos_good[]" class="form-control" multiple>
+                      <small class="text-muted">
+                        Upload foto barang dalam kondisi baik. Maks 8MB per file.
+                      </small>
+                    </div>
+
+                    {{-- FOTO DAMAGED --}}
+                    <div class="mb-3">
+                      <label class="form-label">Upload foto barang rusak (opsional)</label>
+                      <input type="file" name="photos_damaged[]" class="form-control" multiple>
+                      <small class="text-muted">
+                        Upload bukti kerusakan barang. Maks 8MB per file.
+                      </small>
+                    </div>
+                  </div>
+
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                      Batal
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                      <i class="bx bx-save"></i> Simpan Goods Received
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
           </div>
         @endif
       @endforeach
+      {{-- ======= END MODALS ======= --}}
 
     </div> {{-- /#po-table-wrapper --}}
   </div>
@@ -355,6 +512,7 @@
     });
   }
 
+  // ====== FUNGSI RELOAD TABLE VIA AJAX ======
   function loadPoTable(url) {
     const wrapper = document.getElementById('po-table-wrapper');
     if (!wrapper) return;
@@ -373,6 +531,7 @@
 
         wrapper.innerHTML = newWrap.innerHTML;
 
+        // re-bind setelah konten ke-replace
         bindGrValidation();
         bindApproveForms();
       })
@@ -392,6 +551,7 @@
       loadPoTable(url);
     }
 
+    // submit form → pakai AJAX, tidak reload page
     if (searchForm) {
       searchForm.addEventListener('submit', function (e) {
         e.preventDefault();
@@ -399,6 +559,7 @@
       });
     }
 
+    // ketik tanpa enter (debounce 400ms)
     if (searchInput) {
       searchInput.addEventListener('keyup', function () {
         clearTimeout(typingTimer);
@@ -406,6 +567,7 @@
       });
     }
 
+    // pagination via AJAX (delegation)
     document.addEventListener('click', function (e) {
       const link = e.target.closest('#po-table-wrapper .pagination a');
       if (!link) return;

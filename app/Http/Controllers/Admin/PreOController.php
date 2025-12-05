@@ -18,73 +18,51 @@ use Barryvdh\DomPDF\Facade\Pdf;
 class PreOController extends Controller
 {
     /** LIST PO */
+    private const CEO_MIN_TOTAL = 2_000_000;
     public function index(Request $request)
-        {
-            $q      = trim($request->get('q', ''));
-            $status = $request->get('status');
+    {
+        $q      = trim($request->get('q', ''));
+        $status = $request->get('status');
 
-            $perPage = 10;
+        $perPage = 10;
 
-            $me    = auth()->user();
-            $roles = $me?->roles ?? collect();
+        $me    = auth()->user();
+        $roles = $me?->roles ?? collect();
 
-            $isProcurement = $roles->contains('slug', 'procurement') || $roles->contains('slug', 'superadmin');
-            $isCeo         = $roles->contains('slug', 'ceo') || $roles->contains('slug', 'superadmin');
+        $isSuperadmin  = $roles->contains('slug', 'superadmin'); // <== TAMBAH INI
+        $isProcurement = $roles->contains('slug', 'procurement') || $isSuperadmin;
+        $isCeo         = $roles->contains('slug', 'ceo')         || $isSuperadmin;
 
-            $pos = PurchaseOrder::with([
-                    'supplier',
-                    'items.product.supplier',
-                    'items.warehouse',
-                    'restockReceipts',
-                    'user',
-                    'procurementApprover',
-                    'ceoApprover',
-                ])
-                ->withCount('items')
-                ->when($q, function ($qq) use ($q) {
-                    $qq->where('po_code', 'like', "%{$q}%");
-                })
-                ->when($status, fn ($qq) => $qq->where('status', $status))
-                ->orderByDesc('id')
-                ->paginate($perPage)
-                ->appends($request->query());
+        $pos = PurchaseOrder::with([
+                'supplier',
+                'items.product.supplier',
+                'items.warehouse',
+                'restockReceipts',
+                'user',
+                'procurementApprover',
+                'ceoApprover',
+            ])
+            ->withCount('items')
+            ->when($q, function ($qq) use ($q) {
+                $qq->where('po_code', 'like', "%{$q}%");
+            })
+            ->when($status, fn ($qq) => $qq->where('status', $status))
+            ->orderByDesc('id')
+            ->paginate($perPage)
+            ->appends($request->query());
 
-            // default gr_count = 0
-            $pos->getCollection()->each(function ($po) {
-                $po->gr_count = 0;
-            });
+        // hitung gr_count dll tetap...
 
-            if (
-                Schema::hasTable('restock_receipts') &&
-                Schema::hasColumn('restock_receipts', 'purchase_order_id')
-            ) {
-                $poIds = $pos->pluck('id')->all();
-
-                if (! empty($poIds)) {
-                    $grCounts = DB::table('restock_receipts')
-                        ->select('purchase_order_id', DB::raw('COUNT(*) as c'))
-                        ->whereIn('purchase_order_id', $poIds)
-                        ->groupBy('purchase_order_id')
-                        ->pluck('c', 'purchase_order_id');
-
-                    $pos->getCollection()->transform(function ($po) use ($grCounts) {
-                        $po->gr_count = (int) ($grCounts[$po->id] ?? 0);
-                        return $po;
-                    });
-                }
-            }
-
-            // AJAX lu sekarang narik full view dan ngambil #po-table-wrapper sendiri,
-            // jadi gak perlu return partial _table lagi.
-
-            return view('admin.po.index', compact(
-                'pos',
-                'q',
-                'status',
-                'isProcurement',
-                'isCeo'
-            ));
+        return view('admin.po.index', compact(
+            'pos',
+            'q',
+            'status',
+            'isProcurement',
+            'isCeo',
+            'isSuperadmin'      // <== JANGAN LUPA DI-COMPACT
+        ));
     }
+
         /** EDIT PO (manual / dari Restock Request) */
     public function edit(PurchaseOrder $po)
         {
@@ -276,84 +254,43 @@ class PreOController extends Controller
         }
             /** SET PO → ORDERED  */
         /** SET PO → ORDERED  */
+/**
+ * Ajukan PO ke flow approval.
+ * - grand_total < 1 jt / < 2 jt → cukup Procurement (nanti di-approveProc).
+ * - grand_total > 2 jt          → Procurement lalu CEO.
+ */
         public function order(PurchaseOrder $po)
-            {
-                // WAJIB sudah approved baru boleh ORDERED
-                if ($po->approval_status !== 'approved') {
-                    return redirect()
-                        ->route('po.edit', $po->id)
-                        ->with('error', 'PO belum selesai di-approve, tidak bisa di-set ORDERED.');
-                }
-
-                if ($this->poIsLocked($po)) {
-                    return redirect()
-                        ->route('po.index')
-                        ->with('info', 'PO sudah ORDERED dan memiliki Goods Received, tidak dapat diubah statusnya.');
-                }
-
-                $fromRequest = $po->items()->whereNotNull('request_id')->exists();
-
-                // ===== PO DARI RESTOCK REQUEST =====
-                if ($fromRequest) {
-                    if ($po->status === 'ordered') {
-                        return redirect()
-                            ->route('po.index')
-                            ->with('info', 'PO dari Restock Request sudah berstatus ORDERED.');
-                    }
-
-                    $po->status = 'ordered';
-                    if (Schema::hasColumn('purchase_orders', 'ordered_at')) {
-                        $po->ordered_at = now();
-                    }
-                    $po->save();
-
-                    $po->load('items');
-                    $this->syncRequestsFromPo($po, true, []);
-
-                    if (
-                        Schema::hasTable('purchase_order_items') &&
-                        Schema::hasColumn('purchase_order_items', 'request_id') &&
-                        Schema::hasTable('request_restocks') &&
-                        Schema::hasColumn('request_restocks', 'status')
-                    ) {
-                        $requestIds = $po->items()
-                            ->whereNotNull('request_id')
-                            ->pluck('request_id')
-                            ->unique()
-                            ->all();
-
-                        if (! empty($requestIds)) {
-                            DB::table('request_restocks')
-                                ->whereIn('id', $requestIds)
-                                ->update([
-                                    'status'     => 'ordered',
-                                    'updated_at' => now(),
-                                ]);
-                        }
-                    }
-
-                    return redirect()
-                        ->route('po.index')
-                        ->with('success', 'PO dari Restock Request diset ORDERED. Stok akan berpindah saat proses Goods Received.');
-                }
-
-                // ===== PO MANUAL =====
-                if (in_array($po->status, ['ordered', 'completed', 'cancelled'], true)) {
-                    return redirect()
-                        ->route('po.index')
-                        ->with('info', 'Status PO manual saat ini: ' . strtoupper($po->status) . '.');
-                }
-
-                $po->status = 'ordered';
-                if (Schema::hasColumn('purchase_orders', 'ordered_at')) {
-                    $po->ordered_at = now();
-                }
-                $po->save();
-
-                return redirect()
-                    ->route('po.index')
-                    ->with('success', 'PO manual diset ORDERED. Buat Goods Received ketika barang datang.');
+        {
+            if (in_array($po->status, ['ordered', 'completed', 'cancelled'], true)) {
+                return redirect()->route('po.index')
+                    ->with('info', 'PO sudah tidak bisa diajukan approval lagi.');
             }
+
+            if (in_array($po->approval_status, ['waiting_procurement','waiting_ceo','approved'], true)) {
+                return redirect()->route('po.edit', $po->id)
+                    ->with('info', 'PO sudah dalam proses approval.');
+            }
+
+            if ($po->items()->count() === 0 || $po->grand_total <= 0) {
+                return redirect()->route('po.edit', $po->id)
+                    ->with('error', 'Isi item dan harga dulu sebelum mengajukan approval.');
+            }
+
+            // TEKANKAN: logistik tetap draft
+            $po->status           = 'draft';
+            $po->approval_status  = 'waiting_procurement';
+            $po->approved_by_procurement = null;
+            $po->approved_by_ceo         = null;
+            $po->approved_at_procurement = null;
+            $po->approved_at_ceo         = null;
+
+            $po->save();
+
+            return redirect()->route('po.edit', $po->id)
+                ->with('success', 'PO berhasil diajukan ke Procurement untuk approval.');
+        }
+
+
 
         public function cancel(PurchaseOrder $po)
         {
@@ -392,27 +329,139 @@ class PreOController extends Controller
             });
 
             return back()->with('success', 'PO dibatalkan dan request ikut CANCELLED.');
+            
         }
-    public function store(Request $r)
-    {
-        $code = $this->generateManualPoCode();
 
-        $po = PurchaseOrder::create([
-            'po_code'         => $code,
-            'supplier_id'     => null,
-            'ordered_by'      => auth()->id(),
-            'status'          => 'draft',
-            'approval_status' => 'waiting_procurement', // start approval di Procurement
-            'subtotal'        => 0,
-            'discount_total'  => 0,
-            'grand_total'     => 0,
-            'notes'           => null,
+
+        public function approveProcurement(Request $request, PurchaseOrder $po)
+        {
+            if ($po->approval_status !== 'waiting_procurement') {
+                return back()->with('error', 'PO tidak dalam status menunggu approval Procurement.');
+            }
+
+            $user = $request->user();
+
+            $po->approved_by_procurement = $user->id;
+            $po->approved_at_procurement = now();
+            // kalau sebelumnya pernah reject, notes (alasan) di- clear
+            $po->notes = null;
+
+            $grand = (int) $po->grand_total;
+
+            if ($grand > self::CEO_MIN_TOTAL) {
+                // > 2jt → lanjut ke CEO
+                $po->approval_status = 'waiting_ceo';
+                // status tetap draft, belum bisa GR
+            } else {
+                // <= 2jt → cukup Procurement → langsung ORDERED
+                $po->approval_status = 'approved';
+                $po->status          = 'ordered';
+                $po->ordered_at      = now();
+            }
+
+            $po->save();
+
+            return back()->with('success', 'Approval Procurement berhasil disimpan.');
+        }
+
+    public function rejectProcurement(Request $request, PurchaseOrder $po)
+    {
+        if ($po->approval_status !== 'waiting_procurement') {
+            return back()->with('error', 'PO tidak dalam status menunggu approval Procurement.');
+        }
+
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:1000'],
         ]);
+
+        $user = $request->user();
+
+        $po->approval_status         = 'rejected';
+        $po->notes                   = $data['reason'];        // simpan alasan di notes
+        $po->approved_by_procurement = $user->id;
+        $po->approved_at_procurement = now();
+        $po->approved_by_ceo         = null;
+        $po->approved_at_ceo         = null;
+
+        // balik ke draft biar bisa diedit & diajukan ulang
+        $po->status = 'draft';
+
+        $po->save();
 
         return redirect()
             ->route('po.edit', $po->id)
-            ->with('success', 'PO baru berhasil dibuat, silakan isi item.');
+            ->with('error', 'PO ditolak Procurement: ' . $data['reason']);
     }
+
+
+    public function approveCeo(Request $request, PurchaseOrder $po)
+{
+    if ($po->approval_status !== 'waiting_ceo') {
+        return back()->with('error', 'PO tidak dalam status menunggu approval CEO.');
+    }
+
+    $user = $request->user();
+
+    $po->approved_by_ceo  = $user->id;
+    $po->approved_at_ceo  = now();
+    $po->approval_status  = 'approved';
+    $po->notes            = null;  // bersihkan alasan reject lama
+    $po->status           = 'ordered';
+    $po->ordered_at       = now();
+
+    $po->save();
+
+    return back()->with('success', 'PO disetujui CEO dan status di-set ORDERED.');
+}
+
+    public function rejectCeo(Request $request, PurchaseOrder $po)
+    {
+        if ($po->approval_status !== 'waiting_ceo') {
+            return back()->with('error', 'PO tidak dalam status menunggu approval CEO.');
+        }
+
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:1000'],
+        ]);
+
+        $user = $request->user();
+
+        $po->approval_status = 'rejected';
+        $po->notes           = $data['reason'];   // simpan alasan di notes
+        $po->approved_by_ceo = $user->id;
+        $po->approved_at_ceo = now();
+
+        // balik ke draft biar bisa diedit & diajukan ulang
+        $po->status = 'draft';
+
+        $po->save();
+
+        return redirect()
+            ->route('po.edit', $po->id)
+            ->with('error', 'PO ditolak CEO: ' . $data['reason']);
+    }
+
+
+        public function store(Request $r)
+        {
+            $code = $this->generateManualPoCode();
+
+            $po = PurchaseOrder::create([
+                'po_code'         => $code,
+                'supplier_id'     => null,
+                'ordered_by'      => auth()->id(),
+                'status'          => 'draft',      // status logistik = DRAFT        // <== BELUM MASUK FLOW APPROVAL
+                'subtotal'        => 0,
+                'discount_total'  => 0,
+                'grand_total'     => 0,
+                'notes'           => null,
+            ]);
+
+            return redirect()
+                ->route('po.edit', $po->id)
+                ->with('success', 'PO baru berhasil dibuat, silakan isi item.');
+        }
+
 
     protected function generateManualPoCode(): string
     {
@@ -456,21 +505,31 @@ class PreOController extends Controller
 
     protected function poIsLocked(PurchaseOrder $po): bool
     {
+        // 1) Status logistik tertentu → locked
         if (in_array($po->status, ['ordered', 'completed', 'cancelled'], true)) {
             return true;
         }
 
+        // 2) Sudah ada GR
         if (
             Schema::hasTable('restock_receipts') &&
-            Schema::hasColumn('restock_receipts', 'purchase_order_id')
-        ) {
-            return DB::table('restock_receipts')
+            Schema::hasColumn('restock_receipts', 'purchase_order_id') &&
+            DB::table('restock_receipts')
                 ->where('purchase_order_id', $po->id)
-                ->exists();
+                ->exists()
+        ) {
+            return true;
         }
 
+        // 3) Sedang proses approval / sudah approved → form edit dikunci
+        if (in_array($po->approval_status, ['waiting_procurement', 'waiting_ceo', 'approved'], true)) {
+            return true;
+        }
+
+        // Draft / Rejected → boleh diedit
         return false;
     }
+
 
 
 

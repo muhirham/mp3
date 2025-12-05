@@ -179,8 +179,25 @@ Route::middleware('auth')->group(function () {
         ->name('po.cancel')
         ->middleware('menu:po');
         
-        Route::post('/{po}/approve',      [PreOController::class, 'approve'])
+    Route::post('/{po}/approve',      [PreOController::class, 'approve'])
         ->name('po.approve')
+        ->middleware('menu:po');
+
+    Route::post('/po/{po}/approve-proc', [PreOController::class,'approveProcurement'])
+    ->name('po.approve.proc')
+    ->middleware('menu:po');
+
+    Route::post('/po/{po}/reject-proc', [PreOController::class,'rejectProcurement'])
+        ->name('po.reject.proc')
+        ->middleware('menu:po');
+
+    // CEO
+    Route::post('/po/{po}/approve-ceo', [PreOController::class,'approveCeo'])
+        ->name('po.approve.ceo')
+        ->middleware('menu:po');
+
+    Route::post('/po/{po}/reject-ceo', [PreOController::class,'rejectCeo'])
+        ->name('po.reject.ceo')
         ->middleware('menu:po');
 
     // === Goods Received dari PO MANUAL (1 GR per PO) ===

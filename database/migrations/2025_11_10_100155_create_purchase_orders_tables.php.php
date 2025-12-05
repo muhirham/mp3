@@ -47,7 +47,7 @@ return new class extends Migration
             // - approved
             // - rejected
             $t->string('approval_status', 30)
-              ->default('waiting_procurement')
+              ->default('draft')
               ->index();
 
             // ========= STATUS OPERASIONAL PO =========
