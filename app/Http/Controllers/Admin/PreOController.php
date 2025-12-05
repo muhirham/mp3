@@ -393,7 +393,6 @@ class PreOController extends Controller
             ->with('error', 'PO ditolak Procurement: ' . $data['reason']);
     }
 
-
     public function approveCeo(Request $request, PurchaseOrder $po)
 {
     if ($po->approval_status !== 'waiting_ceo') {
@@ -903,6 +902,11 @@ class PreOController extends Controller
 
             return back()->with('info', 'PO ini sudah tidak dalam status menunggu approval.');
         }
+
+        
+
+
+
 
     /** PRINT PDF PO */
     public function exportPdf(PurchaseOrder $po)
