@@ -98,9 +98,15 @@
                         $roleText     = implode(', ', $roleNames);
                         $rolesAttr    = implode(',', $roleSlugs);
                         $signatureUrl = $u->signature_path ? asset('storage/'.$u->signature_path) : null;
+
+                        // Admin WH hanya boleh manage SALES di warehouse dia
+                        $canManageRow = !$isWarehouseUser
+                            || (in_array('sales', $roleSlugs, true) && $u->warehouse_id === $me->warehouse_id);
                     @endphp
                     <tr>
-                        <td><input class="form-check-input row-check" type="checkbox"></td>
+                        <td>
+                            <input class="form-check-input row-check" type="checkbox" @if(!$canManageRow) disabled @endif>
+                        </td>
                         <td>{{ $u->id }}</td>
                         <td>{{ $u->name }}</td>
                         <td>{{ $u->username }}</td>
@@ -123,27 +129,29 @@
                         <td>{{ $u->updated_at?->format('Y-m-d H:i') }}</td>
                         <td>
                             <div class="d-flex gap-1">
-                                <a href="#"
-                                   class="btn btn-sm btn-icon btn-outline-secondary js-edit"
-                                   title="Edit"
-                                   data-id="{{ $u->id }}"
-                                   data-name="{{ $u->name }}"
-                                   data-username="{{ $u->username }}"
-                                   data-email="{{ $u->email }}"
-                                   data-phone="{{ $u->phone }}"
-                                   data-position="{{ $u->position }}"
-                                   data-roles="{{ $rolesAttr }}"
-                                   data-status="{{ $u->status }}"
-                                   data-warehouse_id="{{ $u->warehouse_id ?? '' }}">
-                                    <i class="bx bx-edit-alt"></i>
-                                </a>
-                                <a href="#"
-                                   class="btn btn-sm btn-icon btn-outline-danger js-del"
-                                   title="Delete"
-                                   data-id="{{ $u->id }}"
-                                   data-name="{{ $u->name }}">
-                                    <i class="bx bx-trash"></i>
-                                </a>
+                                @if($canManageRow)
+                                    <a href="#"
+                                       class="btn btn-sm btn-icon btn-outline-secondary js-edit"
+                                       title="Edit"
+                                       data-id="{{ $u->id }}"
+                                       data-name="{{ $u->name }}"
+                                       data-username="{{ $u->username }}"
+                                       data-email="{{ $u->email }}"
+                                       data-phone="{{ $u->phone }}"
+                                       data-position="{{ $u->position }}"
+                                       data-roles="{{ $rolesAttr }}"
+                                       data-status="{{ $u->status }}"
+                                       data-warehouse_id="{{ $u->warehouse_id ?? '' }}">
+                                        <i class="bx bx-edit-alt"></i>
+                                    </a>
+                                    <a href="#"
+                                       class="btn btn-sm btn-icon btn-outline-danger js-del"
+                                       title="Delete"
+                                       data-id="{{ $u->id }}"
+                                       data-name="{{ $u->name }}">
+                                        <i class="bx bx-trash"></i>
+                                    </a>
+                                @endif
                             </div>
                         </td>
                     </tr>
@@ -207,13 +215,11 @@
                     <input name="phone" value="{{ old('phone') }}" class="form-control bg-transparent text-white border-secondary">
                 </div>
 
-                {{-- Position optional --}}
                 <div class="mb-3">
                     <label class="form-label text-white">Position (optional)</label>
                     <input name="position" value="{{ old('position') }}" class="form-control bg-transparent text-white border-secondary">
                 </div>
 
-                {{-- Signature optional --}}
                 <div class="mb-3">
                     <label class="form-label text-white">Signature (optional)</label>
                     <input type="file" name="signature" class="form-control bg-transparent text-white border-secondary">
@@ -224,6 +230,7 @@
                     <div class="col-md-6">
                         <label class="form-label text-white">Roles</label>
                         @if($isWarehouseUser)
+                            {{-- Admin WH: selalu Sales --}}
                             <input type="hidden" name="roles[]" value="sales">
                             <input class="form-control bg-transparent text-white border-secondary" value="Sales" disabled>
                         @else
@@ -334,6 +341,7 @@
                     <div class="col-md-6">
                         <label class="form-label text-white">Roles</label>
                         @if($isWarehouseUser)
+                            {{-- Admin WH: selalu Sales --}}
                             <input type="hidden" name="roles[]" id="edit_roles_force" value="sales">
                             <input class="form-control bg-transparent text-white border-secondary" value="Sales" disabled>
                         @else
@@ -403,14 +411,12 @@
         padding: .35rem .45rem;
     }
 
-    /* kolom signature kecil & center */
     #tblUsers th:nth-child(8),
     #tblUsers td:nth-child(8) {
         text-align: center;
         width: 70px;
     }
 
-    /* kontrol filter/paging kecil */
     #pageLength,
     #f_role,
     #f_status,
@@ -438,7 +444,7 @@ $(function () {
     const table = $('#tblUsers').DataTable({
         order: [[1,'asc']],
         columnDefs: [
-            { targets: [0,13], orderable:false }, // checkbox + actions
+            { targets: [0,13], orderable:false },
             { targets: 1, type: 'num' }
         ],
         pageLength: 10,
@@ -451,23 +457,21 @@ $(function () {
     $('#searchUser').on('keyup', function(){ table.search(this.value).draw(); });
     $('#pageLength').on('change', function(){ table.page.len(parseInt(this.value,10)).draw(); });
 
-    // filter role (kolom ROLES sekarang index 8)
     $('#f_role').on('change', function(){
         const v = this.value;
         table.column(8).search(v ? v : '', true, false).draw();
     });
 
-    // filter status (kolom STATUS sekarang index 10)
     $('#f_status').on('change', function(){
         const v = this.value;
         table.column(10).search(v ? '^'+v+'$' : '', true, false).draw();
     });
 
     $('#checkAll').on('change', function(){
-        $('#tblUsers tbody .row-check').prop('checked', this.checked);
+        $('#tblUsers tbody .row-check:not(:disabled)').prop('checked', this.checked);
     });
 
-    // Preview tanda tangan (klik thumbnail)
+    // Preview signature
     $(document).on('click', '.js-signature', function(e){
         e.preventDefault();
         const img = this.dataset.img;
@@ -482,7 +486,7 @@ $(function () {
         });
     });
 
-    // Export CSV (ID, Name, Username, Email, Phone, Position, Roles, Warehouse, Status, Created, Updated)
+    // Export CSV
     $('#btnExportCSV').on('click', function(e){
         e.preventDefault();
         const headers = ['ID','Name','Username','Email','Phone','Position','Roles','Warehouse','Status','Created','Updated'];
@@ -490,17 +494,17 @@ $(function () {
         $('#tblUsers tbody tr:visible').each(function(){
             const t = $(this).find('td');
             csv += [
-                t.eq(1).text().trim(),  // ID
-                t.eq(2).text().trim(),  // Name
-                t.eq(3).text().trim(),  // Username
-                t.eq(4).text().trim(),  // Email
-                t.eq(5).text().trim(),  // Phone
-                t.eq(6).text().trim(),  // Position
-                t.eq(8).text().trim(),  // Roles
-                t.eq(9).text().trim(),  // Warehouse
-                t.eq(10).text().trim(), // Status
-                t.eq(11).text().trim(), // Created
-                t.eq(12).text().trim()  // Updated
+                t.eq(1).text().trim(),
+                t.eq(2).text().trim(),
+                t.eq(3).text().trim(),
+                t.eq(4).text().trim(),
+                t.eq(5).text().trim(),
+                t.eq(6).text().trim(),
+                t.eq(8).text().trim(),
+                t.eq(9).text().trim(),
+                t.eq(10).text().trim(),
+                t.eq(11).text().trim(),
+                t.eq(12).text().trim()
             ].join(',') + '\n';
         });
         const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
@@ -511,7 +515,7 @@ $(function () {
 
     $('#btnExportPrint').on('click', function(e){ e.preventDefault(); window.print(); });
 
-    // ADD: toggle warehouse
+    // toggle warehouse on add
     function toggleAddWarehouse() {
         @if($isWarehouseUser)
             $('#wrap_add_wh').show(); return;
@@ -525,7 +529,7 @@ $(function () {
     $('#add_roles').on('change', toggleAddWarehouse);
     toggleAddWarehouse();
 
-    // EDIT modal
+    // Edit modal
     const modalEl = document.getElementById('glassEditUser');
     const modal   = modalEl ? new bootstrap.Modal(modalEl) : null;
     const form    = document.getElementById('formEditUser');
@@ -569,7 +573,19 @@ $(function () {
 
     $('#edit_roles').on('change', toggleEditWarehouse);
 
-    // DELETE single
+    function getCheckedIds(){
+        const ids=[];
+        $('#tblUsers tbody tr').each(function(){
+            const cb = $(this).find('.row-check');
+            if (cb.is(':checked') && !cb.is(':disabled')) {
+                const id = $(this).find('td').eq(1).text().trim();
+                if (id) ids.push(Number(id));
+            }
+        });
+        return ids;
+    }
+
+    // Delete single
     $('#tblUsers').on('click', '.js-del', function(e){
         e.preventDefault();
         const id   = this.dataset.id;
@@ -594,18 +610,7 @@ $(function () {
         });
     });
 
-    // BULK DELETE
-    function getCheckedIds(){
-        const ids=[];
-        $('#tblUsers tbody tr').each(function(){
-            if ($(this).find('.row-check').is(':checked')) {
-                const id = $(this).find('td').eq(1).text().trim();
-                if (id) ids.push(Number(id));
-            }
-        });
-        return ids;
-    }
-
+    // Bulk delete
     $('#btnBulkDelete').on('click', function(e){
         e.preventDefault();
         const ids = getCheckedIds();
