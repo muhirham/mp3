@@ -903,21 +903,33 @@ class PreOController extends Controller
             return back()->with('info', 'PO ini sudah tidak dalam status menunggu approval.');
         }
 
-        
 
-
-
-
-    /** PRINT PDF PO */
-    public function exportPdf(PurchaseOrder $po)
+    public function exportPdf(Request $request, PurchaseOrder $po)
     {
+        // 1) Matikan debugbar biar nggak ikut ngumpulin output PDF
+        if (class_exists(\Barryvdh\Debugbar\Facade::class)) {
+            \Barryvdh\Debugbar\Facade::disable();
+        }
+
+        // 2) Naikin batas waktu buat proses PDF ini
+        @set_time_limit(120);   // 120 detik, kalau mau bisa dinaikin lagi
+
+        // 3) Pilih template: default / partner
+        $tpl  = $request->query('tpl', 'default');
+        $view = $tpl === 'partner'
+            ? 'admin.po.print_partner'
+            : 'admin.po.print';
+
+        // 4) Ambil company default
         $company = Company::where('is_default', true)
             ->where('is_active', true)
             ->first();
 
+        // 5) Eager load relasi yang dipakai di blade
         $po->load([
             'supplier',
-            'items.product',
+            'items.product.supplier',
+            'items.warehouse',
             'user',
             'procurementApprover',
             'ceoApprover',
@@ -925,14 +937,16 @@ class PreOController extends Controller
 
         $isDraft = $po->approval_status !== 'approved';
 
-        $pdf = Pdf::loadView('admin.po.print', [
-                'po'      => $po,
-                'company' => $company,
-                'isDraft' => $isDraft,
-            ])
-            ->setPaper('A4', 'portrait');
+        // 6) Generate PDF
+        $pdf = Pdf::loadView($view, [
+            'po'      => $po,
+            'company' => $company,
+            'isDraft' => $isDraft,
+        ]);
 
-        return $pdf->stream('PO-' . $po->po_code . '.pdf');
+        $pdf->setPaper('A4', 'portrait');
+
+        return $pdf->stream('PO-'.$po->po_code.'.pdf');
     }
 
     public function exportExcel(PurchaseOrder $po)

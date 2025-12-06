@@ -6,10 +6,9 @@
     $me    = auth()->user();
     $roles = $me?->roles ?? collect();
 
-    // kalau controller sudah kirim $isSuperadmin / $isProcurement / $isCeo, pakai itu
-    $isSuperadmin  = $isSuperadmin  ?? $roles->contains('slug', 'superadmin');
-    $isProcurement = $isProcurement ?? $roles->contains('slug', 'procurement');
-    $isCeo         = $isCeo         ?? $roles->contains('slug', 'ceo');
+    $isSuperadmin  = $roles->contains('slug', 'superadmin');
+    $isProcurement = $roles->contains('slug', 'procurement');
+    $isCeo         = $roles->contains('slug', 'ceo');
 @endphp
 
 <div class="container-xxl flex-grow-1 container-p-y">
@@ -19,7 +18,7 @@
       <h5 class="mb-0 fw-bold">Purchase Orders</h5>
 
       <div class="d-flex flex-wrap gap-2 ms-auto">
-        {{-- Search PO (akan di-handle AJAX, tidak perlu tekan enter) --}}
+        {{-- Search PO --}}
         <form class="d-flex gap-2" id="po-search-form" method="get">
           <input id="po-search"
                  class="form-control"
@@ -29,13 +28,15 @@
           <button class="btn btn-outline-secondary" type="submit">Cari</button>
         </form>
 
-        {{-- Create new PO --}}
-        <form action="{{ route('po.store') }}" method="POST">
-          @csrf
-          <button type="submit" class="btn btn-primary">
-            <i class="bx bx-plus"></i> New PO
-          </button>
-        </form>
+        {{-- Create new PO (biasanya hanya superadmin) --}}
+        @if($isSuperadmin)
+          <form action="{{ route('po.store') }}" method="POST">
+            @csrf
+            <button type="submit" class="btn btn-primary">
+              <i class="bx bx-plus"></i> New PO
+            </button>
+          </form>
+        @endif
       </div>
     </div>
 
@@ -43,13 +44,13 @@
       <div class="alert alert-info small py-2 mb-0">
         <strong>Rule Approval:</strong>
         <ul class="mb-0 ps-3">
-          <li>Grand total &le; Rp 1.000.000 &rarr; cukup disetujui <strong>Procurement</strong>.</li>
-          <li>Grand total &gt; Rp 1.000.000 &rarr; wajib 2 lapis: <strong>Procurement → CEO</strong>.</li>
+          <li>Grand total &le; Rp 1.000.000 → cukup disetujui <strong>Procurement</strong>.</li>
+          <li>Grand total &gt; Rp 1.000.000 → wajib 2 lapis: <strong>Procurement → CEO</strong>.</li>
         </ul>
       </div>
     </div>
 
-    {{-- WRAPPER YANG NANTI DI-GANTI VIA AJAX --}}
+    {{-- WRAPPER TABEL (dipakai juga untuk AJAX) --}}
     <div id="po-table-wrapper">
 
       <div class="table-responsive">
@@ -71,10 +72,10 @@
           <tbody>
             @forelse($pos as $po)
               @php
-                // cek GR
+                // apakah sudah punya GR
                 $hasGr = (int)($po->gr_count ?? 0) > 0;
 
-                // GR HANYA SUPERADMIN & PO SUDAH APPROVED
+                // Receive hanya superadmin + status ordered + approved + belum pernah GR
                 $canReceive = $isSuperadmin
                               && !$hasGr
                               && $po->status === 'ordered'
@@ -83,18 +84,15 @@
 
                 // ==== SUMMARY SUPPLIER ====
                 $supplierNames = collect();
-
                 if (!empty($po->supplier?->name)) {
                     $supplierNames->push($po->supplier->name);
                 }
-
                 foreach ($po->items as $it) {
                     $sName = $it->product->supplier->name ?? null;
                     if ($sName) {
                         $supplierNames->push($sName);
                     }
                 }
-
                 $supplierNames = $supplierNames->unique()->values();
 
                 if ($supplierNames->isEmpty()) {
@@ -108,13 +106,10 @@
                 // ==== SUMMARY WAREHOUSE ====
                 $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
 
-                if (!$fromRequest) {
-                    // PO manual dari pusat → selalu Central Stock
+                if (! $fromRequest) {
                     $warehouseLabel = 'Central Stock';
                 } else {
-                    // PO dari Request Restock → ambil nama warehouse dari item
                     $warehouseNames = collect();
-
                     foreach ($po->items as $it) {
                         if ($it->warehouse) {
                             $warehouseNames->push(
@@ -123,7 +118,6 @@
                             );
                         }
                     }
-
                     $warehouseNames = $warehouseNames->filter()->unique()->values();
 
                     if ($warehouseNames->isEmpty()) {
@@ -135,21 +129,21 @@
                     }
                 }
 
-                // ==== APPROVAL STATUS ====
+                // ==== APPROVAL STATUS BADGE ====
                 $approvalStatus = $po->approval_status ?: 'draft';
 
                 if ($approvalStatus === 'draft') {
-                    $approvalBadge = '<span class="badge bg-label-secondary">Draft</span>';
+                    $approvalBadge = '<span class="badge bg-label-secondary">DRAFT</span>';
                 } elseif ($approvalStatus === 'waiting_procurement') {
-                    $approvalBadge = '<span class="badge bg-label-warning">Waiting Procurement</span>';
+                    $approvalBadge = '<span class="badge bg-label-warning">WAITING PROCUREMENT</span>';
                 } elseif ($approvalStatus === 'waiting_ceo') {
-                    $approvalBadge = '<span class="badge bg-label-info">Waiting CEO</span>';
+                    $approvalBadge = '<span class="badge bg-label-info">WAITING CEO</span>';
                 } elseif ($approvalStatus === 'approved') {
-                    $approvalBadge = '<span class="badge bg-label-success">Approved</span>';
+                    $approvalBadge = '<span class="badge bg-label-success">APPROVED</span>';
                 } elseif ($approvalStatus === 'rejected') {
-                    $approvalBadge = '<span class="badge bg-label-danger">Rejected</span>';
+                    $approvalBadge = '<span class="badge bg-label-danger">REJECTED</span>';
                 } else {
-                    $approvalBadge = '<span class="badge bg-label-secondary">'.e($approvalStatus).'</span>';
+                    $approvalBadge = '<span class="badge bg-label-secondary">'.e(strtoupper($approvalStatus)).'</span>';
                 }
 
                 $procName = $po->procurementApprover->name ?? '-';
@@ -193,30 +187,6 @@
                         <i class="bx bx-download"></i> Receive
                       </button>
                     @endif
-
-                    {{-- APPROVAL Procurement --}}
-                    @if($isProcurement && in_array($approvalStatus, [null, 'draft', 'waiting_procurement']))
-                      <form method="POST"
-                            action="{{ route('po.approve', $po->id) }}"
-                            class="d-inline form-approve">
-                        @csrf
-                        <button type="submit" class="btn btn-sm btn-success">
-                          <i class="bx bx-check"></i> Approve (Proc)
-                        </button>
-                      </form>
-                    @endif
-
-                    {{-- APPROVAL CEO --}}
-                    @if($isCeo && $approvalStatus === 'waiting_ceo')
-                      <form method="POST"
-                            action="{{ route('po.approve', $po->id) }}"
-                            class="d-inline form-approve">
-                        @csrf
-                        <button type="submit" class="btn btn-sm btn-warning">
-                          <i class="bx bx-check"></i> Approve CEO
-                        </button>
-                      </form>
-                    @endif
                   </div>
                 </td>
               </tr>
@@ -240,7 +210,7 @@
         </div>
       @endif
 
-      {{-- ======= MODAL GR PER PO (di dalam wrapper) ======= --}}
+      {{-- ======= MODAL GR PER PO ======= --}}
       @foreach($pos as $po)
         @php
           $hasGr      = (int)($po->gr_count ?? 0) > 0;
@@ -250,7 +220,11 @@
                         && $po->approval_status === 'approved'
                         && $po->items_count > 0;
 
-          // summary supplier sama seperti di tabel
+          if (! $canReceive) {
+              continue;
+          }
+
+          // summary supplier
           $supplierNames = collect();
           if (!empty($po->supplier?->name)) {
               $supplierNames->push($po->supplier->name);
@@ -271,9 +245,9 @@
               $supplierLabel = $supplierNames->first().' + '.($supplierNames->count() - 1).' supplier';
           }
 
-          // summary warehouse untuk modal
+          // summary warehouse
           $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
-          if (!$fromRequest) {
+          if (! $fromRequest) {
               $whLabel = 'Central Stock';
           } else {
               $whNames = collect();
@@ -293,124 +267,110 @@
           }
         @endphp
 
-        @if($canReceive)
-          <div class="modal fade mdl-gr-po" id="mdlGR-{{ $po->id }}" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
-              <div class="modal-content">
-                <div class="modal-header">
-                  <h5 class="modal-title">Goods Received – {{ $po->po_code }}</h5>
-                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <div class="modal fade mdl-gr-po" id="mdlGR-{{ $po->id }}" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Goods Received – {{ $po->po_code }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+
+              <form action="{{ route('po.gr.store', $po) }}"
+                    method="POST"
+                    enctype="multipart/form-data">
+                @csrf
+                <div class="modal-body">
+                  <p class="mb-3 small">
+                    Supplier: <strong>{{ $supplierLabel }}</strong><br>
+                    Warehouse: <strong>{{ $whLabel }}</strong>
+                  </p>
+
+                  <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Product</th>
+                          <th>Qty Ordered</th>
+                          <th>Qty Received</th>
+                          <th>Qty Remaining</th>
+                          <th>Qty Good</th>
+                          <th>Qty Damaged</th>
+                          <th>Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @foreach($po->items as $i => $item)
+                          @php
+                            $ordered   = (int)($item->qty_ordered ?? 0);
+                            $received  = (int)($item->qty_received ?? 0);
+                            $remaining = max(0, $ordered - $received);
+                            $key       = $item->id;
+                          @endphp
+                          <tr>
+                            <td>{{ $i + 1 }}</td>
+                            <td>
+                              {{ $item->product->name ?? '-' }}<br>
+                              <small class="text-muted">{{ $item->product->product_code ?? '' }}</small>
+                            </td>
+                            <td>{{ $ordered }}</td>
+                            <td>{{ $received }}</td>
+                            <td class="js-remaining" data-remaining="{{ $remaining }}">{{ $remaining }}</td>
+
+                            <td style="width:120px">
+                              <input type="number"
+                                     class="form-control form-control-sm js-qty-good"
+                                     name="receives[{{ $key }}][qty_good]"
+                                     min="0"
+                                     value="{{ $remaining }}">
+                            </td>
+                            <td style="width:120px">
+                              <input type="number"
+                                     class="form-control form-control-sm js-qty-damaged"
+                                     name="receives[{{ $key }}][qty_damaged]"
+                                     min="0"
+                                     value="0">
+                            </td>
+                            <td style="width:180px">
+                              <input type="text"
+                                     class="form-control form-control-sm"
+                                     name="receives[{{ $key }}][notes]"
+                                     placeholder="Catatan (opsional)">
+                              <small class="text-danger small js-row-msg"></small>
+                            </td>
+                          </tr>
+                        @endforeach
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <small class="text-muted d-block mb-3">
+                    Qty Good + Qty Damaged tidak boleh lebih besar dari Qty Remaining.
+                  </small>
+
+                  <div class="mb-3">
+                    <label class="form-label">Upload foto barang bagus (opsional)</label>
+                    <input type="file" name="photos_good[]" class="form-control" multiple>
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label">Upload foto barang rusak (opsional)</label>
+                    <input type="file" name="photos_damaged[]" class="form-control" multiple>
+                  </div>
                 </div>
 
-                {{-- route lama: po.gr.store --}}
-                <form action="{{ route('po.gr.store', $po) }}"
-                      method="POST"
-                      enctype="multipart/form-data">
-                  @csrf
-                  <div class="modal-body">
-                    <p class="mb-3">
-                      Supplier: <strong>{{ $supplierLabel }}</strong><br>
-                      Warehouse: <strong>{{ $whLabel }}</strong>
-                    </p>
-
-                    <div class="table-responsive">
-                      <table class="table table-sm align-middle">
-                        <thead>
-                          <tr>
-                            <th>#</th>
-                            <th>Product</th>
-                            <th>Qty Ordered</th>
-                            <th>Qty Received</th>
-                            <th>Qty Remaining</th>
-                            <th>Qty Good</th>
-                            <th>Qty Damaged</th>
-                            <th>Notes</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          @foreach($po->items as $i => $item)
-                            @php
-                              $ordered   = (int)($item->qty_ordered ?? 0);
-                              $received  = (int)($item->qty_received ?? 0);
-                              $remaining = max(0, $ordered - $received);
-                              $key       = $item->id;
-                            @endphp
-                            <tr>
-                              <td>{{ $i + 1 }}</td>
-                              <td>
-                                {{ $item->product->name ?? '-' }}<br>
-                                <small class="text-muted">{{ $item->product->product_code ?? '' }}</small>
-                              </td>
-                              <td>{{ $ordered }}</td>
-                              <td>{{ $received }}</td>
-                              <td class="js-remaining"
-                                  data-remaining="{{ $remaining }}">
-                                  {{ $remaining }}
-                              </td>
-
-                              <td style="width:120px">
-                                <input type="number"
-                                       class="form-control form-control-sm js-qty-good"
-                                       name="receives[{{ $key }}][qty_good]"
-                                       min="0"
-                                       value="{{ $remaining }}">
-                              </td>
-                              <td style="width:120px">
-                                <input type="number"
-                                       class="form-control form-control-sm js-qty-damaged"
-                                       name="receives[{{ $key }}][qty_damaged]"
-                                       min="0"
-                                       value="0">
-                              </td>
-                              <td style="width:180px">
-                                <input type="text"
-                                       class="form-control form-control-sm"
-                                       name="receives[{{ $key }}][notes]"
-                                       placeholder="Catatan (opsional)">
-                                <small class="text-danger small js-row-msg"></small>
-                              </td>
-                            </tr>
-                          @endforeach
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <small class="text-muted d-block mb-3">
-                      Qty Good + Qty Damaged tidak boleh lebih besar dari Qty Remaining.
-                    </small>
-
-                    {{-- FOTO GOOD --}}
-                    <div class="mb-3">
-                      <label class="form-label">Upload foto barang bagus (opsional)</label>
-                      <input type="file" name="photos_good[]" class="form-control" multiple>
-                      <small class="text-muted">
-                        Upload foto barang dalam kondisi baik. Maks 8MB per file.
-                      </small>
-                    </div>
-
-                    {{-- FOTO DAMAGED --}}
-                    <div class="mb-3">
-                      <label class="form-label">Upload foto barang rusak (opsional)</label>
-                      <input type="file" name="photos_damaged[]" class="form-control" multiple>
-                      <small class="text-muted">
-                        Upload bukti kerusakan barang. Maks 8MB per file.
-                      </small>
-                    </div>
-                  </div>
-
-                  <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
-                      Batal
-                    </button>
-                    <button type="submit" class="btn btn-primary">
-                      <i class="bx bx-save"></i> Simpan Goods Received
-                    </button>
-                  </div>
-                </form>
-              </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    Batal
+                  </button>
+                  <button type="submit" class="btn btn-primary">
+                    <i class="bx bx-save"></i> Simpan Goods Received
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
-        @endif
+        </div>
       @endforeach
       {{-- ======= END MODALS ======= --}}
 
@@ -419,28 +379,9 @@
 
 </div>
 
-{{-- SweetAlert2 --}}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-  function bindApproveForms() {
-    document.querySelectorAll('.form-approve').forEach(form => {
-      form.addEventListener('submit', function (e) {
-        e.preventDefault();
-        Swal.fire({
-          icon: 'question',
-          title: 'Approve PO?',
-          text: 'PO akan diproses sesuai tahap approval.',
-          showCancelButton: true,
-          confirmButtonText: 'Ya, approve',
-          cancelButtonText: 'Batal'
-        }).then(res => {
-          if (res.isConfirmed) form.submit();
-        });
-      });
-    });
-  }
-
-  // flash message
+  // FLASH
   document.addEventListener('DOMContentLoaded', function () {
     @if(session('success'))
       Swal.fire({
@@ -459,11 +400,9 @@
         text: @json(session('error')),
       });
     @endif
-
-    bindApproveForms();
   });
 
-  // ===== VALIDASI & HITUNG LIVE DI MODAL GR =====
+  // VALIDASI DI MODAL GR
   function bindGrValidation() {
     document.querySelectorAll('.mdl-gr-po').forEach(function (modalEl) {
       modalEl.addEventListener('input', function (e) {
@@ -475,10 +414,10 @@
         const row = e.target.closest('tr');
         if (!row) return;
 
-        const goodEl   = row.querySelector('.js-qty-good');
-        const badEl    = row.querySelector('.js-qty-damaged');
-        const remCell  = row.querySelector('.js-remaining');
-        const msgEl    = row.querySelector('.js-row-msg');
+        const goodEl  = row.querySelector('.js-qty-good');
+        const badEl   = row.querySelector('.js-qty-damaged');
+        const remCell = row.querySelector('.js-remaining');
+        const msgEl   = row.querySelector('.js-row-msg');
 
         const maxRem = parseInt(remCell.dataset.remaining || '0', 10);
 
@@ -506,76 +445,13 @@
           }
         }
 
-        const sisa = maxRem - total;
-        remCell.textContent = sisa;
+        remCell.textContent = maxRem - total;
       });
     });
   }
 
-  // ====== FUNGSI RELOAD TABLE VIA AJAX ======
-  function loadPoTable(url) {
-    const wrapper = document.getElementById('po-table-wrapper');
-    if (!wrapper) return;
+  bindGrValidation();
 
-    fetch(url, {
-      headers: {
-        'X-Requested-With': 'XMLHttpRequest'
-      }
-    })
-      .then(res => res.text())
-      .then(html => {
-        const parser = new DOMParser();
-        const doc    = parser.parseFromString(html, 'text/html');
-        const newWrap = doc.querySelector('#po-table-wrapper');
-        if (!newWrap) return;
-
-        wrapper.innerHTML = newWrap.innerHTML;
-
-        // re-bind setelah konten ke-replace
-        bindGrValidation();
-        bindApproveForms();
-      })
-      .catch(err => console.error(err));
-  }
-
-  document.addEventListener('DOMContentLoaded', function () {
-    bindGrValidation();
-
-    const searchForm  = document.getElementById('po-search-form');
-    const searchInput = document.getElementById('po-search');
-    let typingTimer   = null;
-
-    function doSearch() {
-      const q   = searchInput ? (searchInput.value || '') : '';
-      const url = '{{ route('po.index') }}' + '?q=' + encodeURIComponent(q);
-      loadPoTable(url);
-    }
-
-    // submit form → pakai AJAX, tidak reload page
-    if (searchForm) {
-      searchForm.addEventListener('submit', function (e) {
-        e.preventDefault();
-        doSearch();
-      });
-    }
-
-    // ketik tanpa enter (debounce 400ms)
-    if (searchInput) {
-      searchInput.addEventListener('keyup', function () {
-        clearTimeout(typingTimer);
-        typingTimer = setTimeout(doSearch, 400);
-      });
-    }
-
-    // pagination via AJAX (delegation)
-    document.addEventListener('click', function (e) {
-      const link = e.target.closest('#po-table-wrapper .pagination a');
-      if (!link) return;
-      e.preventDefault();
-      const url = link.getAttribute('href');
-      if (!url) return;
-      loadPoTable(url);
-    });
-  });
+  // Pencarian & pagination AJAX (opsional, kalau mau tetap pakai bisa lanjutkan logic lama di sini)
 </script>
 @endsection
