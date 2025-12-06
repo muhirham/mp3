@@ -37,12 +37,12 @@ class PreOController extends Controller
                 'supplier',
                 'items.product.supplier',
                 'items.warehouse',
-                'restockReceipts',
                 'user',
                 'procurementApprover',
                 'ceoApprover',
             ])
             ->withCount('items')
+            ->withCount('restockReceipts as gr_count')
             ->when($q, function ($qq) use ($q) {
                 $qq->where('po_code', 'like', "%{$q}%");
             })

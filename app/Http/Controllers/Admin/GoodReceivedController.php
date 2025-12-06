@@ -132,7 +132,7 @@ class GoodReceivedController extends Controller
 
         $pos = $poQuery
             ->orderByDesc('id')
-            ->paginate(15);
+            ->paginate(8);
 
         $pos->appends($request->all());
 
@@ -210,6 +210,35 @@ class GoodReceivedController extends Controller
 
         return $prefix . str_pad($n, 4, '0', STR_PAD_LEFT);
     }
+
+    public function detail(PurchaseOrder $po)
+    {
+        $me    = auth()->user();
+        $roles = $me?->roles ?? collect();
+
+        $isSuperadmin = $roles->contains('slug', 'superadmin');
+
+        // Load relasi yang dibutuhin di modal
+        $po->load([
+            'supplier',
+            'items.product',
+            'restockReceipts.photos',
+            'restockReceipts.receiver',
+            'restockReceipts.warehouse',
+            'restockReceipts.supplier',
+        ]);
+
+        $company = Company::where('is_default', true)
+            ->where('is_active', true)
+            ->first();
+
+        return view('admin.masterdata.partials.goodReceivedDetail', compact(
+            'po',
+            'company',
+            'isSuperadmin'
+        ));
+    }
+
 
     /** Simpan Goods Received dari PO manual (1 form → banyak item) */
     public function storeFromPo(Request $r, PurchaseOrder $po)

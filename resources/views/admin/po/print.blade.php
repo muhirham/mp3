@@ -5,7 +5,7 @@
     <title>Purchase Order {{ $po->po_code }}</title>
     <style>
         body {
-            font-family: DejaVu Sans, Arial, Helvetica, sans-serif;
+            font-family: Arial, Helvetica, sans-serif;
             font-size: 11px;
             color: #000;
         }
