@@ -298,7 +298,6 @@ Route::middleware('auth')->group(function () {
         ->name('restocks.receive')
         ->middleware('menu:wh_restock');
 
-    // key: wh_issue (pagi)
     Route::get('/sales/handover/morning', function () {
         $me = auth()->user();
 
@@ -312,52 +311,55 @@ Route::middleware('auth')->group(function () {
             $whQuery->orderBy('name');
             $warehouses = $whQuery->get(['id','name']);
         } else {
-            $warehouses = $whQuery->get(['id'])->map(fn($w)=>(object)['id'=>$w->id,'name'=>'Warehouse #'.$w->id]);
+            $warehouses = $whQuery->get(['id'])->map(
+                fn($w)=>(object)['id'=>$w->id,'name'=>'Warehouse #'.$w->id]
+            );
         }
 
         $salesUsers = User::whereHas('roles', fn($q)=>$q->where('slug','sales'))
             ->when($me->warehouse_id, fn($q)=>$q->where('warehouse_id',$me->warehouse_id))
-            ->orderBy('name')->get(['id','name','warehouse_id']);
+            ->orderBy('name')->get(['id','name','warehouse_id','email']);
 
-        $products = Product::select('id','name','product_code')->orderBy('name')->get();
+        // tambahin selling_price
+        $products = Product::select('id','name','product_code','selling_price')
+            ->orderBy('name')
+            ->get();
+
         return view('wh.handover_morning', compact('me','warehouses','salesUsers','products'));
-    })->name('sales.handover.morning')
-      ->middleware('menu:wh_issue');
+    })->name('sales.handover.morning')->middleware('menu:wh_issue');
 
     Route::post('/sales/handover/issue', [SalesHandoverController::class,'issue'])
         ->name('sales.handover.issue')
         ->middleware('menu:wh_issue');
 
-    // key: wh_reconcile (sore + OTP + rekonsiliasi)
+    // sore
     Route::get('/sales/handover/evening', function () {
         $me = auth()->user();
+
         $handovers = SalesHandover::with('sales:id,name')
-            ->whereIn('status',['issued','waiting_otp'])
+            ->where('status','issued')
             ->when($me->warehouse_id, fn($q)=>$q->where('warehouse_id',$me->warehouse_id))
             ->orderBy('handover_date','desc')
             ->get(['id','code','status','sales_id','handover_date','warehouse_id'])
             ->map(fn($h)=> (object)[
-                'id'=>$h->id,'code'=>$h->code,'status'=>$h->status,
-                'sales_id'=>$h->sales_id,'handover_date'=>$h->handover_date,
-                'sales_name'=>$h->sales->name ?? null,
+                'id'          => $h->id,
+                'code'        => $h->code,
+                'status'      => $h->status,
+                'sales_id'    => $h->sales_id,
+                'handover_date'=>$h->handover_date,
+                'sales_name'  => $h->sales->name ?? null,
             ]);
 
         return view('wh.handover_evening', compact('me','handovers'));
-    })->name('sales.handover.evening')
-      ->middleware('menu:wh_reconcile');
+    })->name('sales.handover.evening')->middleware('menu:wh_reconcile');
 
-    Route::post('/sales/handover/{handover}/generate-otp', [SalesHandoverController::class,'generateOtp'])
-        ->name('sales.handover.otp')
-        ->middleware('menu:wh_reconcile');
-
-    Route::post('/sales/handover/{handover}/reconcile',    [SalesHandoverController::class,'reconcile'])
+    Route::post('/sales/handover/{handover}/reconcile', [SalesHandoverController::class,'reconcile'])
         ->name('sales.handover.reconcile')
         ->middleware('menu:wh_reconcile');
 
-        /* <<< ADD THIS */
-        Route::get('/sales/handover/{handover}/items', [SalesHandoverController::class,'items'])
-            ->name('sales.handover.items')
-            ->middleware('menu:wh_reconcile');
+    Route::get('/sales/handover/{handover}/items', [SalesHandoverController::class,'items'])
+        ->name('sales.handover.items')
+        ->middleware('menu:wh_reconcile');
 
     /* === Sales pages (SALES KEYS) === */
 

@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+
 use App\Models\Supplier;
 use App\Models\Warehouse;
 use App\Models\Category;
@@ -385,161 +386,131 @@ class CoreSeeder extends Seeder
             ]
         );
 
-                /*
-                * ===========================
-                *  ROLES & USERS
-                * ===========================
-                */
+        /*
+         * ===========================
+         *  ROLES (BASIC)
+         * ===========================
+         */
 
-                // 1. Pastikan semua role inti + approval ada
-                $roles = [
-                    'superadmin'  => 'Super Admin',
-                    'admin'       => 'Admin',
-                    'warehouse'   => 'Warehouse',
-                    'sales'       => 'Sales',
+        // Semua role termasuk procurement & CEO
+        $basicRoles = [
+            'superadmin'  => 'Super Admin',
+            'admin'       => 'Admin',
+            'warehouse'   => 'Warehouse',
+            'sales'       => 'Sales',
+            'procurement' => 'Procurement',
+            'ceo'         => 'CEO',
+        ];
 
-                    // Role baru buat approval 2 lapis
-                    'procurement' => 'Procurement',
-                    'ceo'         => 'CEO',
-                ];
+        foreach ($basicRoles as $slug => $name) {
+            Role::updateOrCreate(
+                ['slug' => $slug],
+                ['name' => $name]
+            );
+        }
 
-                foreach ($roles as $slug => $name) {
-                    Role::updateOrCreate(
-                        ['slug' => $slug],
-                        ['name' => $name]
-                    );
-                }
+        /*
+         * ===========================
+         *  HOME ROUTE & MENU KEYS
+         *  (LOGIC DARI RoleSeeder)
+         * ===========================
+         */
 
-                // Ambil role satu-satu
-                $roleSuperadmin  = Role::where('slug', 'superadmin')->first();
-                $roleAdmin       = Role::where('slug', 'admin')->first();
-                $roleWarehouse   = Role::where('slug', 'warehouse')->first();
-                $roleSales       = Role::where('slug', 'sales')->first();
-                $roleProcurement = Role::where('slug', 'procurement')->first();
-                $roleCeo         = Role::where('slug', 'ceo')->first();
+        $items = collect(config('menu.items', []));
 
-                // Role yang dipakai untuk user "admin" (kalau ada superadmin, pakai itu, kalau nggak, pakai admin)
-                $roleForAdminUser = $roleSuperadmin ?: $roleAdmin;
+        if ($items->isEmpty()) {
+            // Fallback statis kalau config/menu.php belum kepasang
+            $adminKeys = [
+                'products', 'packages', 'categories', 'suppliers',
+                'stock_adjustments',
+                'warehouses', 'wh_stocklevel', 'wh_restock',
+                'goodreceived', 'wh_issue', 'wh_reconcile', 'wh_sales_reports',
+                'sales_daily', 'sales_return',
+                'po', 'restock_request_ap', 'company',
+                'users', 'roles',
+            ];
 
-                // ========== USER ADMIN PUSAT ==========
-                $admin = User::updateOrCreate(
-                    ['email' => 'admin@local'],
-                    [
-                        'name'         => 'Admin Pusat',
-                        'username'     => 'admin',
-                        'phone'        => '081200000001',
-                        'password'     => Hash::make('password123'),
-                        'warehouse_id' => null,
-                        'status'       => 'active',
-                        // kalau di users lu ada kolom ini, aman:
-                        // 'position'       => 'Admin Pusat',
-                        // 'signature_path' => 'signatures/admin.png',
-                    ]
-                );
-                if ($roleForAdminUser) {
-                    $admin->roles()->sync([$roleForAdminUser->id]);
-                }
+            $warehouseKeys = [
+                'wh_restock', 'warehouses', 'wh_stocklevel',
+                'goodreceived', 'wh_issue', 'wh_reconcile', 'wh_sales_reports',
+            ];
 
-                // ========== USER WAREHOUSE ==========
-                $wh_bkt = User::updateOrCreate(
-                    ['email' => 'wh_bukittinggi@local'],
-                    [
-                        'name'         => 'Admin DEPO Bukittinggi',
-                        'username'     => 'wh_bukittinggi',
-                        'phone'        => '081200000002',
-                        'password'     => Hash::make('password123'),
-                        'warehouse_id' => $wh1->id,
-                        'status'       => 'active',
-                    ]
-                );
-                if ($roleWarehouse) {
-                    $wh_bkt->roles()->sync([$roleWarehouse->id]);
-                }
+            $salesKeys = [
+                'sales_daily', 'sales_return',
+            ];
+        } else {
+            // Ambil dari registry menu
+            $adminKeys = $items->pluck('key')->unique()->values()->all();
+            $warehouseKeys = $items->where('group', 'warehouse')
+                ->pluck('key')->unique()->values()->all();
+            $salesKeys = $items->where('group', 'sales')
+                ->pluck('key')->unique()->values()->all();
+        }
 
-                $wh_pdg = User::updateOrCreate(
-                    ['email' => 'wh_padang@local'],
-                    [
-                        'name'         => 'Admin DEPO Padang',
-                        'username'     => 'wh_padang',
-                        'phone'        => '081200000003',
-                        'password'     => Hash::make('password123'),
-                        'warehouse_id' => $wh2->id,
-                        'status'       => 'active',
-                    ]
-                );
-                if ($roleWarehouse) {
-                    $wh_pdg->roles()->sync([$roleWarehouse->id]);
-                }
+        $roleMenuRows = [
+            [
+                'slug'       => 'superadmin',
+                'name'       => 'Administrator',
+                'home_route' => 'admin.dashboard',
+                'menu_keys'  => $adminKeys,
+            ],
+            [
+                'slug'       => 'warehouse',
+                'name'       => 'Warehouse',
+                'home_route' => 'warehouse.dashboard',
+                'menu_keys'  => $warehouseKeys,
+            ],
+            [
+                'slug'       => 'sales',
+                'name'       => 'Sales',
+                'home_route' => 'sales.dashboard',
+                'menu_keys'  => $salesKeys,
+            ],
+        ];
 
-                // ========== USER SALES ==========
-                $sales_bkt = User::updateOrCreate(
-                    ['email' => 'sales_bukittinggi@local'],
-                    [
-                        'name'         => 'Sales DEPO Bukittinggi',
-                        'username'     => 'sales_bukittinggi',
-                        'phone'        => '081200000004',
-                        'password'     => Hash::make('password123'),
-                        'warehouse_id' => $wh1->id,
-                        'status'       => 'active',
-                    ]
-                );
-                if ($roleSales) {
-                    $sales_bkt->roles()->sync([$roleSales->id]);
-                }
+        foreach ($roleMenuRows as $data) {
+            Role::updateOrCreate(
+                ['slug' => $data['slug']],
+                [
+                    'name'       => $data['name'],
+                    'home_route' => $data['home_route'],
+                    'menu_keys'  => $data['menu_keys'],
+                ]
+            );
+        }
 
-                $sales_pdg = User::updateOrCreate(
-                    ['email' => 'sales_padang@local'],
-                    [
-                        'name'         => 'Sales DEPO Padang',
-                        'username'     => 'sales_padang',
-                        'phone'        => '081200000005',
-                        'password'     => Hash::make('password123'),
-                        'warehouse_id' => $wh2->id,
-                        'status'       => 'active',
-                    ]
-                );
-                if ($roleSales) {
-                    $sales_pdg->roles()->sync([$roleSales->id]);
-                }
+        /*
+         * ===========================
+         *  USERS
+         * ===========================
+         */
 
-                // ========== USER PROCUREMENT (APPROVAL LAPIS 1) ==========
-                $procUser = User::updateOrCreate(
-                    ['email' => 'procurement@local'],
-                    [
-                        'name'         => 'User Procurement',
-                        'username'     => 'procurement',
-                        'phone'        => '081200000006',
-                        'password'     => Hash::make('password123'),
-                        'warehouse_id' => null,
-                        'status'       => 'active',
-                        // sesuaikan kalau lu sudah punya kolom jabatan & tanda tangan
-                        // 'position'       => 'Procurement',
-                        // 'signature_path' => 'signatures/procurement.png',
-                    ]
-                );
-                if ($roleProcurement) {
-                    $procUser->roles()->sync([$roleProcurement->id]);
-                }
+        $roleSuperadmin  = Role::where('slug', 'superadmin')->first();
+        $roleAdmin       = Role::where('slug', 'admin')->first();
+        $roleWarehouse   = Role::where('slug', 'warehouse')->first();
+        $roleSales       = Role::where('slug', 'sales')->first();
+        $roleProcurement = Role::where('slug', 'procurement')->first();
+        $roleCeo         = Role::where('slug', 'ceo')->first();
 
-                // ========== USER CEO (APPROVAL LAPIS 2) ==========
-                $ceoUser = User::updateOrCreate(
-                    ['email' => 'ceo@local'],
-                    [
-                        'name'         => 'Chief Executive Officer',
-                        'username'     => 'ceo',
-                        'phone'        => '081200000007',
-                        'password'     => Hash::make('password123'),
-                        'warehouse_id' => null,
-                        'status'       => 'active',
-                        // 'position'       => 'CEO',
-                        // 'signature_path' => 'signatures/ceo.png',
-                    ]
-                );
-                if ($roleCeo) {
-                    $ceoUser->roles()->sync([$roleCeo->id]);
-                }
+        $roleForAdminUser = $roleSuperadmin ?: $roleAdmin;
 
+        // ========== USER ADMIN PUSAT ==========
+        $admin = User::updateOrCreate(
+            ['email' => 'admin@local'],
+            [
+                'name'         => 'Admin Pusat',
+                'username'     => 'admin',
+                'phone'        => '081200000001',
+                'password'     => Hash::make('password123'),
+                'warehouse_id' => null,
+                'status'       => 'active',
+            ]
+        );
+        if ($roleForAdminUser) {
+            $admin->roles()->sync([$roleForAdminUser->id]);
+        }
 
+        // ========== USER WAREHOUSE ==========
         $wh_bkt = User::updateOrCreate(
             ['email' => 'wh_bukittinggi@local'],
             [
@@ -570,6 +541,7 @@ class CoreSeeder extends Seeder
             $wh_pdg->roles()->sync([$roleWarehouse->id]);
         }
 
+        // ========== USER SALES ==========
         $sales_bkt = User::updateOrCreate(
             ['email' => 'sales_bukittinggi@local'],
             [
@@ -598,6 +570,38 @@ class CoreSeeder extends Seeder
         );
         if ($roleSales) {
             $sales_pdg->roles()->sync([$roleSales->id]);
+        }
+
+        // ========== USER PROCUREMENT (APPROVAL LAPIS 1) ==========
+        $procUser = User::updateOrCreate(
+            ['email' => 'procurement@local'],
+            [
+                'name'         => 'User Procurement',
+                'username'     => 'procurement',
+                'phone'        => '081200000006',
+                'password'     => Hash::make('password123'),
+                'warehouse_id' => null,
+                'status'       => 'active',
+            ]
+        );
+        if ($roleProcurement) {
+            $procUser->roles()->sync([$roleProcurement->id]);
+        }
+
+        // ========== USER CEO (APPROVAL LAPIS 2) ==========
+        $ceoUser = User::updateOrCreate(
+            ['email' => 'ceo@local'],
+            [
+                'name'         => 'Chief Executive Officer',
+                'username'     => 'ceo',
+                'phone'        => '081200000007',
+                'password'     => Hash::make('password123'),
+                'warehouse_id' => null,
+                'status'       => 'active',
+            ]
+        );
+        if ($roleCeo) {
+            $ceoUser->roles()->sync([$roleCeo->id]);
         }
 
         /*
