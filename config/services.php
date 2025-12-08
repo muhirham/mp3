@@ -13,7 +13,11 @@ return [
     | a conventional file to locate the various service credentials.
     |
     */
-
+    'whatsapp' => [
+    'url'   => env('WHATSAPP_API_URL'),
+    'token' => env('WHATSAPP_API_TOKEN'),
+    ],
+    
     'mailgun' => [
         'domain' => env('MAILGUN_DOMAIN'),
         'secret' => env('MAILGUN_SECRET'),

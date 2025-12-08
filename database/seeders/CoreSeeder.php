@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+
 use App\Models\Supplier;
 use App\Models\Warehouse;
 use App\Models\Category;
@@ -11,7 +12,7 @@ use App\Models\Product;
 use App\Models\User;
 use App\Models\StockLevel;
 use App\Models\Role;
-use App\Models\Package; // <— PENTING: cuma Package, bukan Unit
+use App\Models\Package;
 
 class CoreSeeder extends Seeder
 {
@@ -199,7 +200,7 @@ class CoreSeeder extends Seeder
 
         /*
          * ===========================
-         *  PRODUCTS (sesuai tabel)
+         *  PRODUCTS
          * ===========================
          */
 
@@ -387,14 +388,113 @@ class CoreSeeder extends Seeder
 
         /*
          * ===========================
-         *  ROLES & USERS
+         *  ROLES (BASIC)
          * ===========================
          */
 
-        $roleAdmin     = Role::where('slug', 'admin')->first();
-        $roleWarehouse = Role::where('slug', 'warehouse')->first();
-        $roleSales     = Role::where('slug', 'sales')->first();
+        // Semua role termasuk procurement & CEO
+        $basicRoles = [
+            'superadmin'  => 'Super Admin',
+            'admin'       => 'Admin',
+            'warehouse'   => 'Warehouse',
+            'sales'       => 'Sales',
+            'procurement' => 'Procurement',
+            'ceo'         => 'CEO',
+        ];
 
+        foreach ($basicRoles as $slug => $name) {
+            Role::updateOrCreate(
+                ['slug' => $slug],
+                ['name' => $name]
+            );
+        }
+
+        /*
+         * ===========================
+         *  HOME ROUTE & MENU KEYS
+         *  (LOGIC DARI RoleSeeder)
+         * ===========================
+         */
+
+        $items = collect(config('menu.items', []));
+
+        if ($items->isEmpty()) {
+            // Fallback statis kalau config/menu.php belum kepasang
+            $adminKeys = [
+                'products', 'packages', 'categories', 'suppliers',
+                'stock_adjustments',
+                'warehouses', 'wh_stocklevel', 'wh_restock',
+                'goodreceived', 'wh_issue', 'wh_reconcile', 'wh_sales_reports',
+                'sales_daily', 'sales_return',
+                'po', 'restock_request_ap', 'company',
+                'users', 'roles',
+            ];
+
+            $warehouseKeys = [
+                'wh_restock', 'warehouses', 'wh_stocklevel',
+                'goodreceived', 'wh_issue', 'wh_reconcile', 'wh_sales_reports',
+            ];
+
+            $salesKeys = [
+                'sales_daily', 'sales_return',
+            ];
+        } else {
+            // Ambil dari registry menu
+            $adminKeys = $items->pluck('key')->unique()->values()->all();
+            $warehouseKeys = $items->where('group', 'warehouse')
+                ->pluck('key')->unique()->values()->all();
+            $salesKeys = $items->where('group', 'sales')
+                ->pluck('key')->unique()->values()->all();
+        }
+
+        $roleMenuRows = [
+            [
+                'slug'       => 'superadmin',
+                'name'       => 'Administrator',
+                'home_route' => 'admin.dashboard',
+                'menu_keys'  => $adminKeys,
+            ],
+            [
+                'slug'       => 'warehouse',
+                'name'       => 'Warehouse',
+                'home_route' => 'warehouse.dashboard',
+                'menu_keys'  => $warehouseKeys,
+            ],
+            [
+                'slug'       => 'sales',
+                'name'       => 'Sales',
+                'home_route' => 'sales.dashboard',
+                'menu_keys'  => $salesKeys,
+            ],
+        ];
+
+        foreach ($roleMenuRows as $data) {
+            Role::updateOrCreate(
+                ['slug' => $data['slug']],
+                [
+                    'name'       => $data['name'],
+                    'home_route' => $data['home_route'],
+                    'menu_keys'  => $data['menu_keys'],
+                ]
+            );
+        }
+
+        /*
+         * ===========================
+         *  USERS
+         * ===========================
+         */
+
+        $roleSuperadmin  = Role::where('slug', 'superadmin')->first();
+        $roleAdmin       = Role::where('slug', 'admin')->first();
+        $roleWarehouse   = Role::where('slug', 'warehouse')->first();
+        $roleSales       = Role::where('slug', 'sales')->first();
+        $roleProcurement = Role::where('slug', 'procurement')->first();
+        $roleCeo         = Role::where('slug', 'ceo')->first();
+
+        $roleForAdminUser = $roleSuperadmin ?: $roleAdmin;
+
+        // ========== USER ADMIN PUSAT ==========
         $admin = User::updateOrCreate(
             ['email' => 'admin@local'],
             [
@@ -406,10 +506,11 @@ class CoreSeeder extends Seeder
                 'status'       => 'active',
             ]
         );
-        if ($roleAdmin) {
-            $admin->roles()->sync([$roleAdmin->id]);
+        if ($roleForAdminUser) {
+            $admin->roles()->sync([$roleForAdminUser->id]);
         }
 
+        // ========== USER WAREHOUSE ==========
         $wh_bkt = User::updateOrCreate(
             ['email' => 'wh_bukittinggi@local'],
             [
@@ -440,6 +541,7 @@ class CoreSeeder extends Seeder
             $wh_pdg->roles()->sync([$roleWarehouse->id]);
         }
 
+        // ========== USER SALES ==========
         $sales_bkt = User::updateOrCreate(
             ['email' => 'sales_bukittinggi@local'],
             [
@@ -470,6 +572,38 @@ class CoreSeeder extends Seeder
             $sales_pdg->roles()->sync([$roleSales->id]);
         }
 
+        // ========== USER PROCUREMENT (APPROVAL LAPIS 1) ==========
+        $procUser = User::updateOrCreate(
+            ['email' => 'procurement@local'],
+            [
+                'name'         => 'User Procurement',
+                'username'     => 'procurement',
+                'phone'        => '081200000006',
+                'password'     => Hash::make('password123'),
+                'warehouse_id' => null,
+                'status'       => 'active',
+            ]
+        );
+        if ($roleProcurement) {
+            $procUser->roles()->sync([$roleProcurement->id]);
+        }
+
+        // ========== USER CEO (APPROVAL LAPIS 2) ==========
+        $ceoUser = User::updateOrCreate(
+            ['email' => 'ceo@local'],
+            [
+                'name'         => 'Chief Executive Officer',
+                'username'     => 'ceo',
+                'phone'        => '081200000007',
+                'password'     => Hash::make('password123'),
+                'warehouse_id' => null,
+                'status'       => 'active',
+            ]
+        );
+        if ($roleCeo) {
+            $ceoUser->roles()->sync([$roleCeo->id]);
+        }
+
         /*
          * ===========================
          *  STOCK LEVELS
@@ -483,7 +617,7 @@ class CoreSeeder extends Seeder
         ];
 
         foreach ($allProducts as $product) {
-            if (!$product) {
+            if (! $product) {
                 continue;
             }
 

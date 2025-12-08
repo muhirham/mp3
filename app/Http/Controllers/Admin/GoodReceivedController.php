@@ -13,6 +13,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use App\Models\Company;
+
 
 class GoodReceivedController extends Controller
 {
@@ -42,8 +44,6 @@ class GoodReceivedController extends Controller
         $poQuery = PurchaseOrder::with([
             'supplier',
             'items.product',
-            'grDeleteRequests.requester',
-            'grDeleteRequests.approver',
             // restockReceipts yg di-load juga cuma yang masih punya qty
             'restockReceipts' => function ($rr) use (
                 $me,
@@ -132,7 +132,7 @@ class GoodReceivedController extends Controller
 
         $pos = $poQuery
             ->orderByDesc('id')
-            ->paginate(15);
+            ->paginate(8);
 
         $pos->appends($request->all());
 
@@ -173,6 +173,11 @@ class GoodReceivedController extends Controller
 
         $suppliers = Supplier::orderBy('name')->get(['id', 'name']);
 
+        $company = Company::where('is_default', true)
+        ->where('is_active', true)
+        ->first();
+
+
         return view('admin.masterdata.goodReceived', compact(
             'pos',
             'q',
@@ -182,7 +187,8 @@ class GoodReceivedController extends Controller
             'warehouseId',
             'dateFrom',
             'dateTo',
-            'deleteRequests'
+            'deleteRequests',
+            'company'   
         ));
     }
 
@@ -204,6 +210,35 @@ class GoodReceivedController extends Controller
 
         return $prefix . str_pad($n, 4, '0', STR_PAD_LEFT);
     }
+
+    public function detail(PurchaseOrder $po)
+    {
+        $me    = auth()->user();
+        $roles = $me?->roles ?? collect();
+
+        $isSuperadmin = $roles->contains('slug', 'superadmin');
+
+        // Load relasi yang dibutuhin di modal
+        $po->load([
+            'supplier',
+            'items.product',
+            'restockReceipts.photos',
+            'restockReceipts.receiver',
+            'restockReceipts.warehouse',
+            'restockReceipts.supplier',
+        ]);
+
+        $company = Company::where('is_default', true)
+            ->where('is_active', true)
+            ->first();
+
+        return view('admin.masterdata.partials.goodReceivedDetail', compact(
+            'po',
+            'company',
+            'isSuperadmin'
+        ));
+    }
+
 
     /** Simpan Goods Received dari PO manual (1 form → banyak item) */
     public function storeFromPo(Request $r, PurchaseOrder $po)
@@ -529,6 +564,14 @@ class GoodReceivedController extends Controller
      * - PO status jadi 'approved' lagi, received_at di-reset
      * - Request Restock di-recalc
      */
+/**
+ * Rollback SEMUA GR untuk 1 PO (dipakai saat superadmin approve permohonan delete)
+ * - Kalau GR supplier → pusat dikurangi
+ * - Kalau GR restock → warehouse dikurangi, pusat dikembalikan
+ * - Item.qty_received dikurangi
+ * - PO status balik ke 'draft' dan approval direset (bisa diedit & diajukan lagi)
+ * - Request Restock di-recalc
+ */
     protected function rollbackGoodsReceivedForPo(int $poId): void
     {
         DB::transaction(function () use ($poId) {
@@ -622,12 +665,30 @@ class GoodReceivedController extends Controller
                 }
             }
 
-            // ============= 6. RESET STATUS PO KE 'approved' =============
+            // ============= 6. RESET STATUS & APPROVAL PO =============
             $updatePo = [
-                'status'     => 'Draft',
-                'updated_at' => $now,
+                // status barang kembali seperti sebelum ada GR
+                'status'     => 'draft',
+                'approval_status' => 'draft',      // buka lagi flow approval
+                'updated_at'      => $now,
             ];
 
+            // amanin pakai Schema::hasColumn biar kalau kolom belum ada nggak error
+            if (Schema::hasColumn('purchase_orders', 'approval_status')) {
+                $updatePo['approval_status'] = 'draft';
+            }
+            if (Schema::hasColumn('purchase_orders', 'procurement_approved_by')) {
+                $updatePo['procurement_approved_by'] = null;
+            }
+            if (Schema::hasColumn('purchase_orders', 'procurement_approved_at')) {
+                $updatePo['procurement_approved_at'] = null;
+            }
+            if (Schema::hasColumn('purchase_orders', 'ceo_approved_by')) {
+                $updatePo['ceo_approved_by'] = null;
+            }
+            if (Schema::hasColumn('purchase_orders', 'ceo_approved_at')) {
+                $updatePo['ceo_approved_at'] = null;
+            }
             if (Schema::hasColumn('purchase_orders', 'received_at')) {
                 $updatePo['received_at'] = null;
             }

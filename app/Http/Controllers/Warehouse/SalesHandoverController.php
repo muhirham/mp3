@@ -1,281 +1,426 @@
 <?php
-// app/Http/Controllers/SalesHandoverController.php
+
 namespace App\Http\Controllers\Warehouse;
 
-        use App\Http\Controllers\Controller;
-        use App\Models\SalesHandover;
-        use App\Models\SalesHandoverItem;
-        use Illuminate\Http\Request;
-        use Illuminate\Support\Facades\DB;
-        use Illuminate\Support\Facades\Hash;
+use App\Http\Controllers\Controller;
+use App\Models\Product;
+use App\Models\SalesHandover;
+use App\Models\SalesHandoverItem;
+use App\Models\User;
+use App\Models\Warehouse;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 
-        class SalesHandoverController extends Controller
-        {
-        /** Halaman report & list */
-        public function index() { 
-            return view('wh.sales_report'); 
+class SalesHandoverController extends Controller
+{
+    /**
+     * ISSUE PAGI – simpan & kirim OTP pagi ke email sales.
+     */
+    public function issue(Request $request)
+    {
+        $me = auth()->user();
+
+        $validated = $request->validate([
+            'handover_date'      => ['required', 'date'],
+            'warehouse_id'       => ['required', 'exists:warehouses,id'],
+            'sales_id'           => ['required', 'exists:users,id'],
+            'items'              => ['required', 'array', 'min:1'],
+            'items.*.product_id' => ['required', 'exists:products,id'],
+            'items.*.qty'        => ['required', 'integer', 'min:1'],
+        ]);
+
+        $warehouse = Warehouse::findOrFail($validated['warehouse_id']);
+        $sales     = User::findOrFail($validated['sales_id']);
+        $date      = Carbon::parse($validated['handover_date'])->toDateString();
+
+        DB::beginTransaction();
+
+        try {
+            // 1. Generate kode handover
+            $dayPrefix  = Carbon::parse($date)->format('ymd'); // 251207
+            $codePrefix = 'HDO-' . $dayPrefix . '-';
+
+            $lastToday = SalesHandover::whereDate('handover_date', $date)
+                ->orderByDesc('id')
+                ->first();
+
+            $nextNumber = 1;
+            if ($lastToday) {
+                $lastSeq    = (int) substr($lastToday->code, -4);
+                $nextNumber = $lastSeq + 1;
+            }
+
+            $code = $codePrefix . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+
+            // 2. Siapkan data item dan total
+            $itemsInput             = $validated['items'];
+            $itemsData              = [];
+            $totalDispatchedAmount  = 0;
+
+            foreach ($itemsInput as $row) {
+                $product = Product::find($row['product_id']);
+                if (! $product) {
+                    continue;
+                }
+
+                $qty = (int) $row['qty'];
+                if ($qty <= 0) {
+                    continue;
+                }
+
+                $unitPrice  = (float) ($product->selling_price ?? 0);
+                $lineTotal  = $qty * $unitPrice;
+                $totalDispatchedAmount += $lineTotal;
+
+                $itemsData[] = [
+                    'product_id'              => $product->id,
+                    'product_name'            => $product->name,
+                    'product_code'            => $product->product_code,
+                    'qty'                     => $qty,
+                    'unit_price'              => $unitPrice,
+                    'line_total_dispatched'   => $lineTotal,
+                ];
+            }
+
+            if (empty($itemsData)) {
+                throw new \RuntimeException('Minimal harus ada 1 item valid dengan qty > 0.');
+            }
+
+            // 3. Simpan header
+            $handover = SalesHandover::create([
+                'code'                     => $code,
+                'warehouse_id'             => $warehouse->id,
+                'sales_id'                 => $sales->id,
+                'handover_date'            => $date,
+                'status'                   => 'issued',
+                'issued_by'                => $me->id,
+                'total_dispatched_amount'  => $totalDispatchedAmount,
+                'total_sold_amount'        => 0,
+            ]);
+
+            // 4. Simpan detail
+            foreach ($itemsData as $row) {
+                SalesHandoverItem::create([
+                    'handover_id'            => $handover->id,
+                    'product_id'             => $row['product_id'],
+                    'qty_dispatched'         => $row['qty'],
+                    'qty_returned_good'      => 0,
+                    'qty_returned_damaged'   => 0,
+                    'qty_sold'               => 0,
+                    'unit_price'             => $row['unit_price'],
+                    'line_total_dispatched'  => $row['line_total_dispatched'],
+                    'line_total_sold'        => 0,
+                ]);
+            }
+
+            // 5. Generate OTP Pagi
+            $otpPlain = random_int(100000, 999999);
+
+            $handover->morning_otp_hash       = Hash::make($otpPlain);
+            $handover->morning_otp_expires_at = now()->addHours(24);
+            $handover->save();
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            return redirect()
+                ->route('sales.handover.morning')
+                ->withInput()
+                ->with('error', 'Gagal membuat handover: ' . $e->getMessage());
         }
 
+        // 6. Kirim email OTP Pagi
+        $detailLines = [];
+        foreach ($itemsData as $idx => $row) {
+            $detailLines[] = sprintf(
+                '%d. %s (%s) → Qty %d x %s = %s',
+                $idx + 1,
+                $row['product_name'],
+                $row['product_code'],
+                $row['qty'],
+                number_format($row['unit_price'], 0, ',', '.'),
+                number_format($row['line_total_dispatched'], 0, ',', '.')
+            );
+        }
+        $detailText = implode("\n", $detailLines);
+        $totalText  = number_format($totalDispatchedAmount, 0, ',', '.');
 
-        public function items(SalesHandover $handover)
-                {
-                    // batasi akses per gudang (kalau user nempel ke gudang tertentu)
-                    $me = auth()->user();
-                    if ($me->warehouse_id && $handover->warehouse_id != $me->warehouse_id) {
-                        abort(403);
-                    }
+        $subject = 'OTP Handover Pagi & Sore - ' . $handover->code;
 
-                    $items = $handover->items()
-                        ->with(['product:id,name'])
-                        ->get()
-                        ->map(function ($x) {
-                            return [
-                                'product_id'           => $x->product_id,
-                                'product_name'         => $x->product->name ?? ('Produk #'.$x->product_id),
-                                'qty_dispatched'       => (int) $x->qty_dispatched,
-                                'qty_returned_good'    => (int) $x->qty_returned_good,
-                                'qty_returned_damaged' => (int) $x->qty_returned_damaged,
-                                'qty_sold'             => (int) $x->qty_sold,
-                            ];
-                        });
+        $body = <<<EOT
+Halo {$sales->name},
 
-                    return response()->json(['items' => $items]);
+Berikut detail handover pagi dan kode OTP yang akan dipakai juga saat tutup sore.
+
+Handover Pagi - Serah Terima Barang
+Kode      : {$handover->code}
+Tanggal   : {$handover->handover_date}
+Warehouse : {$warehouse->warehouse_name}
+Sales     : {$sales->name}
+
+Detail barang:
+{$detailText}
+
+Total nilai barang: {$totalText}
+
+OTP Handover (pagi & sore): {$otpPlain}
+
+Simpan baik-baik OTP ini. OTP harus diinput admin gudang ketika tutup sore supaya laporan hari itu bisa di-close dan besok kamu bisa ambil barang lagi.
+
+Terima kasih.
+EOT;
+
+        $emailError = null;
+        try {
+            if ($sales->email) {
+                Mail::raw($body, function ($message) use ($sales, $subject) {
+                    $message->to($sales->email, $sales->name)
+                        ->subject($subject);
+                });
+            }
+        } catch (\Throwable $e) {
+            $emailError = $e->getMessage();
+        }
+
+        // 7. SweetAlert message
+        $html = "Handover berhasil dibuat. Kode : <b>{$handover->code}</b><br>"
+            . "Tanggal : {$handover->handover_date}<br>"
+            . "Total nilai barang : <b>{$totalText}</b><br>"
+            . "OTP handover (pagi & sore) : <b>{$otpPlain}</b>";
+
+        if ($emailError) {
+            $html .= "<br><br><b>Namun email OTP TIDAK berhasil dikirim.</b><br>"
+                . "Segera kirim OTP di atas ke sales secara manual.<br>"
+                . "<small>Error email: " . e($emailError) . '</small>';
+        }
+
+        return redirect()
+            ->route('sales.handover.morning')
+            ->with('success', $html);
+    }
+
+    /**
+     * API untuk halaman sore: load item handover (AJAX).
+     */
+    public function items(SalesHandover $handover)
+    {
+        $handover->load(['items.product']);
+
+        $items = $handover->items->map(function (SalesHandoverItem $item) {
+            $product = $item->product;
+
+            return [
+                'product_id'         => $product->id,
+                'product_name'       => $product->name,
+                'product_code'       => $product->product_code,
+                'qty_dispatched'     => $item->qty_dispatched,
+                'qty_returned_good'  => $item->qty_returned_good,
+                'qty_returned_damaged'=> $item->qty_returned_damaged,
+                'qty_sold'           => $item->qty_sold,
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'items'   => $items,
+        ]);
+    }
+
+    /**
+     * RECONCILE SORE – qty kembali, setor uang, upload bukti tf,
+     * validasi OTP pagi & nilai uang vs barang terjual.
+     */
+    public function reconcile(Request $request, SalesHandover $handover)
+    {
+        $validated = $request->validate([
+            'otp_code'                    => ['required', 'digits:6'],
+
+            'items'                       => ['required', 'array', 'min:1'],
+            'items.*.product_id'          => ['required', 'exists:products,id'],
+            'items.*.qty_returned_good'   => ['required', 'integer', 'min:0'],
+            'items.*.qty_returned_damaged'=> ['required', 'integer', 'min:0'],
+
+            'cash_amount'                 => ['nullable', 'numeric', 'min:0'],
+            'transfer_amount'             => ['nullable', 'numeric', 'min:0'],
+            'transfer_proof'              => ['nullable', 'image', 'max:2048'], // 2MB
+        ]);
+
+        // 1. Validasi OTP pagi
+        if (! $handover->morning_otp_hash ||
+            ! Hash::check($validated['otp_code'], $handover->morning_otp_hash)
+        ) {
+            return redirect()
+                ->route('sales.handover.evening')
+                ->with('error', 'OTP tidak valid. Pastikan kode OTP dari email pagi sudah benar.');
+        }
+
+        $handover->load(['items.product', 'sales', 'warehouse']);
+
+        DB::beginTransaction();
+
+        try {
+            $itemsClosing      = [];
+            $totalSoldAmount   = 0;
+            $totalDispatched   = $handover->total_dispatched_amount ?? 0;
+
+            foreach ($validated['items'] as $row) {
+                /** @var \App\Models\SalesHandoverItem|null $item */
+                $item = $handover->items->firstWhere('product_id', $row['product_id']);
+                if (! $item) {
+                    continue;
                 }
 
+                $qtyGood    = (int) $row['qty_returned_good'];
+                $qtyDamaged = (int) $row['qty_returned_damaged'];
+                $qtyReturn  = $qtyGood + $qtyDamaged;
 
-        /** Pagi: buat handover + geser stok WH -> SALES */
-        public function issue(Request $r)
-        {
-            $me = auth()->user();
-            $data = $r->validate([
-            'warehouse_id' => ['required','exists:warehouses,id'],
-            'sales_id'     => ['required','exists:users,id'],
-            'handover_date'=> ['required','date'],
-            'items'        => ['required','array','min:1'],
-            'items.*.product_id' => ['required','exists:products,id'],
-            'items.*.qty'        => ['required','integer','min:1'],
-            ]);
-
-            DB::transaction(function() use ($data,$me) {
-            $seq = (int) (SalesHandover::max('id') ?? 0) + 1;
-            $code = 'HDO-'.now()->format('ymd').'-'.str_pad($seq,4,'0',STR_PAD_LEFT);
-
-            $h = SalesHandover::create([
-                'code'=>$code,
-                'warehouse_id'=>$data['warehouse_id'],
-                'sales_id'=>$data['sales_id'],
-                'handover_date'=>$data['handover_date'],
-                'status'=>'issued',
-                'issued_by'=>$me->id,
-            ]);
-
-            foreach ($data['items'] as $it) {
-                $pid = (int)$it['product_id'];
-                $qty = (int)$it['qty'];
-
-                // lock stok gudang
-                $wh = DB::table('stock_levels')
-                ->where('owner_type','warehouse')->where('owner_id',$data['warehouse_id'])
-                ->where('product_id',$pid)->lockForUpdate()->first();
-
-                if (!$wh || $wh->quantity < $qty) {
-                throw new \RuntimeException("Stok gudang kurang untuk product #{$pid}");
+                if ($qtyReturn > $item->qty_dispatched) {
+                    throw new \RuntimeException(
+                        'Qty kembali melebihi qty dibawa untuk produk ' . $item->product->product_code
+                    );
                 }
 
-                // kurangi gudang
-                DB::table('stock_levels')->where('id',$wh->id)
-                ->update(['quantity'=>$wh->quantity - $qty, 'updated_at'=>now()]);
+                $qtySold = $item->qty_dispatched - $qtyReturn;
 
-                // tambah stok sales
-                $sl = DB::table('stock_levels')
-                ->where('owner_type','sales')->where('owner_id',$data['sales_id'])
-                ->where('product_id',$pid)->lockForUpdate()->first();
+                $item->qty_returned_good    = $qtyGood;
+                $item->qty_returned_damaged = $qtyDamaged;
+                $item->qty_sold             = $qtySold;
 
-                if ($sl) {
-                DB::table('stock_levels')->where('id',$sl->id)
-                    ->update(['quantity'=>$sl->quantity + $qty, 'updated_at'=>now()]);
-                } else {
-                DB::table('stock_levels')->insert([
-                    'owner_type'=>'sales','owner_id'=>$data['sales_id'],'product_id'=>$pid,
-                    'quantity'=>$qty,'created_at'=>now(),'updated_at'=>now()
-                ]);
-                }
+                $unitPrice        = (float) ($item->unit_price ?? $item->product->selling_price ?? 0);
+                $lineSold         = $qtySold * $unitPrice;
+                $item->line_total_sold = $lineSold;
+                $item->save();
 
-                // movement OUT gudang -> IN sales
-                DB::table('stock_movements')->insert([
-                'product_id'=>$pid, 'from_type'=>'warehouse','from_id'=>$data['warehouse_id'],
-                'to_type'=>'sales','to_id'=>$data['sales_id'], 'quantity'=>$qty,
-                'status'=> DB::getSchemaBuilder()->hasColumn('stock_movements','status') ? 'completed' : null,
-                'note'=>"Handover {$h->code} (issue)", 'created_at'=>now(),'updated_at'=>now()
-                ]);
+                $totalSoldAmount += $lineSold;
 
-                SalesHandoverItem::updateOrCreate(
-                ['handover_id'=>$h->id, 'product_id'=>$pid],
-                ['qty_dispatched'=>$qty]
+                $itemsClosing[] = [
+                    'product_name'   => $item->product->name,
+                    'product_code'   => $item->product->product_code,
+                    'qty_dispatched' => $item->qty_dispatched,
+                    'qty_good'       => $qtyGood,
+                    'qty_damaged'    => $qtyDamaged,
+                    'qty_sold'       => $qtySold,
+                    'unit_price'     => $unitPrice,
+                    'line_sold'      => $lineSold,
+                ];
+            }
+
+            // 2. Proses setoran uang + bukti transfer
+            $cash     = (float) ($validated['cash_amount'] ?? 0);
+            $transfer = (float) ($validated['transfer_amount'] ?? 0);
+            $proofPath = $handover->transfer_proof_path;
+
+            if ($request->hasFile('transfer_proof')) {
+                $proofPath = $request->file('transfer_proof')
+                    ->store('handover_transfer_proofs', 'public');
+            }
+
+            // nilai barang terjual harus sama dengan total setor
+            if (round($cash + $transfer) !== round($totalSoldAmount)) {
+                throw new \RuntimeException(
+                    'Total setor (tunai + transfer) harus sama dengan nilai barang terjual.'
                 );
             }
-            });
 
-            return back()->with('success','Handover diterbitkan & stok dipindahkan ke Sales.');
+            // 3. Update header
+            $handover->status             = 'reconciled';
+            $handover->reconciled_by      = auth()->id();
+            $handover->reconciled_at      = now();
+            $handover->total_sold_amount  = $totalSoldAmount;
+            $handover->cash_amount        = $cash;
+            $handover->transfer_amount    = $transfer;
+            $handover->transfer_proof_path= $proofPath;
+            $handover->save();
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            return redirect()
+                ->route('sales.handover.evening')
+                ->with('error', 'Gagal rekonsiliasi: ' . $e->getMessage());
         }
 
-        /** Generate OTP untuk tutup harian (pegang user) */
-        public function generateOtp(SalesHandover $handover)
-        {
-            $this->authorizeAccess($handover); // tulis sendiri kalau perlu
-            if ($handover->status !== 'issued') {
-            return back()->with('error','Status harus ISSUED untuk generate OTP.');
+        // 4. Kirim email closing (OTP sore)
+        $closingOtp = random_int(100000, 999999);
+
+        $handover->closing_otp_hash       = Hash::make($closingOtp);
+        $handover->closing_otp_expires_at = now()->addHours(24);
+        $handover->save();
+
+        $detailLines = [];
+        foreach ($itemsClosing as $idx => $row) {
+            $detailLines[] = sprintf(
+                "%d. %s (%s)\n   Dibawa: %d | Kembali (good): %d | Rusak: %d | Terjual: %d",
+                $idx + 1,
+                $row['product_name'],
+                $row['product_code'],
+                $row['qty_dispatched'],
+                $row['qty_good'],
+                $row['qty_damaged'],
+                $row['qty_sold'],
+            );
+        }
+        $detailText   = implode("\n\n", $detailLines);
+        $soldText     = number_format($totalSoldAmount, 0, ',', '.');
+        $cashText     = number_format($cash, 0, ',', '.');
+        $transferText = number_format($transfer, 0, ',', '.');
+
+        $subject = 'OTP Handover Sore (Closing) - ' . $handover->code;
+
+        $body = <<<EOT
+Halo {$handover->sales->name},
+
+Berikut hasil rekonsiliasi sore untuk handover berikut:
+
+Kode      : {$handover->code}
+Tanggal   : {$handover->handover_date}
+Warehouse : {$handover->warehouse->warehouse_name}
+Sales     : {$handover->sales->name}
+
+Rincian barang:
+{$detailText}
+
+Nilai barang terjual (berdasarkan harga jual master produk): {$soldText}
+
+Setoran:
+- Tunai    : {$cashText}
+- Transfer : {$transferText}
+
+OTP Handover Sore (closing): {$closingOtp}
+
+OTP ini bisa kamu simpan sebagai bukti bahwa laporan sore sudah di-close oleh admin gudang.
+
+Terima kasih.
+EOT;
+
+        $emailError = null;
+        try {
+            if ($handover->sales->email) {
+                Mail::raw($body, function ($message) use ($handover, $subject) {
+                    $message->to($handover->sales->email, $handover->sales->name)
+                        ->subject($subject);
+                });
             }
-            $code = (string) random_int(100000, 999999);
-            $handover->update([
-            'status'=>'waiting_otp',
-            'otp_hash'=> Hash::make($code),
-            'otp_expires_at'=> now()->addMinutes(15),
-            ]);
-            // tampilkan ke layar (atau kirim via SMS jika ada gateway)
-            return back()->with('success','OTP untuk penutupan: '.$code);
+        } catch (\Throwable $e) {
+            $emailError = $e->getMessage();
         }
 
-        /** Sore: rekonsiliasi (input sisa & rusak) — butuh OTP valid untuk final */
-        public function reconcile(Request $r, SalesHandover $handover)
-        {
-            $data = $r->validate([
-            'otp_code' => ['required','digits:6'],
-            'items'    => ['required','array','min:1'],
-            'items.*.product_id' => ['required','exists:products,id'],
-            'items.*.qty_returned_good'    => ['required','integer','min:0'],
-            'items.*.qty_returned_damaged' => ['nullable','integer','min:0'],
-            ]);
+        $html = "Rekonsiliasi berhasil untuk handover <b>{$handover->code}</b>.<br>"
+            . "Total nilai terjual: <b>{$soldText}</b><br>"
+            . "Silakan cek email sales untuk detail laporan sore & OTP closing.";
 
-            // cek OTP
-            if ($handover->status !== 'waiting_otp' || !$handover->otp_hash || now()->greaterThan($handover->otp_expires_at)) {
-            return back()->with('error','OTP tidak aktif / kadaluarsa.');
-            }
-            if (!\Illuminate\Support\Facades\Hash::check($data['otp_code'], $handover->otp_hash)) {
-            return back()->with('error','OTP salah.');
-            }
-
-            DB::transaction(function() use ($handover,$data) {
-            foreach ($data['items'] as $it) {
-                $pid  = (int)$it['product_id'];
-                $good = (int)($it['qty_returned_good'] ?? 0);
-                $bad  = (int)($it['qty_returned_damaged'] ?? 0);
-
-                /** @var \App\Models\SalesHandoverItem $row */
-                $row = SalesHandoverItem::where('handover_id',$handover->id)->where('product_id',$pid)->lockForUpdate()->first();
-                if (!$row) throw new \RuntimeException("Item handover tidak ditemukan (product $pid)");
-                $max = max($row->qty_dispatched - ($row->qty_returned_good + $row->qty_returned_damaged + $row->qty_sold), 0);
-                if (($good + $bad) > $max) throw new \RuntimeException("Qty kembali melebihi sisa untuk product $pid");
-
-                // 1) balikin stok GOOD ke gudang (sales -> warehouse)
-                if ($good > 0) {
-                // kurangi stok sales
-                $sl = DB::table('stock_levels')->where('owner_type','sales')->where('owner_id',$handover->sales_id)
-                        ->where('product_id',$pid)->lockForUpdate()->first();
-                if (!$sl || $sl->quantity < $good) throw new \RuntimeException("Stok sales kurang saat return (product $pid)");
-                DB::table('stock_levels')->where('id',$sl->id)->update([
-                    'quantity'=>$sl->quantity - $good, 'updated_at'=>now()
-                ]);
-
-                // tambah stok gudang
-                $wh = DB::table('stock_levels')->where('owner_type','warehouse')->where('owner_id',$handover->warehouse_id)
-                        ->where('product_id',$pid)->lockForUpdate()->first();
-                if ($wh) {
-                    DB::table('stock_levels')->where('id',$wh->id)->update([
-                    'quantity'=>$wh->quantity + $good, 'updated_at'=>now()
-                    ]);
-                } else {
-                    DB::table('stock_levels')->insert([
-                    'owner_type'=>'warehouse','owner_id'=>$handover->warehouse_id,'product_id'=>$pid,
-                    'quantity'=>$good,'created_at'=>now(),'updated_at'=>now()
-                    ]);
-                }
-
-                // movement return sales -> warehouse
-                DB::table('stock_movements')->insert([
-                    'product_id'=>$pid,'from_type'=>'sales','from_id'=>$handover->sales_id,
-                    'to_type'=>'warehouse','to_id'=>$handover->warehouse_id,'quantity'=>$good,
-                    'status'=> DB::getSchemaBuilder()->hasColumn('stock_movements','status') ? 'completed' : null,
-                    'note'=>"Handover {$handover->code} (return good)",'created_at'=>now(),'updated_at'=>now()
-                ]);
-                }
-
-                // 2) tandai rusak (opsi: masukkan ke gudang/karantina) – di sini contoh: tetap balik ke gudang
-                if ($bad > 0) {
-                // kurangi stok sales
-                $sl = DB::table('stock_levels')->where('owner_type','sales')->where('owner_id',$handover->sales_id)
-                        ->where('product_id',$pid)->lockForUpdate()->first();
-                if (!$sl || $sl->quantity < $bad) throw new \RuntimeException("Stok sales kurang saat return damaged (product $pid)");
-                DB::table('stock_levels')->where('id',$sl->id)->update(['quantity'=>$sl->quantity - $bad, 'updated_at'=>now()]);
-
-                // movement ke gudang dengan note damaged (qty tidak menambah stok good — tergantung kebijakan)
-                DB::table('stock_movements')->insert([
-                    'product_id'=>$pid,'from_type'=>'sales','from_id'=>$handover->sales_id,
-                    'to_type'=>'warehouse','to_id'=>$handover->warehouse_id,'quantity'=>$bad,
-                    'status'=> DB::getSchemaBuilder()->hasColumn('stock_movements','status') ? 'completed' : null,
-                    'note'=>"Handover {$handover->code} (return damaged)",'created_at'=>now(),'updated_at'=>now()
-                ]);
-                }
-
-                // 3) hitung yang terjual = dispatched - total returned - already sold
-                $soldNow = ($row->qty_dispatched - ($row->qty_returned_good + $row->qty_returned_damaged) - $row->qty_sold) - ($good + $bad);
-                $soldNow = max($soldNow, 0);
-
-                if ($soldNow > 0) {
-                // movement sales -> customer (tanpa menambah stok mana pun)
-                DB::table('stock_movements')->insert([
-                    'product_id'=>$pid,'from_type'=>'sales','from_id'=>$handover->sales_id,
-                    'to_type'=>'customer','to_id'=>0,'quantity'=>$soldNow,
-                    'status'=> DB::getSchemaBuilder()->hasColumn('stock_movements','status') ? 'completed' : null,
-                    'note'=>"Handover {$handover->code} (sold auto from reconciliation)",'created_at'=>now(),'updated_at'=>now()
-                ]);
-                }
-
-                $row->update([
-                'qty_returned_good'    => $row->qty_returned_good + $good,
-                'qty_returned_damaged' => $row->qty_returned_damaged + $bad,
-                'qty_sold'             => $row->qty_sold + $soldNow,
-                ]);
-            }
-
-            $handover->update([
-                'status'=>'reconciled',
-                'reconciled_by'=>auth()->id(),
-                'otp_hash'=>null, 'otp_expires_at'=>null
-            ]);
-            });
-
-            return back()->with('success','Rekonsiliasi selesai & ditutup dengan OTP.');
+        if ($emailError) {
+            $html .= "<br><br><b>Namun email OTP sore TIDAK berhasil dikirim.</b><br>"
+                . "<small>Error email: " . e($emailError) . "</small>";
         }
 
-        /** Datatable report: IN/OUT per sales per hari */
-        public function reportDatatable(Request $r)
-        {
-            $dateFrom = $r->input('from');
-            $dateTo   = $r->input('to');
-
-            $q = DB::table('sales_handovers as h')
-            ->join('users as u','u.id','=','h.sales_id')
-            ->join('sales_handover_items as i','i.handover_id','=','h.id')
-            ->selectRaw("
-                h.handover_date,
-                h.code,
-                u.name as sales_name,
-                SUM(i.qty_dispatched) as dispatched,
-                SUM(i.qty_returned_good) as returned_good,
-                SUM(i.qty_returned_damaged) as returned_damaged,
-                SUM(i.qty_sold) as sold
-            ")
-            ->groupBy('h.handover_date','h.code','u.name')
-            ->orderBy('h.handover_date','desc')->orderBy('h.code','desc');
-
-            if ($dateFrom) $q->where('h.handover_date','>=',$dateFrom);
-            if ($dateTo)   $q->where('h.handover_date','<=',$dateTo);
-
-            return response()->json(['data'=>$q->get()]);
-        }
-
-        protected function authorizeAccess(SalesHandover $h) {
-            // taruh policy lu sendiri kalau perlu (Admin WH / pemilik warehouse)
-        }
-        }
+        return redirect()
+            ->route('sales.handover.evening')
+            ->with('success', $html);
+    }
+}

@@ -17,27 +17,27 @@ class User extends Authenticatable
         'username',
         'email',
         'phone',
+        'position',
+        'signature_path',
         'password',
         'warehouse_id',
         'status',
-        'role', // legacy (boleh dipakai fallback)
+        'role', // legacy
     ];
 
-    protected $hidden = ['password','remember_token'];
+    protected $hidden = ['password', 'remember_token'];
 
-    protected $casts  = [
+    protected $casts = [
         'email_verified_at' => 'datetime',
     ];
 
     /* ================== RELASI ================== */
 
-    // pivot roles (tabel role_user: user_id, role_id)
     public function roles()
     {
         return $this->belongsToMany(Role::class, 'role_user', 'user_id', 'role_id');
     }
 
-    // relasi ke warehouse tempat user ditempatkan
     public function warehouse()
     {
         return $this->belongsTo(Warehouse::class, 'warehouse_id');
@@ -45,16 +45,14 @@ class User extends Authenticatable
 
     /* ================== HELPER ROLE ================== */
 
-    // role utama (prioritas admin > warehouse > sales)
     public function primaryRole()
     {
         return $this->roles()
-            ->select('slug','home_route')
+            ->select('slug', 'home_route')
             ->orderByRaw("FIELD(slug,'admin','warehouse','sales')")
             ->first();
     }
 
-    // cek role (terima string/array)
     public function hasRole(string|array $slugs): bool
     {
         $need = is_array($slugs) ? $slugs : [$slugs];
@@ -65,25 +63,22 @@ class User extends Authenticatable
 
     /* ================== HELPER MENU ================== */
 
-    // gabung semua menu_keys dari seluruh role
     public function allMenuKeys(): array
     {
         return $this->roles()
-            ->pluck('menu_keys')   // koleksi: [[a,b],[c],null,...]
-            ->filter()             // buang null
-            ->flatten()            // jadi [a,b,c,...]
+            ->pluck('menu_keys')
+            ->filter()
+            ->flatten()
             ->unique()
             ->values()
             ->all();
     }
 
-    // boleh lihat menu key tertentu?
     public function canSeeMenu(string $key): bool
     {
         return in_array($key, $this->allMenuKeys(), true);
     }
 
-    // alias lama biar kode yang pakai allowedMenuKeys() tetap aman
     public function allowedMenuKeys(): array
     {
         return $this->allMenuKeys();

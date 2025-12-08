@@ -19,6 +19,7 @@ use App\Http\Controllers\Admin\RestockApprovalController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\GoodReceivedController; 
 use App\Http\Controllers\Admin\StockAdjustmentController;
+use App\Http\Controllers\Admin\CompanyController;
 // WAREHOUSE
 use App\Http\Controllers\Warehouse\WarehouseDashboardController;
 use App\Http\Controllers\Warehouse\SalesController as WhSalesController;
@@ -177,8 +178,30 @@ Route::middleware('auth')->group(function () {
     Route::post('/po/{po}/cancel',    [PreOController::class,'cancel'])
         ->name('po.cancel')
         ->middleware('menu:po');
+        
+    Route::post('/{po}/approve',      [PreOController::class, 'approve'])
+        ->name('po.approve')
+        ->middleware('menu:po');
+
+    Route::post('/po/{po}/approve-proc', [PreOController::class,'approveProcurement'])
+    ->name('po.approve.proc')
+    ->middleware('menu:po');
+
+    Route::post('/po/{po}/reject-proc', [PreOController::class,'rejectProcurement'])
+        ->name('po.reject.proc')
+        ->middleware('menu:po');
+
+    // CEO
+    Route::post('/po/{po}/approve-ceo', [PreOController::class,'approveCeo'])
+        ->name('po.approve.ceo')
+        ->middleware('menu:po');
+
+    Route::post('/po/{po}/reject-ceo', [PreOController::class,'rejectCeo'])
+        ->name('po.reject.ceo')
+        ->middleware('menu:po');
 
     // === Goods Received dari PO MANUAL (1 GR per PO) ===
+
     
     Route::get('/po/{po}/pdf',        [PreOController::class,'exportPdf'])
     ->name('po.pdf')
@@ -199,11 +222,39 @@ Route::middleware('auth')->group(function () {
 
 
     // Ajukan permohonan delete GR untuk 1 GR (bukan PO)        
-        Route::post('/good-received/{receipt}/cancel', [GoodReceivedController::class, 'cancelFromGr'])
+    Route::post('/good-received/{receipt}/cancel', [GoodReceivedController::class, 'cancelFromGr'])
         ->name('good-received.cancel')
         ->middleware('menu:goodreceived');
+
+
+    Route::get('/good-received/{po}/detail', [GoodReceivedController::class, 'detail'])
+    ->name('goodreceived.detail')
+    ->middleware('menu:goodreceived');
         
     // Halaman daftar permohonan
+    // ================== MASTER COMPANY ==================
+
+    // Halaman list + form tambah / edit via modal
+    Route::get('/companies', [CompanyController::class, 'index'])
+        ->name('companies.index')
+        ->middleware('menu:company');
+
+    // Simpan company baru
+    Route::post('/companies', [CompanyController::class, 'store'])
+        ->name('companies.store')
+        ->middleware('menu:company');
+
+    // Update company (form di modal)
+    Route::put('/companies/{company}', [CompanyController::class, 'update'])
+        ->name('companies.update')
+        ->middleware('menu:company');
+
+    // Hapus (soft delete) company
+    Route::delete('/companies/{company}', [CompanyController::class, 'destroy'])
+        ->name('companies.destroy')
+        ->middleware('menu:company');
+
+
 
 
     // APPROVE
@@ -247,7 +298,6 @@ Route::middleware('auth')->group(function () {
         ->name('restocks.receive')
         ->middleware('menu:wh_restock');
 
-    // key: wh_issue (pagi)
     Route::get('/sales/handover/morning', function () {
         $me = auth()->user();
 
@@ -261,52 +311,55 @@ Route::middleware('auth')->group(function () {
             $whQuery->orderBy('name');
             $warehouses = $whQuery->get(['id','name']);
         } else {
-            $warehouses = $whQuery->get(['id'])->map(fn($w)=>(object)['id'=>$w->id,'name'=>'Warehouse #'.$w->id]);
+            $warehouses = $whQuery->get(['id'])->map(
+                fn($w)=>(object)['id'=>$w->id,'name'=>'Warehouse #'.$w->id]
+            );
         }
 
         $salesUsers = User::whereHas('roles', fn($q)=>$q->where('slug','sales'))
             ->when($me->warehouse_id, fn($q)=>$q->where('warehouse_id',$me->warehouse_id))
-            ->orderBy('name')->get(['id','name','warehouse_id']);
+            ->orderBy('name')->get(['id','name','warehouse_id','email']);
 
-        $products = Product::select('id','name','product_code')->orderBy('name')->get();
+        // tambahin selling_price
+        $products = Product::select('id','name','product_code','selling_price')
+            ->orderBy('name')
+            ->get();
+
         return view('wh.handover_morning', compact('me','warehouses','salesUsers','products'));
-    })->name('sales.handover.morning')
-      ->middleware('menu:wh_issue');
+    })->name('sales.handover.morning')->middleware('menu:wh_issue');
 
     Route::post('/sales/handover/issue', [SalesHandoverController::class,'issue'])
         ->name('sales.handover.issue')
         ->middleware('menu:wh_issue');
 
-    // key: wh_reconcile (sore + OTP + rekonsiliasi)
+    // sore
     Route::get('/sales/handover/evening', function () {
         $me = auth()->user();
+
         $handovers = SalesHandover::with('sales:id,name')
-            ->whereIn('status',['issued','waiting_otp'])
+            ->where('status','issued')
             ->when($me->warehouse_id, fn($q)=>$q->where('warehouse_id',$me->warehouse_id))
             ->orderBy('handover_date','desc')
             ->get(['id','code','status','sales_id','handover_date','warehouse_id'])
             ->map(fn($h)=> (object)[
-                'id'=>$h->id,'code'=>$h->code,'status'=>$h->status,
-                'sales_id'=>$h->sales_id,'handover_date'=>$h->handover_date,
-                'sales_name'=>$h->sales->name ?? null,
+                'id'          => $h->id,
+                'code'        => $h->code,
+                'status'      => $h->status,
+                'sales_id'    => $h->sales_id,
+                'handover_date'=>$h->handover_date,
+                'sales_name'  => $h->sales->name ?? null,
             ]);
 
         return view('wh.handover_evening', compact('me','handovers'));
-    })->name('sales.handover.evening')
-      ->middleware('menu:wh_reconcile');
+    })->name('sales.handover.evening')->middleware('menu:wh_reconcile');
 
-    Route::post('/sales/handover/{handover}/generate-otp', [SalesHandoverController::class,'generateOtp'])
-        ->name('sales.handover.otp')
-        ->middleware('menu:wh_reconcile');
-
-    Route::post('/sales/handover/{handover}/reconcile',    [SalesHandoverController::class,'reconcile'])
+    Route::post('/sales/handover/{handover}/reconcile', [SalesHandoverController::class,'reconcile'])
         ->name('sales.handover.reconcile')
         ->middleware('menu:wh_reconcile');
 
-        /* <<< ADD THIS */
-        Route::get('/sales/handover/{handover}/items', [SalesHandoverController::class,'items'])
-            ->name('sales.handover.items')
-            ->middleware('menu:wh_reconcile');
+    Route::get('/sales/handover/{handover}/items', [SalesHandoverController::class,'items'])
+        ->name('sales.handover.items')
+        ->middleware('menu:wh_reconcile');
 
     /* === Sales pages (SALES KEYS) === */
 

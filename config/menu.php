@@ -143,6 +143,13 @@ return [
 
         // ================== MASTER DATA ==================
         [
+        'key'   => 'company',
+        'label' => 'Company',
+        'icon'  => 'bx bx-buildings',
+        'route' => 'companies.index',
+        'group' => 'master', // atau group apa pun yang lu pake
+        ],
+        [
             'key'   => 'users',
             'label' => 'Users',
             'route' => 'users.index',

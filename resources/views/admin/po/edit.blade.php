@@ -2,20 +2,73 @@
 
 @section('content')
 
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
 @php
-  $poLocked = $isLocked ?? false;
+    $me    = auth()->user();
+    $roles = $me?->roles ?? collect();
+
+    $isSuperadmin  = $roles->contains('slug', 'superadmin');
+    $isProcurement = $roles->contains('slug', 'procurement');
+    $isCeo         = $roles->contains('slug', 'ceo');
+
+    $approvalStatus = $po->approval_status ?? 'draft';
+
+    $baseLocked     = $isLocked ?? false;
+    $approvalLocked = in_array($approvalStatus, ['waiting_procurement','waiting_ceo','approved'], true);
+
+    $poLocked = $baseLocked || $approvalLocked;
+
+    if ($approvalStatus === 'rejected' && ! $isSuperadmin) {
+        $poLocked = true;
+    }
+
+    $canSubmitApproval = $isSuperadmin
+        && ! $poLocked
+        && in_array($approvalStatus, ['draft','rejected'], true)
+        && $po->items->count() > 0
+        && $po->grand_total > 0;
+
+    $canApproveProc = $isProcurement && $approvalStatus === 'waiting_procurement';
+    $canApproveCeo  = $isCeo        && $approvalStatus === 'waiting_ceo';
 @endphp
 
-<div class="container-xxl flex-grow-1 container-p-y">
+<style>
+  .po-compact {
+    font-size: 0.82rem;
+  }
+  .po-compact h5,
+  .po-compact h6 {
+    font-size: 0.9rem;
+  }
+  .po-compact .card-header,
+  .po-compact .card-body,
+  .po-compact .card-footer {
+    padding: 0.75rem 1rem;
+  }
+  .po-compact .form-control,
+  .po-compact .form-select,
+  .po-compact textarea,
+  .po-compact .btn {
+    font-size: 0.8rem;
+    padding: 0.25rem 0.5rem;
+  }
+  .po-compact table td,
+  .po-compact table th {
+    padding: 0.35rem 0.4rem;
+  }
+</style>
+
+<div class="container-xxl flex-grow-1 container-p-y po-compact">
 
   @if(session('success'))
-    <div class="alert alert-success">{{ session('success') }}</div>
+    <div class="alert alert-success small">{{ session('success') }}</div>
   @endif
   @if(session('info'))
-    <div class="alert alert-info">{{ session('info') }}</div>
+    <div class="alert alert-info small">{{ session('info') }}</div>
   @endif
   @if($errors->any())
-    <div class="alert alert-danger">
+    <div class="alert alert-danger small">
       <ul class="mb-0">
         @foreach($errors->all() as $e)
           <li>{{ $e }}</li>
@@ -45,10 +98,28 @@
           PO baru / aktif, silakan isi item dan simpan.
         @endif
       </small>
+      <small class="text-muted d-block mt-1">
+        Approval status:
+        <strong class="text-uppercase">{{ $po->approval_status ?? 'draft' }}</strong>
+        @if(($po->approval_status ?? '') === 'rejected' && $po->notes)
+          <br>
+          <span class="text-danger">Alasan ditolak: {{ $po->notes }}</span>
+        @endif
+      </small>
     </div>
 
-    <div class="btn-group">
-      <a href="{{ route('po.pdf',$po->id) }}"  class="btn btn-outline-secondary btn-sm">PDF</a>
+    {{-- TOMBOL EXPORT --}}
+    <div class="d-flex gap-2">
+      {{-- Print / PDF via modal --}}
+      <button type="button"
+              class="btn btn-outline-secondary btn-sm"
+              id="btn-open-print"
+              data-url-default="{{ route('po.pdf', ['po' => $po->id, 'tpl' => 'default']) }}"
+              data-url-partner="{{ route('po.pdf', ['po' => $po->id, 'tpl' => 'partner']) }}">
+        <i class="bx bx-printer me-1"></i> Print / PDF
+      </button>
+
+      {{-- Excel --}}
       <a href="{{ route('po.excel',$po->id) }}" class="btn btn-outline-secondary btn-sm">Excel</a>
     </div>
   </div>
@@ -69,7 +140,10 @@
         </div>
         <div class="col-md-8">
           <label class="form-label">Notes</label>
-          <textarea name="notes" rows="2" class="form-control" @disabled($poLocked)>{{ old('notes',$po->notes) }}</textarea>
+          <textarea name="notes"
+                    rows="2"
+                    class="form-control"
+                    @disabled($poLocked)>{{ old('notes',$po->notes) }}</textarea>
         </div>
       </div>
     </div>
@@ -91,10 +165,10 @@
               <th style="width:40px">#</th>
               <th>Product</th>
               <th>Warehouse</th>
-              <th style="width:110px" class="text-end">Qty</th>
+              <th style="width:100px" class="text-end">Qty</th>
               <th style="width:120px" class="text-end">Unit Price</th>
-              <th style="width:120px">Disc Type</th>
-              <th style="width:120px" class="text-end">Disc Value</th>
+              <th style="width:100px">Disc Type</th>
+              <th style="width:110px" class="text-end">Disc Value</th>
               <th style="width:130px" class="text-end">Line Total</th>
               <th style="width:40px"></th>
             </tr>
@@ -114,7 +188,6 @@
                   <input type="hidden" name="items[{{ $idx }}][request_id]" value="{{ $it->request_id }}">
 
                   @if($rowFromRequest)
-                    {{-- dari Request Restock → product tidak boleh diganti --}}
                     <input type="hidden" name="items[{{ $idx }}][product_id]" value="{{ $it->product_id }}">
                     <div class="fw-semibold">
                       {{ $it->product->product_code ?? '-' }} — {{ $it->product->name ?? '-' }}
@@ -123,7 +196,6 @@
                       {{ $it->product->supplier->name ?? '-' }}
                     </div>
                   @else
-                    {{-- item biasa / tambahan → boleh pilih product --}}
                     <select name="items[{{ $idx }}][product_id]"
                             class="form-select form-select-sm product-select"
                             @disabled($poLocked)>
@@ -151,7 +223,6 @@
                 {{-- WAREHOUSE --}}
                 <td>
                   @if($rowFromRequest)
-                    {{-- warehouse fixed dari RF --}}
                     <input type="hidden"
                            name="items[{{ $idx }}][warehouse_id]"
                            value="{{ $it->warehouse_id }}">
@@ -160,7 +231,6 @@
                     </span>
                   @else
                     @if($isFromRequest)
-                      {{-- PO from Request: item tambahan boleh pilih warehouse --}}
                       <select name="items[{{ $idx }}][warehouse_id]"
                               class="form-select form-select-sm"
                               @disabled($poLocked)>
@@ -172,7 +242,6 @@
                         @endforeach
                       </select>
                     @else
-                      {{-- PO manual → selalu Central Stock --}}
                       <input type="hidden" name="items[{{ $idx }}][warehouse_id]" value="">
                       <span class="text-muted">– Central Stock –</span>
                     @endif
@@ -262,23 +331,123 @@
     </div>
   </form>
 
-  {{-- FORM ORDER & CANCEL (TERPISAH, BUKAN NESTED) --}}
   <div class="d-flex justify-content-end mt-2 gap-2">
-    @unless($poLocked)
-      <form method="POST" action="{{ route('po.order', $po->id) }}" class="d-inline">
+    @if($canSubmitApproval)
+      <form method="POST" action="{{ route('po.order', $po->id) }}" class="d-inline frm-order">
         @csrf
-        <button type="submit" class="btn btn-warning me-2">
-          Set ORDERED
+        <button type="submit" class="btn btn-warning">
+          Ajukan Approval
         </button>
       </form>
+    @endif
 
-      <form method="POST" action="{{ route('po.cancel',$po->id) }}">
+    @if(!$poLocked && !in_array($po->approval_status, ['waiting_procurement','waiting_ceo','approved'], true))
+      <form method="POST" action="{{ route('po.cancel',$po->id) }}" class="d-inline frm-cancel">
         @csrf
-        <button type="submit" class="btn btn-outline-danger">Cancel</button>
+        <button type="submit" class="btn btn-outline-danger">Cancel PO</button>
       </form>
-    @endunless
+    @endif
   </div>
 
+  @if($canApproveProc || $canApproveCeo)
+    <div class="card mt-3">
+      <div class="card-header text-center">
+        <h6 class="mb-0">
+          Approval
+          @if($canApproveProc) Procurement @endif
+          @if($canApproveProc && $canApproveCeo) & @endif
+          @if($canApproveCeo) CEO @endif
+        </h6>
+      </div>
+      <div class="card-body d-flex flex-column align-items-center gap-3 small">
+
+        @if($canApproveProc)
+          <div class="text-center">
+            <form method="POST"
+                  action="{{ route('po.approve.proc', $po->id) }}"
+                  class="d-inline-block me-2 frm-approve-proc">
+              @csrf
+              <button type="submit" class="btn btn-success btn-sm">
+                Approve Procurement
+              </button>
+            </form>
+
+            <form method="POST"
+                  action="{{ route('po.reject.proc', $po->id) }}"
+                  class="d-inline-block frm-reject-proc">
+              @csrf
+              <button type="button" class="btn btn-outline-danger btn-sm btn-reject-proc">
+                Reject
+              </button>
+            </form>
+          </div>
+        @endif
+
+        @if($canApproveCeo)
+          <hr class="w-100 my-2">
+          <div class="text-center">
+            <form method="POST"
+                  action="{{ route('po.approve.ceo', $po->id) }}"
+                  class="d-inline-block me-2 frm-approve-ceo">
+              @csrf
+              <button type="submit" class="btn btn-success btn-sm">
+                Approve CEO
+              </button>
+            </form>
+
+            <form method="POST"
+                  action="{{ route('po.reject.ceo', $po->id) }}"
+                  class="d-inline-block frm-reject-ceo">
+              @csrf
+              <button type="button" class="btn btn-outline-danger btn-sm btn-reject-ceo">
+                Reject
+              </button>
+            </form>
+          </div>
+        @endif
+
+      </div>
+    </div>
+  @endif
+
+</div>
+
+{{-- MODAL PRINT PO (SATU MODAL AJA) --}}
+<div class="modal fade" id="poPrintModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl" style="max-width: 900px;">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title">Preview Purchase Order</h5>
+
+        <div class="ms-3">
+          <select id="po-print-template" class="form-select form-select-sm">
+            <option value="default">Template Standar</option>
+            <option value="partner">Template Partner</option>
+          </select>
+        </div>
+
+        <button type="button" class="btn-close ms-2"
+                data-bs-dismiss="modal"
+                aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body p-0">
+        <iframe id="poPrintIframe"
+                src=""
+                style="width:100%;height:70vh;border:0;"></iframe>
+      </div>
+
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm"
+                data-bs-dismiss="modal">
+          Tutup
+        </button>
+        <button type="button" class="btn btn-primary btn-sm" id="btn-run-print">
+          <i class="bx bx-printer me-1"></i> Print / Save PDF
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 
 @push('scripts')
@@ -338,7 +507,7 @@
     const select = tr.querySelector('.product-select');
     if (!select) return;
 
-    const priceMode = isFromRequest ? 'sell' : 'buy'; // PO dari request → harga jual, manual → harga beli
+    const priceMode = isFromRequest ? 'sell' : 'buy';
 
     select.addEventListener('change', function () {
       if (poLocked) return;
@@ -369,7 +538,6 @@
       recalc();
     });
 
-    // set label supplier awal
     const selectedOpt = select.options[select.selectedIndex];
     if (selectedOpt && selectedOpt.value) {
       const supplier  = selectedOpt.dataset.supplier || '-';
@@ -378,7 +546,6 @@
     }
   }
 
-  // Tambah baris baru
   const btnAdd = document.getElementById('btnAddRow');
   if (btnAdd && !poLocked) {
     btnAdd.addEventListener('click', () => {
@@ -387,7 +554,6 @@
 
       let warehouseCellHtml;
       if (isFromRequest) {
-        // PO dari Request → baris tambahan boleh pilih warehouse
         warehouseCellHtml = `
           <select name="items[${idx}][warehouse_id]" class="form-select form-select-sm">
             <option value="">— Pilih —</option>
@@ -397,7 +563,6 @@
           </select>
         `;
       } else {
-        // PO manual → selalu Central Stock
         warehouseCellHtml = `
           <input type="hidden" name="items[${idx}][warehouse_id]" value="">
           <span class="text-muted">– Central Stock –</span>
@@ -471,7 +636,6 @@
     });
   }
 
-  // remove row
   document.querySelector('#tblItems tbody').addEventListener('click', function (e) {
     if (poLocked) return;
     if (e.target.classList.contains('btn-remove')) {
@@ -481,7 +645,6 @@
     }
   });
 
-  // recalc saat input berubah
   document.querySelector('#tblItems tbody').addEventListener('input', function (e) {
     if (poLocked) return;
     if (
@@ -494,14 +657,171 @@
     }
   });
 
-  // pasang auto-price ke baris awal
   document.querySelectorAll('#tblItems tbody tr').forEach(tr => attachProductAutoPrice(tr));
 
   renumberRows();
   recalc();
 })();
 </script>
-@endpush
 
+{{-- SCRIPT PRINT MODAL --}}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const btnOpen   = document.getElementById('btn-open-print');
+  const modalEl   = document.getElementById('poPrintModal');
+  const iframe    = document.getElementById('poPrintIframe');
+  const tplSelect = document.getElementById('po-print-template');
+  const btnPrint  = document.getElementById('btn-run-print');
+
+  if (!btnOpen || !modalEl || !iframe || !tplSelect || !btnPrint) {
+    return;
+  }
+
+  const urlDefault = btnOpen.dataset.urlDefault;
+  const urlPartner = btnOpen.dataset.urlPartner;
+
+  const bsModal = new bootstrap.Modal(modalEl);
+
+  function buildUrl(baseUrl) {
+    return baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'autoprint=0';
+  }
+
+  function loadTemplate(tpl) {
+    let baseUrl = (tpl === 'partner') ? urlPartner : urlDefault;
+    iframe.src = buildUrl(baseUrl);
+  }
+
+  btnOpen.addEventListener('click', function () {
+    tplSelect.value = 'default';
+    loadTemplate('default');
+    bsModal.show();
+  });
+
+  tplSelect.addEventListener('change', function () {
+    loadTemplate(this.value);
+  });
+
+  btnPrint.addEventListener('click', function () {
+    if (iframe.contentWindow) {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    }
+  });
+});
+</script>
+
+<script>
+  // SweetAlert untuk ORDER, CANCEL, dan REJECT
+  document.addEventListener('DOMContentLoaded', function () {
+    // Ajukan Approval
+    document.querySelectorAll('.frm-order').forEach(form => {
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        Swal.fire({
+          icon: 'question',
+          title: 'Ajukan approval?',
+          text: 'PO akan dikirim ke Procurement / CEO sesuai rule approval.',
+          showCancelButton: true,
+          confirmButtonText: 'Ya, ajukan',
+          cancelButtonText: 'Batal'
+        }).then(res => {
+          if (res.isConfirmed) form.submit();
+        });
+      });
+    });
+
+    // Cancel PO
+    document.querySelectorAll('.frm-cancel').forEach(form => {
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        Swal.fire({
+          icon: 'warning',
+          title: 'Cancel PO?',
+          text: 'PO yang dicancel tidak dapat digunakan untuk GR.',
+          showCancelButton: true,
+          confirmButtonText: 'Ya, cancel',
+          cancelButtonText: 'Batal'
+        }).then(res => {
+          if (res.isConfirmed) form.submit();
+        });
+      });
+    });
+
+    // Reject Procurement
+    document.querySelectorAll('.btn-reject-proc').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const form = this.closest('form');
+        Swal.fire({
+          title: 'Alasan reject Procurement',
+          input: 'textarea',
+          inputPlaceholder: 'Tuliskan alasan penolakan...',
+          inputAttributes: { 'aria-label': 'Alasan reject' },
+          showCancelButton: true,
+          confirmButtonText: 'Kirim Reject',
+          cancelButtonText: 'Batal',
+          inputValidator: value => {
+            if (!value) {
+              return 'Alasan wajib diisi';
+            }
+            if (value.length > 1000) {
+              return 'Maksimal 1000 karakter.';
+            }
+            return null;
+          }
+        }).then(res => {
+          if (res.isConfirmed) {
+            let input = form.querySelector('input[name="reason"]');
+            if (!input) {
+              input = document.createElement('input');
+              input.type = 'hidden';
+              input.name = 'reason';
+              form.appendChild(input);
+            }
+            input.value = res.value;
+            form.submit();
+          }
+        });
+      });
+    });
+
+    // Reject CEO
+    document.querySelectorAll('.btn-reject-ceo').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const form = this.closest('form');
+        Swal.fire({
+          title: 'Alasan reject CEO',
+          input: 'textarea',
+          inputPlaceholder: 'Tuliskan alasan penolakan...',
+          inputAttributes: { 'aria-label': 'Alasan reject' },
+          showCancelButton: true,
+          confirmButtonText: 'Kirim Reject',
+          cancelButtonText: 'Batal',
+          inputValidator: value => {
+            if (!value) {
+              return 'Alasan wajib diisi';
+            }
+            if (value.length > 1000) {
+              return 'Maksimal 1000 karakter.';
+            }
+            return null;
+          }
+        }).then(res => {
+          if (res.isConfirmed) {
+            let input = form.querySelector('input[name="reason"]');
+            if (!input) {
+              input = document.createElement('input');
+              input.type = 'hidden';
+              input.name = 'reason';
+              form.appendChild(input);
+            }
+            input.value = res.value;
+            form.submit();
+          }
+        });
+      });
+    });
+  });
+</script>
+@endpush
 
 @endsection
