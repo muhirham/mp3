@@ -19,12 +19,10 @@
 
     $poLocked = $baseLocked || $approvalLocked;
 
-    // Kalau status REJECTED dan buka dari akun Procurement/CEO → full read-only
     if ($approvalStatus === 'rejected' && ! $isSuperadmin) {
         $poLocked = true;
     }
 
-    // Ajukan approval hanya boleh oleh SUPERADMIN
     $canSubmitApproval = $isSuperadmin
         && ! $poLocked
         && in_array($approvalStatus, ['draft','rejected'], true)
@@ -36,7 +34,6 @@
 @endphp
 
 <style>
-  /* Compact style biar nggak banyak scroll */
   .po-compact {
     font-size: 0.82rem;
   }
@@ -113,33 +110,16 @@
 
     {{-- TOMBOL EXPORT --}}
     <div class="d-flex gap-2">
-      {{-- Dropdown PDF --}}
-      <div class="btn-group">
-        <button type="button"
-                class="btn btn-outline-secondary btn-sm dropdown-toggle"
-                data-bs-toggle="dropdown"
-                aria-expanded="false">
-          PDF
-        </button>
-        <ul class="dropdown-menu dropdown-menu-end">
-          <li>
-            <a class="dropdown-item"
-               href="{{ route('po.pdf', ['po' => $po->id, 'tpl' => 'default']) }}"
-               target="_blank">
-              Template Standar
-            </a>
-          </li>
-          <li>
-            <a class="dropdown-item"
-               href="{{ route('po.pdf', ['po' => $po->id, 'tpl' => 'partner']) }}"
-               target="_blank">
-              Template Partner
-            </a>
-          </li>
-        </ul>
-      </div>
+      {{-- Print / PDF via modal --}}
+      <button type="button"
+              class="btn btn-outline-secondary btn-sm"
+              id="btn-open-print"
+              data-url-default="{{ route('po.pdf', ['po' => $po->id, 'tpl' => 'default']) }}"
+              data-url-partner="{{ route('po.pdf', ['po' => $po->id, 'tpl' => 'partner']) }}">
+        <i class="bx bx-printer me-1"></i> Print / PDF
+      </button>
 
-      {{-- Excel biasa --}}
+      {{-- Excel --}}
       <a href="{{ route('po.excel',$po->id) }}" class="btn btn-outline-secondary btn-sm">Excel</a>
     </div>
   </div>
@@ -351,7 +331,6 @@
     </div>
   </form>
 
-  {{-- FORM ORDER & CANCEL (TERPISAH, BUKAN NESTED) --}}
   <div class="d-flex justify-content-end mt-2 gap-2">
     @if($canSubmitApproval)
       <form method="POST" action="{{ route('po.order', $po->id) }}" class="d-inline frm-order">
@@ -362,7 +341,6 @@
       </form>
     @endif
 
-    {{-- Cancel hanya kalau belum dalam flow approval & tidak locked --}}
     @if(!$poLocked && !in_array($po->approval_status, ['waiting_procurement','waiting_ceo','approved'], true))
       <form method="POST" action="{{ route('po.cancel',$po->id) }}" class="d-inline frm-cancel">
         @csrf
@@ -371,7 +349,6 @@
     @endif
   </div>
 
-  {{-- CARD APPROVAL (hanya kalau sedang menunggu approval) --}}
   @if($canApproveProc || $canApproveCeo)
     <div class="card mt-3">
       <div class="card-header text-center">
@@ -433,6 +410,44 @@
     </div>
   @endif
 
+</div>
+
+{{-- MODAL PRINT PO (SATU MODAL AJA) --}}
+<div class="modal fade" id="poPrintModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl" style="max-width: 900px;">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title">Preview Purchase Order</h5>
+
+        <div class="ms-3">
+          <select id="po-print-template" class="form-select form-select-sm">
+            <option value="default">Template Standar</option>
+            <option value="partner">Template Partner</option>
+          </select>
+        </div>
+
+        <button type="button" class="btn-close ms-2"
+                data-bs-dismiss="modal"
+                aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body p-0">
+        <iframe id="poPrintIframe"
+                src=""
+                style="width:100%;height:70vh;border:0;"></iframe>
+      </div>
+
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm"
+                data-bs-dismiss="modal">
+          Tutup
+        </button>
+        <button type="button" class="btn btn-primary btn-sm" id="btn-run-print">
+          <i class="bx bx-printer me-1"></i> Print / Save PDF
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 
 @push('scripts')
@@ -647,6 +662,52 @@
   renumberRows();
   recalc();
 })();
+</script>
+
+{{-- SCRIPT PRINT MODAL --}}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const btnOpen   = document.getElementById('btn-open-print');
+  const modalEl   = document.getElementById('poPrintModal');
+  const iframe    = document.getElementById('poPrintIframe');
+  const tplSelect = document.getElementById('po-print-template');
+  const btnPrint  = document.getElementById('btn-run-print');
+
+  if (!btnOpen || !modalEl || !iframe || !tplSelect || !btnPrint) {
+    return;
+  }
+
+  const urlDefault = btnOpen.dataset.urlDefault;
+  const urlPartner = btnOpen.dataset.urlPartner;
+
+  const bsModal = new bootstrap.Modal(modalEl);
+
+  function buildUrl(baseUrl) {
+    return baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'autoprint=0';
+  }
+
+  function loadTemplate(tpl) {
+    let baseUrl = (tpl === 'partner') ? urlPartner : urlDefault;
+    iframe.src = buildUrl(baseUrl);
+  }
+
+  btnOpen.addEventListener('click', function () {
+    tplSelect.value = 'default';
+    loadTemplate('default');
+    bsModal.show();
+  });
+
+  tplSelect.addEventListener('change', function () {
+    loadTemplate(this.value);
+  });
+
+  btnPrint.addEventListener('click', function () {
+    if (iframe.contentWindow) {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    }
+  });
+});
 </script>
 
 <script>

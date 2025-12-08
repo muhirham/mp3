@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <title>Purchase Order {{ $po->po_code }}</title>
     <style>
+        @page {
+            size: A4 portrait;
+            margin: 10mm;
+        }
+
         body {
             font-family: Arial, Helvetica, sans-serif;
             font-size: 11px;
@@ -35,7 +40,7 @@
         .mt-20 { margin-top: 20px; }
 
         .small { font-size: 10px; }
-        .text-muted { color: #777; } {{-- biar class text-muted kepake --}}
+        .text-muted { color: #777; }
 
         .draft-watermark {
             position: fixed;
@@ -57,16 +62,16 @@
 {{-- HEADER COMPANY / KOP SURAT --}}
 @if($company)
     @php
-        $logoPath = $company->logo_path
-            ? public_path('storage/'.$company->logo_path)
+        $logoUrl = $company->logo_path
+            ? asset('storage/'.$company->logo_path)
             : null;
     @endphp
 
     <table>
         <tr>
             <td style="width: 25%; vertical-align: top;">
-                @if($logoPath && file_exists($logoPath))
-                    <img src="{{ $logoPath }}" style="max-width: 140px;">
+                @if($logoUrl)
+                    <img src="{{ $logoUrl }}" style="max-width: 140px;">
                 @endif
             </td>
             <td style="vertical-align: top;">
@@ -112,66 +117,56 @@
 
 <div class="title">PURCHASE ORDER</div>
 
-{{-- INFO PO & SUPPLIER --}}
 @php
-    $supplier = $po->supplier;
-    $formatRupiah = fn($v) => 'Rp ' . number_format($v, 0, ',', '.');
+    $supplier     = $po->supplier;
+    $formatRupiah = fn($v) => 'Rp ' . number_format($v ?? 0, 0, ',', '.');
 @endphp
 
 <table>
     <tr>
         {{-- Supplier --}}
         @php
-    // fallback: kalau variabel $supplier nggak dikirim dari controller,
-    // pakai relasi $po->supplier
-    $sup = $supplier ?? ($po->supplier ?? null);
-@endphp
+            $sup = $supplier ?? ($po->supplier ?? null);
 
-@php
-    // Kumpulin nama supplier dari PO dan dari item-itemnya
-    $supplierNames = collect();
-    $supAddress    = null;
-    $supPhone      = null;
-    $supEmail      = null;
+            $supplierNames = collect();
+            $supAddress    = null;
+            $supPhone      = null;
+            $supEmail      = null;
 
-    // 1. Kalau PO punya supplier_id, pakai itu dulu
-    if ($po->supplier) {
-        $supplierNames->push($po->supplier->name);
-        $supAddress = $po->supplier->address;
-        $supPhone   = $po->supplier->phone;
-        $supEmail   = $po->supplier->email;
-    }
+            if ($po->supplier) {
+                $supplierNames->push($po->supplier->name);
+                $supAddress = $po->supplier->address;
+                $supPhone   = $po->supplier->phone;
+                $supEmail   = $po->supplier->email;
+            }
 
-    // 2. Tambahin supplier dari product di item-item PO
-    $itemSuppliers = $po->items
-        ->map(fn ($it) => $it->product?->supplier)
-        ->filter(); // buang null
+            $itemSuppliers = $po->items
+                ->map(fn ($it) => $it->product?->supplier)
+                ->filter();
 
-    if ($itemSuppliers->isNotEmpty()) {
-        if ($supplierNames->isEmpty()) {
-            // kalau tadi belum ada, alamat/telepon ambil dari supplier pertama
-            $firstSup   = $itemSuppliers->first();
-            $supAddress = $firstSup->address ?? null;
-            $supPhone   = $firstSup->phone ?? null;
-            $supEmail   = $firstSup->email ?? null;
-        }
+            if ($itemSuppliers->isNotEmpty()) {
+                if ($supplierNames->isEmpty()) {
+                    $firstSup   = $itemSuppliers->first();
+                    $supAddress = $firstSup->address ?? null;
+                    $supPhone   = $firstSup->phone ?? null;
+                    $supEmail   = $firstSup->email ?? null;
+                }
 
-        $supplierNames = $supplierNames
-            ->merge($itemSuppliers->pluck('name'))
-            ->filter()
-            ->unique()
-            ->values();
-    }
+                $supplierNames = $supplierNames
+                    ->merge($itemSuppliers->pluck('name'))
+                    ->filter()
+                    ->unique()
+                    ->values();
+            }
 
-    // 3. Label tampilannya
-    if ($supplierNames->isEmpty()) {
-        $supplierLabel = '-';
-    } elseif ($supplierNames->count() === 1) {
-        $supplierLabel = $supplierNames->first();
-    } else {
-        $supplierLabel = $supplierNames->first().' + '.($supplierNames->count() - 1).' supplier';
-    }
-@endphp
+            if ($supplierNames->isEmpty()) {
+                $supplierLabel = '-';
+            } elseif ($supplierNames->count() === 1) {
+                $supplierLabel = $supplierNames->first();
+            } else {
+                $supplierLabel = $supplierNames->first().' + '.($supplierNames->count() - 1).' supplier';
+            }
+        @endphp
 
         <td style="width:50%; vertical-align:top;">
             <table>
@@ -208,8 +203,6 @@
                 @endif
             </table>
         </td>
-
-
 
         {{-- Info PO --}}
         <td style="width: 50%; vertical-align: top;">
@@ -332,14 +325,10 @@
 
 @php
     $sign = function($user) {
-        if (! $user) return null;
-        $path = $user->signature_path
-            ? public_path('storage/'.$user->signature_path)
-            : null;
-        if ($path && file_exists($path)) {
-            return $path;
+        if (! $user || ! $user->signature_path) {
+            return null;
         }
-        return null;
+        return asset('storage/'.$user->signature_path);
     };
 @endphp
 
@@ -394,6 +383,15 @@
         </td>
     </tr>
 </table>
+
+@if(!empty($autoPrint))
+<script>
+    window.addEventListener('load', function () {
+        window.focus();
+        window.print();
+    });
+</script>
+@endif
 
 </body>
 </html>

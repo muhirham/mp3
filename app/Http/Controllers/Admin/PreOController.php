@@ -906,26 +906,18 @@ class PreOController extends Controller
 
     public function exportPdf(Request $request, PurchaseOrder $po)
     {
-        // 1) Matikan debugbar biar nggak ikut ngumpulin output PDF
-        if (class_exists(\Barryvdh\Debugbar\Facade::class)) {
-            \Barryvdh\Debugbar\Facade::disable();
-        }
-
-        // 2) Naikin batas waktu buat proses PDF ini
-        @set_time_limit(120);   // 120 detik, kalau mau bisa dinaikin lagi
-
-        // 3) Pilih template: default / partner
+        // 1) pilih template: default / partner
         $tpl  = $request->query('tpl', 'default');
         $view = $tpl === 'partner'
             ? 'admin.po.print_partner'
             : 'admin.po.print';
 
-        // 4) Ambil company default
+        // 2) ambil company default
         $company = Company::where('is_default', true)
             ->where('is_active', true)
             ->first();
 
-        // 5) Eager load relasi yang dipakai di blade
+        // 3) eager load relasi
         $po->load([
             'supplier',
             'items.product.supplier',
@@ -937,18 +929,14 @@ class PreOController extends Controller
 
         $isDraft = $po->approval_status !== 'approved';
 
-        // 6) Generate PDF
-        $pdf = Pdf::loadView($view, [
-            'po'      => $po,
-            'company' => $company,
-            'isDraft' => $isDraft,
+        // 4) balikin VIEW biasa, bukan PDF
+        return view($view, [
+            'po'        => $po,
+            'company'   => $company,
+            'isDraft'   => $isDraft,
+            'autoPrint' => true,   // flag buat auto window.print()
         ]);
-
-        $pdf->setPaper('A4', 'portrait');
-
-        return $pdf->stream('PO-'.$po->po_code.'.pdf');
     }
-
     public function exportExcel(PurchaseOrder $po)
     {
         return back()->with('info', 'Export Excel belum diaktifkan.');

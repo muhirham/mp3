@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <title>Partner PO {{ $po->po_code }}</title>
     <style>
+        @page {
+            size: A4 portrait;
+            margin: 10mm;
+        }
+
         body {
             font-family: Arial, Helvetica, sans-serif;
             font-size: 10px;
@@ -63,43 +68,35 @@
 <body>
 
 @php
-    // default kalau variabel belum dikirim
-    $isDraft = $isDraft ?? ($po->approval_status !== 'approved');
-
+    $isDraft      = $isDraft ?? ($po->approval_status !== 'approved');
     $formatRupiah = fn($v) => 'Rp ' . number_format($v ?? 0, 0, ',', '.');
 
-    $company = $company ?? null;
-
-    // batas perlu CEO (ikut rule di index: > 1.000.000)
-    $needsCeo = ($po->grand_total ?? 0) > 1_000_000;
+    $company      = $company ?? null;
+    $needsCeo     = ($po->grand_total ?? 0) > 1_000_000;
 
     $creator   = $po->user ?? null;
     $procUser  = $po->procurementApprover ?? null;
     $ceoUser   = $po->ceoApprover ?? null;
 
-    $partnerId   = $company?->short_name ?: 'MAND4U';
-    $partnerName = $company?->legal_name ?? $company?->name ?? 'PT Mandiri Daya Utama Nusantara';
-    $partnerAddr = $company?->address ?? 'Komplek Golden Plaza Blok C17, Jl. RS Fatmawati No. 15, Jakarta Selatan, DKI Jakarta';
+    $partnerId    = $company?->short_name ?: 'MAND4U';
+    $partnerName  = $company?->legal_name ?? $company?->name ?? 'PT Mandiri Daya Utama Nusantara';
+    $partnerAddr  = $company?->address ?? 'Komplek Golden Plaza Blok C17, Jl. RS Fatmawati No. 15, Jakarta Selatan, DKI Jakarta';
     $partnerPhone = $company?->phone ?? '+62 21 7590 9945';
     $partnerFax   = $company?->fax   ?? '-';
     $partnerCp    = $creator->name ?? 'Admin Pusat';
     $partnerBillTo = $partnerAddr;
 
-    $logoPath = $company?->logo_path
-        ? public_path('storage/'.$company->logo_path)
+    $logoUrl = $company?->logo_path
+        ? asset('storage/'.$company->logo_path)
         : null;
 
     $shipToDefault = 'CENTRAL STOCK';
 
-    $signPath = function($user) {
-        if (! $user) return null;
-        $path = $user->signature_path
-            ? public_path('storage/'.$user->signature_path)
-            : null;
-        if ($path && file_exists($path)) {
-            return $path;
+    $signUrl = function($user) {
+        if (! $user || ! $user->signature_path) {
+            return null;
         }
-        return null;
+        return asset('storage/'.$user->signature_path);
     };
 @endphp
 
@@ -116,8 +113,8 @@
             </div>
         </td>
         <td style="width: 40%; text-right;">
-            @if($logoPath && file_exists($logoPath))
-                <img src="{{ $logoPath }}" style="max-width: 90px;">
+            @if($logoUrl)
+                <img src="{{ $logoUrl }}" style="max-width: 90px;">
             @endif
         </td>
     </tr>
@@ -229,7 +226,7 @@
                 $discType   = $item->discount_type;
                 $discVal    = (float) ($item->discount_value ?? 0);
                 $discPct    = $discType === 'percent' ? $discVal : 0;
-                $lineTotal  = $item->line_total ?? ($qty * ($item->unit_price ?? 0) - $item->discount_amount ?? 0);
+                $lineTotal  = $item->line_total ?? ($qty * ($item->unit_price ?? 0) - ($item->discount_amount ?? 0));
             @endphp
             <tr>
                 <td class="text-center">{{ $rowNo++ }}</td>
@@ -240,14 +237,15 @@
                 <td class="text-center">{{ $qty }}</td>
                 <td class="text-center">{{ $unit }}</td>
                 <td class="text-right">{{ $formatRupiah($item->unit_price) }}</td>
-                <td class="text-center">{{ $discPct > 0 ? rtrim(rtrim(number_format($discPct,2,'.',''), '0'), '.') : '' }}</td>
+                <td class="text-center">
+                    {{ $discPct > 0 ? rtrim(rtrim(number_format($discPct,2,'.',''), '0'), '.') : '' }}
+                </td>
                 <td class="text-right">{{ $formatRupiah($lineTotal) }}</td>
                 <td class="text-left">{{ $shipTo }}</td>
                 <td></td>
             </tr>
         @endforeach
 
-        {{-- baris kosong biar tabel keliatan fixed --}}
         @for($i = $rowNo; $i <= 7; $i++)
             <tr>
                 <td>&nbsp;</td>
@@ -282,7 +280,6 @@
     </tr>
 </table>
 
-{{-- TANDA TANGAN --}}
 @php
     $signTableClass = $needsCeo ? 'sign-table sign-3col' : 'sign-table sign-2col';
 @endphp
@@ -303,8 +300,8 @@
         {{-- PIC --}}
         <td>
             <div style="height:50px; margin-top:5px; margin-bottom:5px;">
-                @if($signPath($creator))
-                    <img src="{{ $signPath($creator) }}" style="height:45px;">
+                @if($signUrl($creator))
+                    <img src="{{ $signUrl($creator) }}" style="height:45px;">
                 @endif
             </div>
         </td>
@@ -313,23 +310,23 @@
         <td>
             <div style="height:50px; margin-top:5px; margin-bottom:5px;">
                 @if($needsCeo)
-                    @if($signPath($procUser))
-                        <img src="{{ $signPath($procUser) }}" style="height:45px;">
+                    @if($signUrl($procUser))
+                        <img src="{{ $signUrl($procUser) }}" style="height:45px;">
                     @endif
                 @else
-                    @if($signPath($procUser ?: $ceoUser))
-                        <img src="{{ $signPath($procUser ?: $ceoUser) }}" style="height:45px;">
+                    @if($signUrl($procUser ?: $ceoUser))
+                        <img src="{{ $signUrl($procUser ?: $ceoUser) }}" style="height:45px;">
                     @endif
                 @endif
             </div>
         </td>
 
-        {{-- CEO (hanya kalau perlu) --}}
+        {{-- CEO --}}
         @if($needsCeo)
             <td>
                 <div style="height:50px; margin-top:5px; margin-bottom:5px;">
-                    @if($signPath($ceoUser))
-                        <img src="{{ $signPath($ceoUser) }}" style="height:45px;">
+                    @if($signUrl($ceoUser))
+                        <img src="{{ $signUrl($ceoUser) }}" style="height:45px;">
                     @endif
                 </div>
             </td>
@@ -359,6 +356,15 @@
         @endif
     </tr>
 </table>
+
+@if(!empty($autoPrint))
+<script>
+    window.addEventListener('load', function () {
+        window.focus();
+        window.print();
+    });
+</script>
+@endif
 
 </body>
 </html>
