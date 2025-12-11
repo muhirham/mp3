@@ -8,45 +8,66 @@ return new class extends Migration
 {
     public function up(): void
     {
+        /*
+         * HEADER: sales_handovers
+         * 1 record = 1x handover (pagi–sore) per sales per hari
+         */
         Schema::create('sales_handovers', function (Blueprint $table) {
             $table->id();
 
-            // contoh: HDO-251207-0001
+            // Contoh: HDO-251208-0001
             $table->string('code', 50)->unique();
 
+            // Relasi
             $table->foreignId('warehouse_id')->constrained('warehouses');
             $table->foreignId('sales_id')->constrained('users');
+
             $table->date('handover_date');
 
-            // issued      : sudah serah terima pagi, belum rekonsiliasi
-            // reconciled  : sudah rekonsiliasi sore, laporan close
-            // cancelled   : dibatalkan
-            $table->enum('status', ['issued', 'reconciled', 'cancelled'])->default('issued');
+            // draft → waiting_morning_otp → on_sales → waiting_evening_otp → closed / cancelled
+            $table->enum('status', [
+                'draft',
+                'waiting_morning_otp',
+                'on_sales',
+                'waiting_evening_otp',
+                'closed',
+                'cancelled',
+            ])->default('draft');
 
             $table->foreignId('issued_by')->constrained('users');
-            $table->foreignId('reconciled_by')->nullable()->constrained('users');
-            $table->timestamp('reconciled_at')->nullable();
+            $table->foreignId('closed_by')->nullable()->constrained('users');
 
-            // total nilai barang keluar & terjual (berdasarkan selling_price)
-            $table->decimal('total_dispatched_amount', 15, 2)->default(0);
-            $table->decimal('total_sold_amount', 15, 2)->default(0);
+            // ====== NOMINAL UANG (pakai bigInteger / unsignedBigInteger) ======
+            // nilai total bawaan pagi (sum line_total_start semua item)
+            $table->unsignedBigInteger('total_dispatched_amount')->default(0);
 
-            // OTP pagi (dipakai validasi sore)
+            // nilai total penjualan (sum line_total_sold semua item) setelah closing sore
+            $table->unsignedBigInteger('total_sold_amount')->default(0);
+
+            // setoran tunai & transfer dari sales
+            $table->unsignedBigInteger('cash_amount')->default(0);
+            $table->unsignedBigInteger('transfer_amount')->default(0);
+
+            // path file bukti transfer (disimpan di storage)
+            $table->string('transfer_proof_path')->nullable();
+
+            // ====== OTP PAGI ======
             $table->string('morning_otp_hash', 255)->nullable();
-            $table->timestamp('morning_otp_expires_at')->nullable();
+            $table->timestamp('morning_otp_sent_at')->nullable();
+            $table->timestamp('morning_otp_verified_at')->nullable();
 
-            // OTP closing sore (hanya dikirim ke email sebagai bukti)
-            $table->string('closing_otp_hash', 255)->nullable();
-            $table->timestamp('closing_otp_expires_at')->nullable();
-
-            // Setoran uang
-            $table->decimal('cash_amount', 15, 2)->default(0);
-            $table->decimal('transfer_amount', 15, 2)->default(0);
-            $table->string('transfer_proof_path')->nullable(); // path gambar bukti tf
+            // ====== OTP SORE (closing) ======
+            $table->string('evening_otp_hash', 255)->nullable();
+            $table->timestamp('evening_otp_sent_at')->nullable();
+            $table->timestamp('evening_otp_verified_at')->nullable();
 
             $table->timestamps();
         });
 
+        /*
+         * DETAIL: sales_handover_items
+         * Tiap baris = 1 produk yang dibawa sales
+         */
         Schema::create('sales_handover_items', function (Blueprint $table) {
             $table->id();
 
@@ -54,23 +75,22 @@ return new class extends Migration
                 ->constrained('sales_handovers')
                 ->cascadeOnDelete();
 
-            $table->foreignId('product_id')
-                ->constrained('products');
+            $table->foreignId('product_id')->constrained('products');
 
-            // qty
-            $table->integer('qty_dispatched');                    // dibawa pagi
-            $table->integer('qty_returned_good')->default(0);     // balik bagus
-            $table->integer('qty_returned_damaged')->default(0);  // balik rusak
-            $table->integer('qty_sold')->default(0);              // dihitung sore
+            // Qty pagi & sore
+            $table->integer('qty_start');                 // qty dibawa pagi
+            $table->integer('qty_returned')->default(0);  // qty sisa (good+rusak) sore
+            $table->integer('qty_sold')->default(0);      // qty_start - qty_returned
 
-            // harga
-            $table->decimal('unit_price', 15, 2)->default(0);
-            $table->decimal('line_total_dispatched', 15, 2)->default(0); // qty_dispatched * price
-            $table->decimal('line_total_sold', 15, 2)->default(0);       // qty_sold * price
+            // Harga & nilai (pakai bigInteger juga, isi rupiah utuh)
+            $table->unsignedBigInteger('unit_price')->default(0);        // harga satuan
+            $table->unsignedBigInteger('line_total_start')->default(0);  // qty_start * unit_price
+            $table->unsignedBigInteger('line_total_sold')->default(0);   // qty_sold * unit_price
 
             $table->timestamps();
 
-            $table->unique(['handover_id', 'product_id']); // 1 produk sekali saja per handover
+            // 1 produk cuma boleh muncul sekali per handover
+            $table->unique(['handover_id', 'product_id']);
         });
     }
 

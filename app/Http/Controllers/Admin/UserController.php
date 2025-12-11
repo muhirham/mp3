@@ -100,7 +100,7 @@ class UserController extends Controller
         $roleIds = Role::whereIn('slug', $roleSlugs)->pluck('id')->all();
 
         // upload signature
-        $signaturePath = null;
+            $signaturePath = replace_uploaded_file( null,$request->file('signature') ?? null,'signatures','public');
         if ($request->hasFile('signature')) {
             $signaturePath = $request->file('signature')->store('signatures', 'public');
         }
@@ -170,14 +170,14 @@ class UserController extends Controller
 
         $roleIds = Role::whereIn('slug', $roleSlugs)->pluck('id')->all();
 
-        // upload signature baru (kalau ada)
-        $signaturePath = $user->signature_path;
-        if ($request->hasFile('signature')) {
-            if ($signaturePath) {
-                Storage::disk('public')->delete($signaturePath);
-            }
-            $signaturePath = $request->file('signature')->store('signatures', 'public');
-        }
+ // upload / ganti signature
+        $signaturePath = replace_uploaded_file(
+            $user->signature_path,
+            $request->file('signature') ?? null,
+            'signatures'
+        );
+
+
 
         $payload = collect($data)->only([
             'name','username','email','phone','position','warehouse_id','status',
@@ -215,9 +215,8 @@ class UserController extends Controller
             }
         }
 
-        if ($user->signature_path) {
-            Storage::disk('public')->delete($user->signature_path);
-        }
+        delete_file_if_exists($user->signature_path);
+
 
         $user->delete();
 
@@ -257,9 +256,7 @@ class UserController extends Controller
             $users = User::whereIn('id', $ids)->get();
 
             foreach ($users as $user) {
-                if ($user->signature_path) {
-                    Storage::disk('public')->delete($user->signature_path);
-                }
+                delete_file_if_exists($user->signature_path);
                 $user->delete();
             }
         });
