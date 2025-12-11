@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class SalesHandover extends Model
 {
@@ -19,23 +19,29 @@ class SalesHandover extends Model
         'status',
         'issued_by',
         'reconciled_by',
-        'reconciled_at',
+
+        // amount
         'total_dispatched_amount',
         'total_sold_amount',
-        'morning_otp_hash',
-        'morning_otp_expires_at',
-        'closing_otp_hash',
-        'closing_otp_expires_at',
         'cash_amount',
         'transfer_amount',
         'transfer_proof_path',
+
+        // OTP
+        'issue_otp_hash',
+        'issue_otp_expires_at',
+        'otp_hash',
+        'otp_expires_at',
     ];
 
     protected $casts = [
-        'handover_date'          => 'date',
-        'reconciled_at'          => 'datetime',
-        'morning_otp_expires_at' => 'datetime',
-        'closing_otp_expires_at' => 'datetime',
+        'handover_date'           => 'date',
+        'issue_otp_expires_at'    => 'datetime',
+        'otp_expires_at'          => 'datetime',
+        'total_dispatched_amount' => 'decimal:2',
+        'total_sold_amount'       => 'decimal:2',
+        'cash_amount'             => 'decimal:2',
+        'transfer_amount'         => 'decimal:2',
     ];
 
     public function items()

@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class SalesHandoverItem extends Model
 {
@@ -14,19 +14,21 @@ class SalesHandoverItem extends Model
     protected $fillable = [
         'handover_id',
         'product_id',
-        'qty_dispatched',
-        'qty_returned_good',
-        'qty_returned_damaged',
+        'qty_start',
+        'qty_returned',
         'qty_sold',
         'unit_price',
-        'line_total_dispatched',
+        'line_total_start',
         'line_total_sold',
     ];
 
     protected $casts = [
-        'unit_price'             => 'float',
-        'line_total_dispatched'  => 'float',
-        'line_total_sold'        => 'float',
+        'qty_start'        => 'integer',
+        'qty_returned'     => 'integer',
+        'qty_sold'         => 'integer',
+        'unit_price'       => 'float',
+        'line_total_start' => 'float',
+        'line_total_sold'  => 'float',
     ];
 
     public function handover()

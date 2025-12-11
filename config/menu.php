@@ -113,7 +113,7 @@ return [
         [
             'key'   => 'sales_daily',
             'label' => 'Daily Report',
-            'route' => 'sales.report',
+            'route' => 'daily.sales.report',
             'group' => 'sales',
             'icon'  => 'bx bx-calendar-check',
         ],

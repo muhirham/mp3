@@ -282,6 +282,7 @@ return [
          * @var array|null
          */
         'isRemoteEnabled' => false,
+        'isJavascriptEnabled' => false,
         'allowed_remote_hosts' => null,
 
         /**

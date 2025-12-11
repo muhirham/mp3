@@ -643,10 +643,9 @@ class GoodReceivedController extends Controller
                     ->get();
 
                 foreach ($photos as $p) {
-                    if (! empty($p->path)) {
-                        Storage::disk('public')->delete($p->path);
-                    }
+                delete_file_if_exists($p->path);
                 }
+                
 
                 DB::table('restock_receipt_photos')
                     ->whereIn('receipt_id', $ids)

@@ -42,13 +42,20 @@ class CompanyController extends Controller
         DB::transaction(function () use ($request, $data) {
             // handle logo
             if ($request->hasFile('logo')) {
-                $data['logo_path'] = $request->file('logo')->store('companies', 'public');
+                $data['logo_path'] = replace_uploaded_file(
+                    null,
+                    $request->file('logo'),
+                    'companies'
+                );
             }
 
             if ($request->hasFile('logo_small')) {
-                $data['logo_small_path'] = $request->file('logo_small')->store('companies', 'public');
+                $data['logo_small_path'] = replace_uploaded_file(
+                    null,
+                    $request->file('logo_small'),
+                    'companies'
+                );
             }
-
             $data['is_active']  = $request->boolean('is_active', true);
             $isDefaultRequested = $request->boolean('is_default', false);
 
@@ -90,18 +97,20 @@ class CompanyController extends Controller
         DB::transaction(function () use ($request, $data, $company) {
             // logo utama
             if ($request->hasFile('logo')) {
-                if ($company->logo_path) {
-                    Storage::disk('public')->delete($company->logo_path);
-                }
-                $data['logo_path'] = $request->file('logo')->store('companies', 'public');
+                $data['logo_path'] = replace_uploaded_file(
+                    $company->logo_path,
+                    $request->file('logo'),
+                    'companies'
+                );
             }
 
             // logo kecil
             if ($request->hasFile('logo_small')) {
-                if ($company->logo_small_path) {
-                    Storage::disk('public')->delete($company->logo_small_path);
-                }
-                $data['logo_small_path'] = $request->file('logo_small')->store('companies', 'public');
+                $data['logo_small_path'] = replace_uploaded_file(
+                    $company->logo_small_path,
+                    $request->file('logo_small'),
+                    'companies'
+                );
             }
 
             $data['is_active']  = $request->boolean('is_active', true);
@@ -127,6 +136,8 @@ class CompanyController extends Controller
 
     public function destroy(Company $company)
     {
+        delete_file_if_exists($company->logo_path);
+        delete_file_if_exists($company->logo_small_path);
         // soft delete aja
         $company->delete();
 
