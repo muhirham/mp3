@@ -37,12 +37,16 @@ return new class extends Migration
             $table->foreignId('issued_by')->constrained('users');
             $table->foreignId('closed_by')->nullable()->constrained('users');
 
-            // ====== NOMINAL UANG (pakai bigInteger / unsignedBigInteger) ======
+            // ====== NOMINAL UANG (pakai unsignedBigInteger) ======
             // nilai total bawaan pagi (sum line_total_start semua item)
             $table->unsignedBigInteger('total_dispatched_amount')->default(0);
 
             // nilai total penjualan (sum line_total_sold semua item) setelah closing sore
             $table->unsignedBigInteger('total_sold_amount')->default(0);
+
+            // FLAG: diisi oleh SALES sekali saja
+            $table->boolean('evening_filled_by_sales')->default(false);
+            $table->timestamp('evening_filled_at')->nullable();
 
             // setoran tunai & transfer dari sales
             $table->unsignedBigInteger('cash_amount')->default(0);

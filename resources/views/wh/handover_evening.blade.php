@@ -9,10 +9,13 @@
 
 <div class="container-xxl flex-grow-1 container-p-y">
 
-  {{-- STEP 1: INPUT HASIL & GENERATE OTP SORE --}}
+  {{-- STEP 1: SALES INPUT PENJUALAN SORE --}}
   <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
-      <h5 class="mb-0 fw-bold">Rekonsiliasi Sore – Input Hasil & Kirim OTP</h5>
+      <h5 class="mb-0 fw-bold">Input Penjualan Sore (diisi oleh Sales)</h5>
+      <small class="text-muted">
+        Setiap handover hanya bisa diisi <b>1 kali</b> oleh sales.
+      </small>
     </div>
     <div class="card-body">
 
@@ -25,13 +28,20 @@
               <option value="{{ $h->id }}"
                       data-code="{{ $h->code }}"
                       data-sales="{{ $h->sales->name ?? ('Sales #'.$h->sales_id) }}"
-                      data-date="{{ \Carbon\Carbon::parse($h->handover_date)->format('Y-m-d') }}">
+                      data-date="{{ \Carbon\Carbon::parse($h->handover_date)->format('Y-m-d') }}"
+                      data-locked="{{ $h->evening_filled_by_sales ? 1 : 0 }}">
                 {{ $h->code }} — {{ $h->sales->name ?? ('Sales #'.$h->sales_id) }}
                 ({{ \Carbon\Carbon::parse($h->handover_date)->format('Y-m-d') }})
+                @if($h->evening_filled_by_sales)
+                  — [SUDAH DIISI]
+                @endif
               </option>
             @endforeach
           </select>
-          <div class="form-text">Hanya handover yang sudah lock OTP pagi (status <b>ON_SALES</b>).</div>
+          <div class="form-text">
+            Hanya handover yang sudah lock OTP pagi (status <b>ON_SALES</b>).  
+            Jika sudah bertanda <b>[SUDAH DIISI]</b>, data tidak bisa diubah lagi dari sisi sales.
+          </div>
         </div>
         <div class="col-md-3">
           <button id="btnLoadItems" class="btn btn-primary w-100" disabled>
@@ -99,14 +109,14 @@
 
         <div class="d-flex justify-content-end gap-2 mt-3">
           <button type="submit" class="btn btn-primary" id="btnSubmit" disabled>
-            Simpan Hasil &amp; Kirim OTP Sore
+            Simpan Hasil Penjualan
           </button>
         </div>
       </form>
     </div>
   </div>
 
-  {{-- STEP 2: VERIFIKASI OTP SORE --}}
+  {{-- STEP 2: VERIFIKASI OTP SORE (closing) --}}
   <div class="card">
     <div class="card-header">
       <h5 class="mb-0 fw-bold">Verifikasi OTP Sore (Closing)</h5>
@@ -231,11 +241,21 @@
       return;
     }
 
+    // kalau sudah pernah diisi, jangan boleh edit lagi dari sisi UI
+    if (opt.dataset.locked === '1') {
+      Swal.fire({
+        icon: 'info',
+        title: 'Sudah Diisi',
+        html: 'Data penjualan untuk handover ini sudah pernah dikirim.<br>Jika ada kesalahan, hubungi admin gudang untuk revisi.',
+      });
+      btnLoad.disabled = true;
+      return;
+    }
+
     txtCode.value  = opt.dataset.code || '';
     txtSales.value = opt.dataset.sales || '';
     txtDate.value  = opt.dataset.date || '';
 
-    // set action
     const urlSave = @json(route('sales.handover.evening.save', 0)).replace('/0', '/' + id);
     form.setAttribute('action', urlSave);
 
@@ -273,9 +293,8 @@
       let html = '';
       items.forEach((it, idx) => html += rowHtml(idx, it));
       tblBody.innerHTML = html;
-      btnSubmit.disabled = true;   // baru enabled setelah validasi awal
-      btnClear.disabled  = false;
       btnSubmit.disabled = false;
+      btnClear.disabled  = false;
     } catch (err) {
       console.error(err);
       tblBody.innerHTML = '';

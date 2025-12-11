@@ -23,9 +23,12 @@ use App\Http\Controllers\Admin\CompanyController;
 // WAREHOUSE
 use App\Http\Controllers\Warehouse\WarehouseDashboardController;
 use App\Http\Controllers\Warehouse\SalesController as WhSalesController;
-use App\Http\Controllers\Warehouse\SalesHandoverController;
 use App\Http\Controllers\Warehouse\StockWhController;
 use App\Http\Controllers\Warehouse\GRController;  
+
+// SALES
+use App\Http\Controllers\Warehouse\SalesHandoverController;
+use App\Http\Controllers\Sales\HandoverOtpItemsController;
 
 // OTHERS
 use App\Http\Controllers\ReportController;
@@ -345,7 +348,17 @@ Route::middleware('auth')->group(function () {
         ->middleware('menu:sales_daily');
 
         // key: sales_daily
+    Route::get('/sales/otp-items', [HandoverOtpItemsController::class, 'index'])
+    ->name('sales.otp.items')
+    ->middleware('menu:sales_otp');   // pake key yang baru di config/menu.php
 
+    Route::post('/sales/otp-items/verify', [HandoverOtpItemsController::class, 'verify'])
+        ->name('sales.otp.items.verify')
+        ->middleware('menu:sales_otp');
+
+    Route::get('/sales/handover/otps', [SalesHandoverController::class, 'salesOtpIndex'])
+        ->name('sales.handover.otps')
+        ->middleware('menu:sales-handover-otp'); 
 
     // key: sales_return
     Route::get('/sales/return', [WhSalesController::class,'return'])
