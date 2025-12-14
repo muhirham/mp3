@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
+use App\Mail\SalesHandoverOtpMail;
 
 class SalesHandoverController extends Controller
 {
@@ -76,166 +77,189 @@ class SalesHandoverController extends Controller
      * PAGI – Simpan handover (draft) + kirim OTP pagi ke email sales
      * Status: waiting_morning_otp
      */
-    public function morningStoreAndSendOtp(Request $request)
-    {
-        $me = auth()->user();
+        public function morningStoreAndSendOtp(Request $request)
+        {
+            $me = auth()->user();
 
-        $data = $request->validate([
-            'handover_date'      => ['required', 'date'],
-            'warehouse_id'       => ['required', 'exists:warehouses,id'],
-            'sales_id'           => ['required', 'exists:users,id'],
-            'items'              => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['required', 'exists:products,id'],
-            'items.*.qty'        => ['required', 'integer', 'min:1'],
-        ]);
+            $data = $request->validate([
+                'handover_date'      => ['required', 'date'],
+                'warehouse_id'       => ['required', 'exists:warehouses,id'],
+                'sales_id'           => ['required', 'exists:users,id'],
+                'items'              => ['required', 'array', 'min:1'],
+                'items.*.product_id' => ['required', 'exists:products,id'],
+                'items.*.qty'        => ['required', 'integer', 'min:1'],
+            ]);
 
-        $date      = Carbon::parse($data['handover_date'])->toDateString();
-        $warehouse = Warehouse::findOrFail($data['warehouse_id']);
-        $sales     = User::findOrFail($data['sales_id']);
+            $date      = Carbon::parse($data['handover_date'])->toDateString();
+            $warehouse = Warehouse::findOrFail($data['warehouse_id']);
+            $sales     = User::findOrFail($data['sales_id']);
 
-        $warehouseName = $warehouse->warehouse_name
-            ?? $warehouse->name
-            ?? ('Warehouse #' . $warehouse->id);
+            $warehouseName = $warehouse->warehouse_name
+                ?? $warehouse->name
+                ?? ('Warehouse #' . $warehouse->id);
 
-        $itemsData = [];
-
-        try {
-            DB::beginTransaction();
-
-            // Generate kode HDO-YYMMDD-XXXX
-            $dayPrefix  = Carbon::parse($date)->format('ymd');
-            $codePrefix = 'HDO-' . $dayPrefix . '-';
-
-            $lastToday = SalesHandover::whereDate('handover_date', $date)
+            // ================================
+            // VALIDASI: SALES MASIH PUNYA HDO AKTIF?
+            // ================================
+            $openHandover = SalesHandover::where('sales_id', $sales->id)
+                ->whereNotIn('status', ['closed', 'cancelled'])
+                ->orderByDesc('handover_date')
                 ->orderByDesc('id')
                 ->first();
 
-            $nextNumber = $lastToday
-                ? ((int) substr($lastToday->code, -4)) + 1
-                : 1;
+            if ($openHandover) {
+                $statusLabel = strtoupper(str_replace('_', ' ', $openHandover->status));
 
-            $code = $codePrefix . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
-
-            // Buat header
-            $handover = SalesHandover::create([
-                'code'          => $code,
-                'warehouse_id'  => $warehouse->id,
-                'sales_id'      => $sales->id,
-                'handover_date' => $date,
-                'status'        => 'waiting_morning_otp',
-                'issued_by'     => $me->id,
-            ]);
-
-            // Detail item
-            foreach ($data['items'] as $row) {
-                $product = Product::find($row['product_id']);
-                if (! $product) {
-                    continue;
-                }
-
-                $qty = (int) $row['qty'];
-                if ($qty <= 0) {
-                    continue;
-                }
-
-                // Harga rupiah utuh (integer)
-                $unitPrice = (int) ($product->selling_price ?? 0);
-
-                $itemsData[] = [
-                    'product'    => $product,
-                    'qty'        => $qty,
-                    'unit_price' => $unitPrice,
-                ];
-
-                SalesHandoverItem::create([
-                    'handover_id'      => $handover->id,
-                    'product_id'       => $product->id,
-                    'qty_start'        => $qty,
-                    'qty_returned'     => 0,
-                    'qty_sold'         => 0,
-                    'unit_price'       => $unitPrice,
-                    'line_total_start' => 0,
-                    'line_total_sold'  => 0,
-                ]);
+                return back()
+                    ->withInput()
+                    ->with(
+                        'error',
+                        "Sales {$sales->name} masih punya handover aktif ({$openHandover->code}) ".
+                        "dengan status {$statusLabel}. Silakan closing dulu handover tersebut ".
+                        "sebelum membuat handover baru."
+                    );
             }
+            // ================================
 
-            if (empty($itemsData)) {
-                throw new \RuntimeException('Minimal harus ada 1 item valid (produk + qty > 0).');
-            }
-
-            // Generate OTP pagi
-            $otp = (string) random_int(100000, 999999);
-
-            // simpan "PLAIN|HASH" di kolom lama
-            $handover->morning_otp_hash    = $this->packOtp($otp);
-            $handover->morning_otp_sent_at = now();
-            $handover->save();
-
-
-            DB::commit();
-        } catch (\Throwable $e) {
-            DB::rollBack();
-
-            return back()
-                ->with('error', 'Gagal membuat handover: ' . $e->getMessage())
-                ->withInput();
-        }
-
-        // Kirim email OTP Pagi ke SALES
-        if ($sales->email) {
-            $lines = [];
-            foreach ($itemsData as $i => $row) {
-                $p = $row['product'];
-                $lines[] = sprintf(
-                    '%d. %s (%s) — Qty %d x %s',
-                    $i + 1,
-                    $p->name,
-                    $p->product_code,
-                    $row['qty'],
-                    number_format($row['unit_price'], 0, ',', '.')
-                );
-            }
-            $detailText = implode("\n", $lines);
-
-            $body = <<<EOT
-Halo {$sales->name},
-
-Berikut draft handover PAGI (serah terima barang):
-
-Kode      : {$handover->code}
-Tanggal   : {$handover->handover_date}
-Warehouse : {$warehouseName}
-Sales     : {$sales->name}
-
-Detail barang dibawa (draft):
-{$detailText}
-
-OTP Handover Pagi: {$otp}
-
-OTP ini dipegang oleh SALES.
-Setelah admin gudang input OTP ini, barang dianggap resmi dibawa sales dan stok gudang dipindah ke stok sales.
-
-Terima kasih.
-EOT;
+            $itemsData = [];
 
             try {
-                Mail::raw($body, function ($message) use ($sales, $handover) {
-                    $message->to($sales->email, $sales->name)
-                        ->subject('OTP Handover Pagi - ' . $handover->code);
-                });
+                DB::beginTransaction();
+
+                // Generate kode HDO-YYMMDD-XXXX
+                $dayPrefix  = Carbon::parse($date)->format('ymd');
+                $codePrefix = 'HDO-' . $dayPrefix . '-';
+
+                $lastToday = SalesHandover::whereDate('handover_date', $date)
+                    ->orderByDesc('id')
+                    ->first();
+
+                $nextNumber = $lastToday
+                    ? ((int) substr($lastToday->code, -4)) + 1
+                    : 1;
+
+                $code = $codePrefix . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+
+                // Buat header
+                $handover = SalesHandover::create([
+                    'code'          => $code,
+                    'warehouse_id'  => $warehouse->id,
+                    'sales_id'      => $sales->id,
+                    'handover_date' => $date,
+                    'status'        => 'waiting_morning_otp',
+                    'issued_by'     => $me->id,
+                ]);
+
+                // Detail item
+                foreach ($data['items'] as $row) {
+                    $product = Product::find($row['product_id']);
+                    if (! $product) {
+                        continue;
+                    }
+
+                    $qty = (int) $row['qty'];
+                    if ($qty <= 0) {
+                        continue;
+                    }
+
+                    // Harga rupiah utuh (integer)
+                    $unitPrice = (int) ($product->selling_price ?? 0);
+
+                    $itemsData[] = [
+                        'product'    => $product,
+                        'qty'        => $qty,
+                        'unit_price' => $unitPrice,
+                    ];
+
+                    SalesHandoverItem::create([
+                        'handover_id'      => $handover->id,
+                        'product_id'       => $product->id,
+                        'qty_start'        => $qty,
+                        'qty_returned'     => 0,
+                        'qty_sold'         => 0,
+                        'unit_price'       => $unitPrice,
+                        'line_total_start' => 0,
+                        'line_total_sold'  => 0,
+                    ]);
+                }
+
+                if (empty($itemsData)) {
+                    throw new \RuntimeException('Minimal harus ada 1 item valid (produk + qty > 0).');
+                }
+
+                // Generate OTP pagi
+                $otp = (string) random_int(100000, 999999);
+
+                // simpan "PLAIN|HASH" di kolom lama
+                $handover->morning_otp_hash    = $this->packOtp($otp);
+                $handover->morning_otp_sent_at = now();
+                $handover->save();
+
+                DB::commit();
             } catch (\Throwable $e) {
-                return back()->with(
-                    'success',
-                    "Handover {$handover->code} berhasil dibuat.<br>Namun email OTP pagi gagal dikirim: " . e($e->getMessage())
-                );
+                DB::rollBack();
+
+                return back()
+                    ->with('error', 'Gagal membuat handover: ' . $e->getMessage())
+                    ->withInput();
             }
+
+            // Kirim email OTP Pagi ke SALES
+            if ($sales->email) {
+                $lines = [];
+                foreach ($itemsData as $i => $row) {
+                    $p = $row['product'];
+                    $lines[] = sprintf(
+                        '%d. %s (%s) — Qty %d x %s',
+                        $i + 1,
+                        $p->name,
+                        $p->product_code,
+                        $row['qty'],
+                        number_format($row['unit_price'], 0, ',', '.')
+                    );
+                }
+                $detailText = implode("\n", $lines);
+
+                $body = <<<EOT
+        Halo {$sales->name},
+
+        Berikut draft handover PAGI (serah terima barang):
+
+        Kode      : {$handover->code}
+        Tanggal   : {$handover->handover_date}
+        Warehouse : {$warehouseName}
+        Sales     : {$sales->name}
+
+        Detail barang dibawa (draft):
+        {$detailText}
+
+        OTP Handover Pagi: {$otp}
+
+        OTP ini dipegang oleh SALES.
+        Setelah admin gudang input OTP ini, barang dianggap resmi dibawa sales dan stok gudang dipindah ke stok sales.
+
+        Terima kasih.
+        EOT;
+
+                try {
+                    Mail::raw($body, function ($message) use ($sales, $handover) {
+                        $message->to($sales->email, $sales->name)
+                            ->subject('OTP Handover Pagi - ' . $handover->code);
+                    });
+                } catch (\Throwable $e) {
+                    return back()->with(
+                        'success',
+                        "Handover {$handover->code} berhasil dibuat.<br>Namun email OTP pagi gagal dikirim: " . e($e->getMessage())
+                    );
+                }
+            }
+
+            return back()->with(
+                'success',
+                "Handover {$handover->code} berhasil dibuat dan OTP pagi sudah dikirim ke email sales."
+            );
         }
 
-        return back()->with(
-            'success',
-            "Handover {$handover->code} berhasil dibuat dan OTP pagi sudah dikirim ke email sales."
-        );
-    }
 
     /**
      * Verifikasi OTP Pagi:
@@ -383,30 +407,55 @@ EOT;
      */
     public function eveningForm(Request $request)
     {
-        $me = auth()->user();
+        $me    = auth()->user();
+        $roles = $me?->roles ?? collect();
 
-        // Handover yg bisa diisi oleh SALES:
-        $onSales = SalesHandover::with('sales:id,name')
-            ->where('status', 'on_sales')
-            ->where('sales_id', $me->id)
+        $isWarehouse = $roles->contains('slug', 'warehouse');
+        $isAdminLike = $roles->contains('slug', 'admin')
+                    || $roles->contains('slug', 'superadmin');
+
+        // Menu ini cuma buat admin/warehouse
+        if (! $isWarehouse && ! $isAdminLike) {
+            abort(403, 'Menu ini hanya untuk admin warehouse.');
+        }
+
+        // ===== LIST HANDOVER UNTUK DROPDOWN (APPROVAL) =====
+        $listQuery = SalesHandover::with(['warehouse', 'sales'])
+            ->whereIn('status', ['on_sales', 'waiting_evening_otp'])
+            ->where('evening_filled_by_sales', true); // sudah diisi sore oleh sales
+
+        // Warehouse murni dikunci ke warehouse_id nya
+        if ($isWarehouse && $me->warehouse_id && ! $isAdminLike) {
+            $listQuery->where('warehouse_id', $me->warehouse_id);
+        }
+
+        $handoverList = $listQuery
             ->orderBy('handover_date', 'desc')
             ->orderBy('code')
             ->get();
 
-        // Handover yg sudah dikirimi OTP sore dan menunggu verifikasi
-        $waitingEvening = SalesHandover::with('sales:id,name')
-            ->where('status', 'waiting_evening_otp')
-            ->where('sales_id', $me->id)
-            ->orderBy('handover_date', 'desc')
-            ->orderBy('code')
-            ->get();
+        // ===== DETAIL HANDOVER YANG DIPILIH =====
+        $selectedId = $request->integer('handover_id') ?: null;
+        $handover   = null;
+
+        if ($selectedId) {
+            $detailQuery = SalesHandover::with(['warehouse', 'sales', 'items.product'])
+                ->where('id', $selectedId);
+
+            if ($isWarehouse && $me->warehouse_id && ! $isAdminLike) {
+                $detailQuery->where('warehouse_id', $me->warehouse_id);
+            }
+
+            $handover = $detailQuery->firstOrFail();
+        }
 
         return view('wh.handover_evening', [
-            'me'             => $me,
-            'onSales'        => $onSales,
-            'waitingEvening' => $waitingEvening,
+            'me'           => $me,
+            'handoverList' => $handoverList,
+            'handover'     => $handover,
         ]);
     }
+
 
     /**
      * API JSON – load detail item untuk sore (SALES).
@@ -585,13 +634,23 @@ EOT;
         if ($handover->status !== 'waiting_evening_otp') {
             return back()->with('error', "Status handover harus 'waiting_evening_otp' untuk verifikasi OTP sore.");
         }
-
+        
         [$storedPlain, $storedHash] = $this->splitOtpField($handover->evening_otp_hash);
 
         if (! $storedHash || ! Hash::check($data['otp_code'], $storedHash)) {
             return back()->with('error', 'OTP sore tidak valid.');
         }
 
+        // >>> NEW: pastikan semua payment item sudah APPROVED <<<
+        $hasUnapproved = $handover->items()
+            ->where('qty_sold', '>', 0)                 // cuma yang benar-benar terjual
+            ->where('payment_status', '!=', 'approved') // pending / rejected
+            ->exists();
+
+        if ($hasUnapproved) {
+            return back()->with('error', 'Masih ada item terjual yang payment-nya belum APPROVED.');
+        }
+        // <<< END NEW >>>
 
         $me = auth()->user();
 
@@ -982,6 +1041,16 @@ EOT;
                 'unit_price'   => (int) $item->unit_price,
                 'line_start'   => (int) $item->line_total_start,
                 'line_sold'    => (int) $item->line_total_sold,
+
+                // >>> NEW: info payment per item <<<
+                'payment_qty'          => (int) $item->payment_qty,
+                'payment_method'       => $item->payment_method,
+                'payment_amount'       => (int) $item->payment_amount,
+                'payment_status'       => $item->payment_status,
+                'payment_reject_reason'=> $item->payment_reject_reason,
+                'payment_proof_url'    => $item->payment_transfer_proof_path
+                                            ? asset('storage/'.$item->payment_transfer_proof_path)
+                                            : null,
             ];
         });
 
@@ -1018,6 +1087,7 @@ EOT;
             'items'   => $items,
         ]);
     }
+
 
     // ================== HELPER ==================
 
@@ -1149,33 +1219,36 @@ EOT;
         if ($request->ajax()) {
             $handovers = $query->get();
 
-            $rows = $handovers->values()->map(function (SalesHandover $h, int $idx) {
-                $badgeClass = match ($h->status) {
-                    'closed'               => 'bg-label-success',
-                    'on_sales'             => 'bg-label-info',
-                    'waiting_morning_otp',
-                    'waiting_evening_otp'  => 'bg-label-warning',
-                    'cancelled'            => 'bg-label-danger',
-                    default                => 'bg-label-secondary',
-                };
+        $rows = $handovers->values()->map(function (SalesHandover $h, int $idx) {
+            $badgeClass = match ($h->status) {
+                'closed'               => 'bg-label-success',
+                'on_sales'             => 'bg-label-info',
+                'waiting_morning_otp',
+                'waiting_evening_otp'  => 'bg-label-warning',
+                'cancelled'            => 'bg-label-danger',
+                default                => 'bg-label-secondary',
+            };
 
-                $warehouseName = optional($h->warehouse)->warehouse_name
-                            ?? optional($h->warehouse)->name
-                            ?? '-';
+            $warehouseName = optional($h->warehouse)->warehouse_name
+                        ?? optional($h->warehouse)->name
+                        ?? '-';
 
-                return [
-                    'no'                     => $idx + 1,
-                    'date'                   => optional($h->handover_date)->format('Y-m-d'),
-                    'code'                   => $h->code,
-                    'warehouse'              => $warehouseName,
-                    'status'                 => $h->status,
-                    'status_badge_class'     => $badgeClass,
-                    'morning_otp_plain'      => $h->morning_otp_plain,
-                    'morning_otp_sent_at'    => optional($h->morning_otp_sent_at)->format('H:i'),
-                    'evening_otp_plain'      => $h->evening_otp_plain,
-                    'evening_otp_sent_at'    => optional($h->evening_otp_sent_at)->format('H:i'),
-                ];
-            });
+            [$morningPlain] = $this->splitOtpField($h->morning_otp_hash);
+            [$eveningPlain] = $this->splitOtpField($h->evening_otp_hash);
+
+            return [
+                'no'                  => $idx + 1,
+                'date'                => optional($h->handover_date)->format('Y-m-d'),
+                'code'                => $h->code,
+                'warehouse'           => $warehouseName,
+                'status'              => $h->status,
+                'status_badge_class'  => $badgeClass,
+                'morning_otp_plain'   => $morningPlain,
+                'morning_otp_sent_at' => optional($h->morning_otp_sent_at)->format('H:i'),
+                'evening_otp_plain'   => $eveningPlain,
+                'evening_otp_sent_at' => optional($h->evening_otp_sent_at)->format('H:i'),
+            ];
+        });
 
             return response()->json([
                 'success' => true,
@@ -1195,5 +1268,259 @@ EOT;
             'statusOptions' => $statusOptions,
         ]);
     }
+
+        /**
+     * FORM APPROVAL PAYMENT PER ITEM (WAREHOUSE)
+     */
+    public function paymentApprovalForm(Request $request, SalesHandover $handover)
+    {
+        $me = $request->user();
+
+        $handoverList = SalesHandover::with(['sales', 'warehouse'])
+            ->whereIn('status', ['on_sales', 'waiting_evening_otp', 'closed'])
+            ->orderByDesc('handover_date')
+            ->get();
+
+        $statusLabelMap = [
+            'draft'               => 'Draft',
+            'waiting_morning_otp' => 'Menunggu OTP Pagi',
+            'on_sales'            => 'On Sales',
+            'waiting_evening_otp' => 'Menunggu OTP Sore',
+            'closed'              => 'Closed',
+            'cancelled'           => 'Cancelled',
+        ];
+
+        $badgeClassMap = [
+            'closed'              => 'bg-label-success',
+            'on_sales'            => 'bg-label-info',
+            'waiting_morning_otp' => 'bg-label-warning',
+            'waiting_evening_otp' => 'bg-label-warning',
+            'cancelled'           => 'bg-label-danger',
+            'default'             => 'bg-label-secondary',
+        ];
+
+        $statusKey   = $handover->status;
+        $statusLabel = $statusLabelMap[$statusKey] ?? $statusKey;
+        $badgeClass  = $badgeClassMap[$statusKey] ?? $badgeClassMap['default'];
+
+        $canEdit      = $handover->status !== 'closed';
+        $canVerifyOtp = $handover->status === 'waiting_evening_otp';
+
+        $itemsSold   = $handover->items->where('qty_sold', '>', 0);
+        $allApproved = $itemsSold->count() > 0
+            && $itemsSold->every(fn($it) => $it->payment_status === 'approved');
+        $hasEveningOtp  = ! empty($handover->evening_otp_hash);
+        $canGenerateOtp = $canEdit && $allApproved && ! $hasEveningOtp;
+
+        return view('wh.handover_evening', compact(
+            'me', 'handover', 'handoverList',
+            'statusLabel', 'badgeClass', 'canEdit', 'canVerifyOtp', 'canGenerateOtp'
+        ));
+    }
+/**
+ * SIMPAN APPROVAL PAYMENT PER ITEM
+ * - approved  => sales ga bisa ubah lagi
+ * - rejected  => reason dikirim, sales boleh isi ulang payment (status jadi pending saat sales save lagi)
+ */
+    public function paymentApprovalSave(Request $request, SalesHandover $handover)
+    {
+        $data = $request->validate([
+            'decisions'              => ['required', 'array'],
+            'decisions.*.status'     => ['required', 'in:approved,rejected'],
+            'decisions.*.reason'     => ['nullable', 'string', 'max:500'],
+        ]);
+
+        // butuh items + product + sales buat hitung & email
+        $handover->load(['items.product', 'sales']);
+
+        if ($handover->status === 'closed') {
+            return back()->with('error', 'Handover sudah CLOSED. Approval tidak bisa diubah lagi.');
+        }
+
+        $autoOtpGenerated = false;
+        $generatedOtpCode = null;
+
+        try {
+            DB::beginTransaction();
+
+            // ===== 1. SIMPAN KEPUTUSAN PER ITEM =====
+            foreach ($handover->items as $item) {
+                $key = (string) $item->id;
+                if (! isset($data['decisions'][$key])) {
+                    continue;
+                }
+
+                $row    = $data['decisions'][$key];
+                $status = $row['status'];
+
+                if ($status === 'approved') {
+                    $item->payment_status        = 'approved';
+                    $item->payment_reject_reason = null;
+                } else {
+                    $item->payment_status        = 'rejected';
+                    $item->payment_reject_reason = $row['reason'] ?? null;
+                }
+
+                $item->save();
+            }
+
+            // ===== 2. SINKRON QTY JUAL / KEMBALI & NILAI TERJUAL DARI PAYMENT_QTY =====
+            $totalSoldAmount = 0;
+
+            foreach ($handover->items as $item) {
+                $qtyStart = (int) $item->qty_start;
+                $payQty   = max(0, (int) $item->payment_qty);   // qty bayar dari sales
+
+                if ($payQty > $qtyStart) {
+                    $payQty = $qtyStart;
+                }
+
+                $qtySold     = $payQty;
+                $qtyReturned = max(0, $qtyStart - $qtySold);
+
+                $unitPrice = $item->unit_price ?: (int) ($item->product->selling_price ?? 0);
+                $lineSold  = $qtySold * $unitPrice;
+
+                $item->qty_sold        = $qtySold;
+                $item->qty_returned    = $qtyReturned;
+                $item->unit_price      = $unitPrice;
+                $item->line_total_sold = $lineSold;
+                $item->save();
+
+                $totalSoldAmount += $lineSold;
+            }
+
+            // update total penjualan di header
+            $handover->total_sold_amount = $totalSoldAmount;
+            $handover->save();
+
+            // ===== 3. CEK LAYAK AUTO-GENERATE OTP SORE =====
+            $itemsSold = $handover->items
+                ->filter(fn ($it) => (int) $it->qty_sold > 0);
+
+            $allApproved = $itemsSold->count() > 0
+                && $itemsSold->every(fn ($it) => $it->payment_status === 'approved');
+
+            $hasEveningOtp = ! empty($handover->evening_otp_hash);
+
+            if ($allApproved && ! $hasEveningOtp) {
+                $generatedOtpCode = (string) random_int(100000, 999999);
+
+                // simpan "PLAIN|HASH" di kolom evening_otp_hash
+                $handover->evening_otp_hash    = $this->packOtp($generatedOtpCode);
+                $handover->evening_otp_sent_at = now();
+                $handover->status              = 'waiting_evening_otp';
+                $handover->save();
+
+                $autoOtpGenerated = true;
+            }
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            return back()->with('error', 'Gagal menyimpan approval payment: '.$e->getMessage());
+        }
+
+        // ===== 4. KIRIM EMAIL OTP KALAU BARU DIGENERATE =====
+        if ($autoOtpGenerated && $handover->sales && $handover->sales->email) {
+
+            $itemsForMail = $handover->items->map(function ($it) {
+                return [
+                    'name'  => $it->product->name ?? ('Produk #'.$it->product_id),
+                    'code'  => $it->product->product_code ?? '',
+                    'qty'   => (int) $it->qty_sold,
+                    'price' => (int) $it->unit_price,
+                    'total' => (int) $it->line_total_sold,
+                ];
+            })->toArray();
+
+            $grandTotal = (int) $handover->cash_amount + (int) $handover->transfer_amount;
+            if ($grandTotal <= 0) {
+                $grandTotal = (int) $handover->items->sum('payment_amount');
+            }
+
+            try {
+                Mail::to($handover->sales->email)
+                    ->send(new SalesHandoverOtpMail($handover, $generatedOtpCode, $itemsForMail, $grandTotal));
+            } catch (\Throwable $e) {
+                return redirect()
+                    ->route('warehouse.handovers.payments.form', ['handover' => $handover->id])
+                    ->with(
+                        'success',
+                        'Approval payment tersimpan & OTP sore otomatis dibuat, '
+                        .'tetapi email gagal dikirim: '.e($e->getMessage())
+                    );
+            }
+        }
+
+        $msg = 'Approval payment per item berhasil disimpan.';
+        if ($autoOtpGenerated) {
+            $msg .= '<br>Semua item terjual sudah <b>APPROVED</b>, OTP sore otomatis dibuat '
+                . 'dan status handover berubah menjadi <b>WAITING_EVENING_OTP</b>.';
+        }
+
+        return redirect()
+            ->route('warehouse.handovers.payments.form', ['handover' => $handover->id])
+            ->with('success', $msg);
+    }
+        
+    public function generateEveningOtp(SalesHandover $handover)
+    {
+        if ($handover->status === 'closed') {
+            return back()->with('error', 'Handover ini sudah CLOSED.');
+        }
+
+        $handover->loadMissing(['items.product', 'sales']);
+
+        $itemsSold = $handover->items->where('qty_sold', '>', 0);
+        if ($itemsSold->isEmpty()) {
+            return back()->with('error', 'Belum ada item terjual, tidak bisa generate OTP sore.');
+        }
+
+        $allApproved = $itemsSold->every(fn($item) => $item->payment_status === 'approved');
+        if (! $allApproved) {
+            return back()->with('error', 'Masih ada payment yang belum APPROVED.');
+        }
+
+        $otpCode = (string) random_int(100000, 999999);
+
+        // simpan "PLAIN|HASH" di kolom evening_otp_hash
+        $handover->evening_otp_hash    = $this->packOtp($otpCode);
+        $handover->evening_otp_sent_at = now();
+        $handover->status              = 'waiting_evening_otp';
+        $handover->save();
+
+        if ($handover->sales && $handover->sales->email) {
+            $itemsForMail = $handover->items->map(function ($it) {
+                return [
+                    'name'  => $it->product->name ?? ('Produk #'.$it->product_id),
+                    'code'  => $it->product->product_code ?? '',
+                    'qty'   => (int) $it->qty_sold,
+                    'price' => (int) $it->unit_price,
+                    'total' => (int) $it->line_total_sold,
+                ];
+            })->toArray();
+
+            $grandTotal = (int) $handover->cash_amount + (int) $handover->transfer_amount;
+            if ($grandTotal <= 0) {
+                $grandTotal = (int) $handover->items->sum('payment_amount');
+            }
+
+            try {
+                Mail::to($handover->sales->email)
+                    ->send(new SalesHandoverOtpMail($handover, $otpCode, $itemsForMail, $grandTotal));
+            } catch (\Throwable $e) {
+                return back()->with(
+                    'success',
+                    'OTP sore dibuat, tetapi pengiriman email gagal: '.$e->getMessage()
+                );
+            }
+        }
+
+        return back()->with('success', 'OTP sore berhasil dibuat dan dikirim ke sales.');
+    }
+
+
 
 }

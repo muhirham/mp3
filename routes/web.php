@@ -322,14 +322,24 @@ Route::middleware('auth')->group(function () {
         ->name('sales.handover.items')
         ->middleware('menu:wh_reconcile');
 
-    Route::post('/sales/handover/{handover}/evening/save', [SalesHandoverController::class, 'eveningSaveAndSendOtp'])
+    Route::post('/sales/handover/{handover}/evening/save', [SalesHandoverController::class, 'eveningSave'])
         ->name('sales.handover.evening.save')
         ->middleware('menu:wh_reconcile');
+
 
     Route::post('/sales/handover/evening/verify', [SalesHandoverController::class, 'verifyEveningOtp'])
         ->name('sales.handover.evening.verify')
         ->middleware('menu:wh_reconcile');
+
+    // GENERATE OTP SORE (untuk closing handover)
+    Route::post('/warehouse/handovers/{handover}/evening/generate-otp',[SalesHandoverController::class, 'generateEveningOtp'])
+        ->name('warehouse.handovers.evening.generate-otp')
+        ->middleware('menu:wh_sales_reports');
+
+
     /* === Sales pages (SALES KEYS) === */
+
+    // === Sales pages (SALES & WAREHOUSE) ===
 
     Route::get('/warehouse/sales-reports', [SalesHandoverController::class,'warehouseSalesReport'])
         ->name('sales.report')
@@ -339,7 +349,7 @@ Route::middleware('auth')->group(function () {
         ->name('sales.report.detail')
         ->middleware('menu:wh_sales_reports');
 
-        Route::get('/sales/report', [SalesHandoverController::class,'salesReport'])
+    Route::get('/sales/report', [SalesHandoverController::class,'salesReport'])
         ->name('daily.sales.report')
         ->middleware('menu:sales_daily');
 
@@ -347,10 +357,10 @@ Route::middleware('auth')->group(function () {
         ->name('daily.report.detail')
         ->middleware('menu:sales_daily');
 
-        // key: sales_daily
+    // key: sales_otp
     Route::get('/sales/otp-items', [HandoverOtpItemsController::class, 'index'])
-    ->name('sales.otp.items')
-    ->middleware('menu:sales_otp');   // pake key yang baru di config/menu.php
+        ->name('sales.otp.items')
+        ->middleware('menu:sales_otp');
 
     Route::post('/sales/otp-items/verify', [HandoverOtpItemsController::class, 'verify'])
         ->name('sales.otp.items.verify')
@@ -358,7 +368,28 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/sales/handover/otps', [SalesHandoverController::class, 'salesOtpIndex'])
         ->name('sales.handover.otps')
-        ->middleware('menu:sales-handover-otp'); 
+        ->middleware('menu:sales-handover-otp');
+
+    Route::post('/sales/otp-items/payments', [HandoverOtpItemsController::class, 'savePayments'])
+        ->name('sales.otp.items.payments.save')
+        ->middleware('menu:sales_otp');
+
+    // ====== WAREHOUSE: APPROVAL PEMBAYARAN HANDOVER ======
+// FORM APPROVAL (GET) – sudah benar
+    Route::get('/warehouse/handovers/{handover}/payments', [SalesHandoverController::class, 'paymentApprovalForm'])
+        ->name('warehouse.handovers.payments.form')
+        ->middleware('menu:wh_sales_reports');
+
+    // SIMPAN APPROVAL (POST)
+    Route::post('/warehouse/handovers/{handover}/payments', [SalesHandoverController::class, 'paymentApprovalSave'])
+        ->name('warehouse.handovers.payments.approve')
+        ->middleware('menu:wh_sales_reports');
+
+
+    // Reject 1 item payment (dipanggil via AJAX dari tabel item)
+    Route::post('/warehouse/handovers/{handover}/payments/reject', [SalesHandoverController::class, 'rejectPayment'])
+        ->name('warehouse.handovers.payments.reject')
+        ->middleware('menu:wh_sales_reports');
 
     // key: sales_return
     Route::get('/sales/return', [WhSalesController::class,'return'])
@@ -369,5 +400,6 @@ Route::middleware('auth')->group(function () {
     Route::resource('/reports', ReportController::class)
         ->only(['index'])
         ->middleware('menu:reports');
+
         
 });

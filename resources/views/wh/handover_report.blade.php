@@ -33,6 +33,9 @@
     }
 
     $search = $search ?? '';
+
+    // boleh buka halaman approval kalau warehouse / admin / superadmin
+    $canOpenApproval = $isWarehouse || $isAdminLike;
 @endphp
 
 <div class="container-xxl flex-grow-1 container-p-y">
@@ -129,7 +132,7 @@
           </select>
         </div>
 
-        {{-- Hanya tombol Reset, tanpa "Terapkan Filter" --}}
+        {{-- Hanya tombol Reset --}}
         <div class="col-md-3 d-flex gap-2">
           <a href="{{ route($listRouteName) }}"
              class="btn btn-outline-secondary flex-fill mt-3 mt-md-0">
@@ -265,9 +268,18 @@
 <div class="modal fade" id="handoverDetailModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Detail Handover</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      <div class="modal-header d-flex justify-content-between align-items-center">
+        <h5 class="modal-title mb-0">Detail Handover</h5>
+        <div class="d-flex align-items-center gap-2">
+          @if($canOpenApproval)
+            <button type="button"
+                    id="approvalButton"
+                    class="btn btn-sm btn-primary d-none">
+              Handover Evening &amp; Approval
+            </button>
+          @endif
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
       </div>
       <div class="modal-body">
         <div id="detailHeader" class="mb-3 small"></div>
@@ -313,12 +325,21 @@
     const sumDiffEl       = document.getElementById('sumDiff');
     const periodTextEl    = document.getElementById('periodText');
 
+    // tombol approval di header modal (hanya warehouse/admin)
+    const approvalButton    = document.getElementById('approvalButton');
+    const canOpenApproval   = @json($canOpenApproval);
+    const approvalUrlTemplate = canOpenApproval
+        ? @json(route('warehouse.handovers.payments.form', 0)) // /warehouse/handovers/0/payments
+        : null;
+
     if (!modalEl) return;
 
     const bsModal = new bootstrap.Modal(modalEl);
 
     const listUrl           = @json(route($listRouteName));
     const detailUrlTemplate = @json(route($detailRoute, 0));
+
+    let currentHandoverId = null;
 
     function formatRp(num) {
         return 'Rp ' + new Intl.NumberFormat('id-ID').format(num || 0);
@@ -332,6 +353,13 @@
             btn.addEventListener('click', async () => {
                 const id = btn.dataset.id;
                 if (!id) return;
+
+                currentHandoverId = null;
+
+                // reset tombol approval setiap kali buka modal
+                if (approvalButton) {
+                    approvalButton.classList.add('d-none');
+                }
 
                 detailHeader.innerHTML  = 'Loading...';
                 detailTbody.innerHTML   = '<tr><td colspan="7" class="text-center text-muted">Loading…</td></tr>';
@@ -350,6 +378,8 @@
 
                     const h  = json.handover;
                     const it = json.items || [];
+
+                    currentHandoverId = h.id;
 
                     const statusLabelMap = {
                         draft: 'Draft',
@@ -392,6 +422,17 @@
                             </div>
                         </div>
                     `;
+
+                    // munculin tombol approval kalau boleh
+                    const showApproval =
+                        canOpenApproval &&
+                        approvalButton &&
+                        approvalUrlTemplate &&
+                        (h.status === 'on_sales' || h.status === 'waiting_evening_otp' || h.status === 'closed');
+
+                    if (showApproval) {
+                        approvalButton.classList.remove('d-none');
+                    }
 
                     let htmlItems = '';
                     it.forEach(row => {
@@ -481,7 +522,7 @@
         });
     }
 
-    // Zoom bukti transfer
+    // klik bukti transfer -> zoom
     modalEl.addEventListener('click', (e) => {
         const img = e.target.closest('.proof-thumb');
         if (!img) return;
@@ -495,6 +536,15 @@
             background: '#000',
         });
     });
+
+    // tombol approval: pindah halaman di TAB yang sama
+    if (approvalButton && canOpenApproval && approvalUrlTemplate) {
+        approvalButton.addEventListener('click', function () {
+            if (!currentHandoverId) return;
+            const url = approvalUrlTemplate.replace('/0', '/' + currentHandoverId);
+            window.location.href = url;
+        });
+    }
 
     // === AJAX reload list ===
     async function reloadList() {
@@ -568,7 +618,7 @@
         }
     }
 
-    // Auto-filter: setiap perubahan input / select
+    // Auto-filter
     if (filterForm) {
         const autoSelectors = [
             'input[name="date_from"]',
@@ -582,17 +632,16 @@
             el.addEventListener('change', reloadList);
         });
 
-        // Kalau form ke-submit (misal tekan Enter), tetap pakai AJAX
+        // submit form -> tetap pakai AJAX
         filterForm.addEventListener('submit', function (e) {
             e.preventDefault();
             reloadList();
         });
     }
 
-    // Search global di navbar (input "Search..." atas)
+    // Search global di navbar
     const navbarSearch = document.querySelector('.layout-navbar input[placeholder*="Search"]');
     if (navbarSearch && hiddenSearch) {
-        // sync nilai awal
         navbarSearch.value = hiddenSearch.value || '';
 
         let timer = null;

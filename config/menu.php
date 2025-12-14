@@ -52,7 +52,7 @@ return [
         ],
         [
             'key'   => 'wh_stocklevel',
-            'label' => 'Stock Gudang',
+            'label' => 'Warehouse Stock Level',
             'route' => 'stocklevel.index',
             'group' => 'warehouse',
             'icon'  => 'bx bx-layer',
