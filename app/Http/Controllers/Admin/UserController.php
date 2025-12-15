@@ -263,4 +263,30 @@ class UserController extends Controller
 
         return response()->json(['success' => 'Selected users deleted.']);
     }
+
+    public function toggleStatus(Request $request, User $user)
+        {
+            /** @var \App\Models\User $me */
+            $me          = $this->ensureCanManageUsers();
+            $isWarehouse = $me->hasRole('warehouse');
+
+            // superadmin ga boleh nonaktifin diri sendiri (biar aman)
+            if ($me && $me->id === $user->id) {
+                return response()->json(['error' => "You can't change your own status."], 422);
+            }
+
+            // Admin WH hanya boleh manage SALES di warehouse dia
+            if ($isWarehouse) {
+                $canManage = $user->warehouse_id === $me->warehouse_id && $user->hasRole('sales');
+                if (!$canManage) {
+                    return response()->json(['error' => "You are not allowed to change this user's status."], 422);
+                }
+            }
+
+            $user->status = ($user->status === 'active') ? 'inactive' : 'active';
+            $user->save();
+
+            return response()->json(['success' => 'Status updated.', 'status' => $user->status]);
+        }
+
 }

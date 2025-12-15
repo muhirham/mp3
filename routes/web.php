@@ -51,14 +51,17 @@ Route::get('/dashboard', function () {
     // mendarat ke home_route role pertama yg punya nilai
     $home = $u->roles()->whereNotNull('home_route')->value('home_route') ?: 'admin.dashboard';
     return redirect()->route($home);
-})->middleware('auth')->name('dashboard');
+})->middleware(['auth','active'])->name('dashboard');
 
-Route::get('/', fn() => redirect()->route('dashboard'))->middleware('auth');
 
-Route::post('/logout', [LoginController::class,'logout'])->name('logout')->middleware('auth');
+Route::get('/', fn() => redirect()->route('dashboard'))->middleware(['auth','active']);
+
+
+Route::post('/logout', [LoginController::class,'logout'])->name('logout')->middleware(['auth','active']);
+
 
 /* ===== Protected by menu keys ===== */
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth','active'])->group(function () {
 
     // ===== Dashboard (cukup auth, TIDAK pakai menu:xxx) =====
     Route::get('/admin',     [AdminController::class,'index'])->name('admin.dashboard');

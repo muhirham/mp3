@@ -13,11 +13,10 @@ class Authenticate
         if (!Auth::check()) {
             return redirect()->route('login');
         }
-
+        // Role check (punya lo)
         if (!empty($slugs)) {
-            $user = Auth::user();
-            $ok   = $user->roles()->whereIn('slug', $slugs)->exists()
-                 || in_array(($user->role ?? ''), $slugs, true); // fallback
+            $ok = $user->roles()->whereIn('slug', $slugs)->exists()
+                || in_array(($user->role ?? ''), $slugs, true); // fallback
             if (!$ok) abort(403, 'Unauthorized');
         }
 

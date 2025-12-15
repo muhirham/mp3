@@ -63,4 +63,18 @@ class LoginController extends Controller
         session()->regenerateToken();
         return redirect()->route('login')->with('status', 'Anda telah logout.');
     }
+    protected function authenticated($request, $user)
+    {
+        if (($user->status ?? 'inactive') !== 'active') {
+            Auth::logout();
+
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()->route('login')
+                ->withErrors(['email' => 'Akun Anda tidak aktif. Silakan hubungi admin.']);
+        }
+
+        return redirect()->intended('/dashboard');
+    }
 }
