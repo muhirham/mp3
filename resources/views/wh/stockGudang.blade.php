@@ -62,17 +62,20 @@
   <div class="card">
     <div class="table-responsive">
       <table id="tblStock" class="table table-hover align-middle mb-0">
-        <thead>
-          <tr>
-            <th>NO</th>
-            <th>CODE</th>
-            <th>PRODUCT</th>
-            <th>UNIT</th>
-            <th>CATEGORY</th>
-            <th>SUPPLIER</th>
-            <th class="text-end">STOCK</th>
-          </tr>
-        </thead>
+          <thead>
+            <tr>
+              <th>NO</th>
+              <th>CODE</th>
+              <th>PRODUCT</th>
+              <th>UNIT</th>
+              <th>CATEGORY</th>
+              <th>SUPPLIER</th>
+              <th class="text-end">STOCK</th>
+              <th class="text-end">MIN STOCK</th>
+              <th>STATUS</th>
+              <th class="text-end">SELLING</th>
+            </tr>
+          </thead>
         <tbody></tbody>
       </table>
     </div>
@@ -100,7 +103,7 @@
 
 <script>
 $(function () {
-  const dtUrl            = @json(route('stocklevel.datatable'));
+  const dtUrl            = @json(route('restocks.datatable')); // ✅ FIX
   const CAN_SWITCH_WH    = @json($canSwitchWarehouse ?? false);
   const USER_WAREHOUSE_ID= @json($me->warehouse_id ?? null);
 
@@ -113,15 +116,13 @@ $(function () {
       type: 'GET',
       data: function(d){
         if (CAN_SWITCH_WH) {
-          // superadmin/admin pusat: ambil dari dropdown
           d.warehouse_id = $('#filterWarehouse').val() || '';
         } else {
-          // admin WH: pakai warehouse dia sendiri
           d.warehouse_id = USER_WAREHOUSE_ID || '';
         }
       }
     },
-    order: [[1, 'asc']], // by CODE
+    order: [[1, 'asc']],
     columns: [
       { data: 'rownum', orderable:false, searchable:false },
       { data: 'product_code' },
@@ -129,7 +130,10 @@ $(function () {
       { data: 'package_name' },
       { data: 'category_name' },
       { data: 'supplier_name' },
-      { data: 'quantity', className:'text-end' }
+      { data: 'quantity', className:'text-end' },
+      { data: 'stock_minimum', className:'text-end' },
+      { data: 'status', orderable:false, searchable:false },
+      { data: 'selling_price', className:'text-end' },
     ]
   });
 
@@ -147,5 +151,7 @@ $(function () {
     table.page.len(parseInt(this.value || 10,10)).draw();
   });
 });
+
 </script>
+
 @endpush
