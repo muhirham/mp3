@@ -312,6 +312,10 @@ Route::middleware(['auth','active'])->group(function () {
     Route::post('/restocks/{restock}/receive',[StockWhController::class,'receive'])
         ->name('restocks.receive')
         ->middleware('menu:wh_restock');
+    Route::get('/restocks/export/excel', [StockWhController::class, 'exportExcel'])
+        ->name('restocks.export.excel')
+        ->middleware('menu:wh_restock');
+
 
     Route::get('/sales/handover/morning', [SalesHandoverController::class, 'morningForm'])
         ->name('sales.handover.morning')
