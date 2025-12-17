@@ -205,17 +205,26 @@ Route::middleware(['auth','active'])->group(function () {
     Route::post('/po/{po}/reject-ceo', [PreOController::class,'rejectCeo'])
         ->name('po.reject.ceo')
         ->middleware('menu:po');
-
-    // === Goods Received dari PO MANUAL (1 GR per PO) ===
-
     
     Route::get('/po/{po}/pdf',        [PreOController::class,'exportPdf'])
-    ->name('po.pdf')
-    ->middleware('menu:po');
+        ->name('po.pdf')
+        ->middleware('menu:po');
     
     Route::get('/po/{po}/excel',      [PreOController::class,'exportExcel'])
-    ->name('po.excel')
-    ->middleware('menu:po');
+        ->name('po.excel')
+        ->middleware('menu:po');
+
+        Route::get('/po/table', [PreOController::class, 'table'])
+        ->name('po.table')
+        ->middleware('menu:po');
+
+    Route::get('/po/export/index', [PreOController::class, 'exportIndexExcel'])
+        ->name('po.export.index')
+        ->middleware('menu:po');
+
+    Route::get('/po/export/monthly', [PreOController::class, 'exportMonthlyExcel'])
+        ->name('po.export.monthly')
+        ->middleware('menu:po');
     
     Route::post('/po/{po}/gr', [GoodReceivedController::class, 'storeFromPo'])
         ->name('po.gr.store')
@@ -234,8 +243,8 @@ Route::middleware(['auth','active'])->group(function () {
 
 
     Route::get('/good-received/{po}/detail', [GoodReceivedController::class, 'detail'])
-    ->name('goodreceived.detail')
-    ->middleware('menu:goodreceived');
+        ->name('goodreceived.detail')
+        ->middleware('menu:goodreceived');
         
     // Halaman daftar permohonan
     // ================== MASTER COMPANY ==================

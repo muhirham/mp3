@@ -14,6 +14,21 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Barryvdh\DomPDF\Facade\Pdf; 
+use Maatwebsite\Excel\Facades\Excel;
+use Carbon\Carbon;
+use Maatwebsite\Excel\Concerns\FromArray;
+use Maatwebsite\Excel\Concerns\WithHeadings;
+use App\Exports\PO\PoIndexWithItemsExport;
+use Illuminate\Validation\ValidationException;
+use Maatwebsite\Excel\Concerns\WithMultipleSheets;
+use Maatwebsite\Excel\Concerns\WithTitle;
+use Maatwebsite\Excel\Concerns\WithStyles;
+use Maatwebsite\Excel\Concerns\WithDrawings;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
+
+
+
 
 class PreOController extends Controller
 {
@@ -21,19 +36,28 @@ class PreOController extends Controller
     private const CEO_MIN_TOTAL = 2_000_000;
     public function index(Request $request)
     {
-        $q      = trim($request->get('q', ''));
-        $status = $request->get('status');
+        $q              = trim((string) $request->get('q', ''));
+        $status         = trim((string) $request->get('status', ''));
+        $approvalStatus = trim((string) $request->get('approval_status', ''));
+        $warehouseId    = trim((string) $request->get('warehouse_id', ''));
 
-        $perPage = 10;
+        // per_page
+        $perPage = (int) $request->get('per_page', 10);
+        $allowed = [10, 25, 50, 100];
+        if (!in_array($perPage, $allowed, true)) $perPage = 10;
 
         $me    = auth()->user();
         $roles = $me?->roles ?? collect();
 
-        $isSuperadmin  = $roles->contains('slug', 'superadmin'); // <== TAMBAH INI
+        $isSuperadmin  = $roles->contains('slug', 'superadmin');
         $isProcurement = $roles->contains('slug', 'procurement') || $isSuperadmin;
-        $isCeo         = $roles->contains('slug', 'ceo')         || $isSuperadmin;
+        $isCeo         = $roles->contains('slug', 'ceo') || $isSuperadmin;
 
-        $pos = PurchaseOrder::with([
+        // kolom tanggal (kalau ada po_date pakai itu, kalau nggak pakai created_at)
+        $dateCol = Schema::hasColumn('purchase_orders', 'po_date') ? 'po_date' : 'created_at';
+
+        $query = PurchaseOrder::query()
+            ->with([
                 'supplier',
                 'items.product.supplier',
                 'items.warehouse',
@@ -42,26 +66,88 @@ class PreOController extends Controller
                 'ceoApprover',
             ])
             ->withCount('items')
-            ->withCount('restockReceipts as gr_count')
-            ->when($q, function ($qq) use ($q) {
-                $qq->where('po_code', 'like', "%{$q}%");
-            })
-            ->when($status, fn ($qq) => $qq->where('status', $status))
+            ->withCount([
+                'restockReceipts as gr_count' => function ($q) {
+                    $q->where(function ($qq) {
+                        $qq->where('qty_good', '>', 0)
+                        ->orWhere('qty_damaged', '>', 0);
+                    });
+                }
+            ]);
+
+        // search
+        if ($q !== '') {
+            $query->where('po_code', 'like', "%{$q}%");
+        }
+
+        // status logistik
+        if ($status !== '') {
+            $query->where('status', $status);
+        }
+
+        // approval_status (PENTING: draft di DB lu biasanya NULL)
+        if ($approvalStatus !== '') {
+            if ($approvalStatus === 'draft') {
+                $query->where(function ($qq) {
+                    $qq->whereNull('approval_status')
+                    ->orWhere('approval_status', 'draft');
+                });
+            } else {
+                $query->where('approval_status', $approvalStatus);
+            }
+        }
+
+        // filter warehouse
+        if ($warehouseId !== '') {
+            $query->whereHas('items', function ($itQ) use ($warehouseId) {
+                if ($warehouseId === 'central') {
+                    $itQ->whereNull('warehouse_id');
+                } else {
+                    $itQ->where('warehouse_id', (int) $warehouseId);
+                }
+            });
+        }
+
+        // filter tanggal: hanya jalan kalau user ngisi from/to/month
+        $hasDateFilter = $request->filled('from') || $request->filled('to') || $request->filled('month');
+        if ($hasDateFilter) {
+            [$fromC, $toC] = $this->parseRangeMaxOneMonth($request); // kita ubah fn-nya di bawah biar fleksibel
+
+            if ($dateCol === 'created_at') {
+                $query->whereBetween('created_at', [
+                    $fromC->copy()->startOfDay(),
+                    $toC->copy()->endOfDay(),
+                ]);
+            } else {
+                $query->whereBetween($dateCol, [
+                    $fromC->toDateString(),
+                    $toC->toDateString(),
+                ]);
+            }
+        }
+
+        $pos = $query
             ->orderByDesc('id')
             ->paginate($perPage)
             ->appends($request->query());
 
-        // hitung gr_count dll tetap...
+        // biar blade gak query sendiri
+        $warehouses = Warehouse::query()
+            ->select('id', 'warehouse_name')
+            ->orderBy('warehouse_name')
+            ->get();
 
         return view('admin.po.index', compact(
             'pos',
             'q',
             'status',
+            'warehouses',
             'isProcurement',
             'isCeo',
-            'isSuperadmin'      // <== JANGAN LUPA DI-COMPACT
+            'isSuperadmin'
         ));
     }
+
 
         /** EDIT PO (manual / dari Restock Request) */
     public function edit(PurchaseOrder $po)
@@ -937,8 +1023,120 @@ class PreOController extends Controller
             'autoPrint' => true,   // flag buat auto window.print()
         ]);
     }
-    public function exportExcel(PurchaseOrder $po)
-    {
-        return back()->with('info', 'Export Excel belum diaktifkan.');
+
+
+
+public function exportIndexExcel(Request $request)
+{
+    // range opsional (kalau kosong -> tidak filter tanggal)
+    [$from, $to, $key, $useDate] = $this->parseExportRangeOptional($request);
+
+    $q              = trim((string) $request->input('q', ''));
+    $status         = (string) $request->input('status', '');
+    $approvalStatus = (string) $request->input('approval_status', '');
+    $warehouseId    = (string) $request->input('warehouse_id', '');
+
+    $dateCol = Schema::hasColumn('purchase_orders', 'po_date') ? 'po_date' : 'created_at';
+
+    $query = PurchaseOrder::query()
+        ->with([
+            'supplier',
+            'items.product.supplier',
+            'items.warehouse',
+            'procurementApprover',
+            'ceoApprover',
+        ])
+        ->withCount('items')
+        ->withCount([
+            'restockReceipts as gr_count' => function ($q) {
+                $q->where(function ($qq) {
+                    $qq->where('qty_good', '>', 0)->orWhere('qty_damaged', '>', 0);
+                });
+            }
+        ])
+        ->orderByDesc('id');
+
+    if ($q !== '') $query->where('po_code', 'like', "%{$q}%");
+    if ($status !== '') $query->where('status', $status);
+    if ($approvalStatus !== '') $query->where('approval_status', $approvalStatus);
+
+    if ($warehouseId !== '') {
+        $query->whereHas('items', function ($itQ) use ($warehouseId) {
+            if ($warehouseId === 'central') $itQ->whereNull('warehouse_id');
+            else $itQ->where('warehouse_id', (int) $warehouseId);
+        });
     }
+
+    // ✅ tanggal cuma diterapkan kalau user isi range/bulan
+    if ($useDate) {
+        if ($dateCol === 'created_at') {
+            $query->whereBetween('created_at', [$from->copy()->startOfDay(), $to->copy()->endOfDay()]);
+        } else {
+            $query->whereBetween($dateCol, [$from->toDateString(), $to->toDateString()]);
+        }
+    }
+
+    $pos = $query->get();
+
+    // ✅ ambil company default aktif (buat kop surat di excel)
+
+        $company = Company::where('is_default', true)
+            ->where('is_active', true)
+            ->first();
+
+        // meta lu tetap (yang penting "filters" tetep bisa kebaca)
+        $meta = [
+            'filters' => $request->query(),
+        ];
+
+        $filename = "PO-INDEX-DETAIL-{$key}.xlsx";
+
+        return Excel::download(
+            new PoIndexWithItemsExport($pos, $meta, $dateCol, $company), // ✅ tambah $company
+            $filename
+        );
+
+}
+
+
+    private function parseExportRangeOptional(Request $request): array
+    {
+        $month = $request->input('month'); // optional
+        $from  = $request->input('from');
+        $to    = $request->input('to');
+
+        // ✅ kalau tidak ada range/bulan -> export ALL (tanpa filter tanggal)
+        if (!$from && !$to && !$month) {
+            return [null, null, 'ALL', false];
+        }
+
+        // kalau cuma salah satu, samain biar valid
+        if ($from && !$to) $to = $from;
+        if ($to && !$from) $from = $to;
+
+        if ($from && $to) {
+            $fromC = Carbon::parse($from)->startOfDay();
+            $toC   = Carbon::parse($to)->endOfDay();
+        } else {
+            $fromC = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+            $toC   = $fromC->copy()->endOfMonth();
+        }
+
+        if ($fromC->gt($toC)) {
+            throw ValidationException::withMessages([
+                'to' => 'Tanggal "to" harus >= "from".',
+            ]);
+        }
+
+        // optional: tetap jaga 1 bulan (biar konsisten sama validasi JS)
+        if ($fromC->format('Y-m') !== $toC->format('Y-m')) {
+            throw ValidationException::withMessages([
+                'to' => 'Range maksimal 1 bulan. "from" dan "to" harus di bulan yang sama.',
+            ]);
+        }
+
+        return [$fromC, $toC, $fromC->format('Y-m'), true];
+    }
+
+
 }

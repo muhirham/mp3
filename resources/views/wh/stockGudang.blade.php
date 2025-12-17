@@ -103,7 +103,7 @@
 
 <script>
 $(function () {
-  const dtUrl            = @json(route('restocks.datatable')); // ✅ FIX
+  const dtUrl = @json(route('stocklevel.datatable'));// ✅ FIX
   const CAN_SWITCH_WH    = @json($canSwitchWarehouse ?? false);
   const USER_WAREHOUSE_ID= @json($me->warehouse_id ?? null);
 
