@@ -106,13 +106,34 @@ Route::middleware(['auth','active'])->group(function () {
         ->name('stock-adjustments.index')
         ->middleware('menu:stock_adjustments');
 
-    Route::post('stock-adjustments', [StockAdjustmentController::class, 'store'])
-        ->name('stock-adjustments.store')
-        ->middleware('menu:stock_adjustments');
+// Stock Adjustments
+Route::get('stock-adjustments', [StockAdjustmentController::class, 'index'])
+    ->name('stock-adjustments.index')
+    ->middleware('menu:stock_adjustments');
 
-    Route::get('stock-adjustments/ajax-products', [StockAdjustmentController::class, 'ajaxProducts'])
-        ->name('stock-adjustments.ajax-products')
-        ->middleware('menu:stock_adjustments');
+Route::get('stock-adjustments/datatable', [StockAdjustmentController::class, 'datatable'])
+    ->name('stock-adjustments.datatable')
+    ->middleware('menu:stock_adjustments');
+
+Route::get('stock-adjustments/products', [StockAdjustmentController::class, 'products'])
+    ->name('stock-adjustments.products')
+    ->middleware('menu:stock_adjustments');
+
+Route::get('stock-adjustments/{adjustment}/detail', [StockAdjustmentController::class, 'detail'])
+    ->name('stock-adjustments.detail')
+    ->middleware('menu:stock_adjustments');
+
+Route::get('stock-adjustments/ajax-products', [StockAdjustmentController::class, 'ajaxProducts'])
+    ->name('stock-adjustments.ajax-products')
+    ->middleware('menu:stock_adjustments');
+
+Route::post('stock-adjustments', [StockAdjustmentController::class, 'store'])
+    ->name('stock-adjustments.store')
+    ->middleware('menu:stock_adjustments');
+
+Route::get('/stock-adjustments/export/excel', [StockAdjustmentController::class, 'exportIndexExcel'])
+    ->name('stock-adjustments.exportIndexExcel')
+    ->middleware('menu:stock_adjustments');
 
 
     // key: suppliers
