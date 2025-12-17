@@ -11,9 +11,10 @@
     <div class="card-header d-flex justify-content-between align-items-center">
       <h5 class="mb-0 fw-bold">Daftar OTP Handover</h5>
       <small class="text-muted">
-        Halaman ini menampilkan OTP <b>pagi</b> & <b>sore</b> untuk handover milik Anda.
+        Halaman ini menampilkan OTP <b>pagi</b> untuk handover milik Anda.
       </small>
     </div>
+
     <div class="card-body">
 
       {{-- Filter (tanpa tombol, trigger via JS) --}}
@@ -22,10 +23,12 @@
           <label class="form-label">Dari Tanggal</label>
           <input type="date" name="date_from" id="dateFrom" value="{{ $dateFrom }}" class="form-control">
         </div>
+
         <div class="col-md-3">
           <label class="form-label">Sampai Tanggal</label>
           <input type="date" name="date_to" id="dateTo" value="{{ $dateTo }}" class="form-control">
         </div>
+
         <div class="col-md-3">
           <label class="form-label">Status</label>
           <select name="status" id="statusFilter" class="form-select">
@@ -34,7 +37,6 @@
             @endforeach
           </select>
         </div>
-        {{-- tidak ada tombol tampilkan --}}
       </form>
 
       {{-- Tabel --}}
@@ -44,15 +46,15 @@
             <tr>
               <th style="width: 6%">#</th>
               <th style="width: 12%">Tanggal</th>
-              <th style="width: 18%">Kode Handover</th>
+              <th style="width: 20%">Kode Handover</th>
               <th>Warehouse</th>
               <th style="width: 14%">Status</th>
-              <th style="width: 12%">OTP Pagi</th>
-              <th style="width: 12%">OTP Sore</th>
+              <th style="width: 14%">OTP Pagi</th>
             </tr>
           </thead>
+
           <tbody id="handoverBody">
-            {{-- initial render (biar nggak kosong kalau JS mati) --}}
+            {{-- initial render (fallback kalau JS mati) --}}
             @forelse($handovers as $idx => $h)
               @php
                   $badgeClass = match ($h->status) {
@@ -64,6 +66,7 @@
                       default                => 'bg-label-secondary',
                   };
               @endphp
+
               <tr>
                 <td>{{ $idx + 1 }}</td>
                 <td>{{ optional($h->handover_date)->format('Y-m-d') }}</td>
@@ -90,27 +93,17 @@
                     <span class="text-muted small">Belum ada</span>
                   @endif
                 </td>
-                <td>
-                  @if($h->evening_otp_plain)
-                    <span class="badge bg-label-info fs-6">
-                      {{ $h->evening_otp_plain }}
-                    </span>
-                    <div class="small text-muted">
-                      Kirim: {{ optional($h->evening_otp_sent_at)->format('H:i') }}
-                    </div>
-                  @else
-                    <span class="text-muted small">Belum ada</span>
-                  @endif
-                </td>
               </tr>
+
             @empty
               <tr>
-                <td colspan="7" class="text-center text-muted">
+                <td colspan="6" class="text-center text-muted">
                   Tidak ada handover pada periode ini.
                 </td>
               </tr>
             @endforelse
           </tbody>
+
         </table>
       </div>
 
@@ -137,9 +130,7 @@
     const filterForm  = document.getElementById('filterForm');
     const dataUrl     = @json(url()->current());
 
-    if (!bodyEl || !dateFromEl || !dateToEl || !statusEl) {
-        return;
-    }
+    if (!bodyEl || !dateFromEl || !dateToEl || !statusEl || !filterForm) return;
 
     // Jangan submit form ke server, kita pakai AJAX
     filterForm.addEventListener('submit', function (e) {
@@ -149,7 +140,7 @@
     function setLoading() {
         bodyEl.innerHTML = `
             <tr>
-                <td colspan="7" class="text-center text-muted">
+                <td colspan="6" class="text-center text-muted">
                     Memuat data...
                 </td>
             </tr>
@@ -159,7 +150,7 @@
     function setEmpty() {
         bodyEl.innerHTML = `
             <tr>
-                <td colspan="7" class="text-center text-muted">
+                <td colspan="6" class="text-center text-muted">
                     Tidak ada handover pada periode ini.
                 </td>
             </tr>
@@ -167,21 +158,16 @@
     }
 
     function renderRows(rows) {
-        if (!rows.length) {
+        if (!rows || !rows.length) {
             setEmpty();
             return;
         }
 
         let html = '';
         rows.forEach(function (r) {
-            const morningOtp  = r.morning_otp_plain
+            const morningOtp = r.morning_otp_plain
                 ? `<span class="badge bg-label-primary fs-6">${r.morning_otp_plain}</span>
                    <div class="small text-muted">Kirim: ${r.morning_otp_sent_at || '-'}</div>`
-                : `<span class="text-muted small">Belum ada</span>`;
-
-            const eveningOtp  = r.evening_otp_plain
-                ? `<span class="badge bg-label-info fs-6">${r.evening_otp_plain}</span>
-                   <div class="small text-muted">Kirim: ${r.evening_otp_sent_at || '-'}</div>`
                 : `<span class="text-muted small">Belum ada</span>`;
 
             html += `
@@ -196,7 +182,6 @@
                         </span>
                     </td>
                     <td>${morningOtp}</td>
-                    <td>${eveningOtp}</td>
                 </tr>
             `;
         });
@@ -215,25 +200,19 @@
 
         try {
             const res = await fetch(`${dataUrl}?${params.toString()}`, {
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
             });
 
-            if (!res.ok) {
-                throw new Error('Gagal memuat data');
-            }
+            if (!res.ok) throw new Error('Gagal memuat data');
 
             const json = await res.json();
-            if (!json.success) {
-                throw new Error(json.message || 'Gagal memuat data');
-            }
+            if (!json.success) throw new Error(json.message || 'Gagal memuat data');
 
             renderRows(json.rows || []);
         } catch (err) {
             bodyEl.innerHTML = `
                 <tr>
-                    <td colspan="7" class="text-center text-danger">
+                    <td colspan="6" class="text-center text-danger">
                         ${err.message}
                     </td>
                 </tr>

@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Sales;
 
 use App\Http\Controllers\Controller;
 use App\Models\SalesHandover;
-use App\Models\SalesHandoverItem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -46,8 +45,7 @@ class HandoverOtpItemsController extends Controller
      */
     public function index(Request $request)
     {
-        $me    = $request->user();
-        $today = now()->toDateString();
+        $me = $request->user();
 
         $handover = SalesHandover::with([
                 'warehouse',
@@ -55,13 +53,13 @@ class HandoverOtpItemsController extends Controller
                 'sales',
             ])
             ->where('sales_id', $me->id)
-            ->whereDate('handover_date', $today)
             ->whereIn('status', [
                 'waiting_morning_otp',
                 'on_sales',
                 'waiting_evening_otp',
             ])
-            ->latest('id')
+            ->orderByDesc('handover_date')
+            ->orderByDesc('id')
             ->first();
 
         $isOtpVerified  = false;
@@ -84,17 +82,17 @@ class HandoverOtpItemsController extends Controller
         }
 
         return view('sales.handover_otp', [
-            'me'            => $me,
-            'handover'      => $handover,
-            'items'         => $items,
-            'isOtpVerified' => $isOtpVerified,
-            'canEditPayment'=> $canEditPayment,
+            'me'             => $me,
+            'handover'       => $handover,
+            'items'          => $items,
+            'isOtpVerified'  => $isOtpVerified,
+            'canEditPayment' => $canEditPayment,
         ]);
     }
 
+
     /**
      * Verifikasi OTP pagi via AJAX.
-     * Setelah sukses → reload halaman (biar render form payment dari server).
      */
     public function verify(Request $request)
     {
@@ -103,12 +101,10 @@ class HandoverOtpItemsController extends Controller
             'handover_id' => ['nullable', 'integer'],
         ]);
 
-        $me    = $request->user();
-        $today = now()->toDateString();
+        $me = $request->user();
 
         $query = SalesHandover::with(['warehouse', 'items.product', 'sales'])
             ->where('sales_id', $me->id)
-            ->whereDate('handover_date', $today)
             ->whereIn('status', [
                 'waiting_morning_otp',
                 'on_sales',
@@ -119,7 +115,10 @@ class HandoverOtpItemsController extends Controller
             $query->where('id', $request->handover_id);
         }
 
-        $handover = $query->latest('id')->first();
+        $handover = $query
+            ->orderByDesc('handover_date')
+            ->orderByDesc('id')
+            ->first();
 
         if (! $handover) {
             return response()->json([
@@ -162,6 +161,7 @@ class HandoverOtpItemsController extends Controller
         ]);
     }
 
+
     /**
      * SALES isi payment per item.
      */
@@ -169,144 +169,166 @@ class HandoverOtpItemsController extends Controller
     {
         $me = $request->user();
 
-        $data = $request->validate([
-            'handover_id'            => ['required', 'exists:sales_handovers,id'],
-            'items'                  => ['required', 'array'],
+        $request->validate([
+            'handover_id' => ['required', 'integer', 'exists:sales_handovers,id'],
+            'items'       => ['required', 'array'],
             'items.*.payment_qty'    => ['nullable', 'integer', 'min:0'],
             'items.*.payment_method' => ['nullable', 'in:cash,transfer'],
             'items.*.payment_amount' => ['nullable', 'integer', 'min:0'],
             'items.*.payment_proof'  => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:2048'],
         ]);
 
-        $handover = SalesHandover::with('items.product')
-            ->where('id', $data['handover_id'])
-            ->where('sales_id', $me->id)
-            ->firstOrFail();
+        $handover = SalesHandover::with(['items.product'])->findOrFail($request->handover_id);
 
-        if (! in_array($handover->status, ['on_sales', 'waiting_evening_otp'])) {
-            return back()->with('error', 'Payment hanya bisa diisi ketika status handover ON_SALES / WAITING_EVENING_OTP.');
+        // keamanan: cuma boleh handover milik sales yang login
+        if ((int) $handover->sales_id !== (int) $me->id) {
+            abort(403, 'Tidak boleh mengubah handover milik sales lain.');
         }
+
+        // hanya bisa edit saat open
+        if (!in_array($handover->status, ['on_sales', 'waiting_evening_otp'], true)) {
+            return back()->with('error', 'Handover tidak bisa diisi payment pada status ini.');
+        }
+
+        // wajib OTP verified
+        $sessionKey = 'sales_handover_otp_verified_'.$handover->id;
+        if (!$request->session()->get($sessionKey, false)) {
+            return back()->with('error', 'OTP pagi belum diverifikasi.');
+        }
+
+        $itemsInput = $request->input('items', []);
 
         try {
-            DB::beginTransaction();
+            DB::transaction(function () use ($handover, $itemsInput, $request) {
 
-            foreach ($handover->items as $item) {
-                $key = (string) $item->id;
-                if (! isset($data['items'][$key])) {
-                    continue;
-                }
+                $touched   = 0;
+                $totalSold = 0;
 
-                $row = $data['items'][$key];
+                foreach ($handover->items as $item) {
+                    if (!isset($itemsInput[$item->id])) {
+                        continue;
+                    }
 
-                // Kalau sudah approved, jangan bisa diubah lagi.
-                if ($item->payment_status === 'approved') {
-                    continue;
-                }
+                    $currentStatus = $item->payment_status ?: 'draft';
 
-                $qty    = (int) ($row['payment_qty'] ?? 0);
-                $method = $row['payment_method'] ?? null;
-                $amount = (int) ($row['payment_amount'] ?? 0);
+                    // LOCK server: pending/approved ga boleh diubah
+                    if (in_array($currentStatus, ['pending', 'approved'], true)) {
+                        continue;
+                    }
 
-                // ================================
-                // KOSONG SEMUA → RESET KE NULL
-                // ================================
-                if ($qty === 0 && ! $method && $amount === 0 && ! $request->hasFile("items.$key.payment_proof")) {
-                    $item->payment_qty                 = 0;
-                    $item->payment_method              = null;
-                    $item->payment_amount              = 0;
-                    $item->payment_status              = null; // <--- BUKAN pending, biarin kosong
-                    $item->payment_reject_reason       = null;
-                    // bukti tidak dihapus, biarin aja kalau ada
+                    $row = $itemsInput[$item->id];
+
+                    $qtyStart  = (int) $item->qty_start;
+                    $unitPrice = (int) ($item->unit_price ?: ($item->product?->selling_price ?? 0));
+                    $maxQty    = $qtyStart;
+
+                    $qtyBayar = (int) ($row['payment_qty'] ?? 0);
+                    if ($qtyBayar < 0) $qtyBayar = 0;
+                    if ($qtyBayar > $maxQty) $qtyBayar = $maxQty;
+
+                    $method = $row['payment_method'] ?? null;
+                    $method = ($method !== null && trim($method) === '') ? null : $method;
+
+                    $proofFile = $request->file("items.{$item->id}.payment_proof");
+
+                    // ====== HITUNG SOLD/RETURNED OTOMATIS (INI YANG LO MAU) ======
+                    // Terjual = qty bayar
+                    $qtySold = $qtyBayar;
+
+                    // Kembali = qty_start - qty_sold
+                    $qtyReturned = max(0, $qtyStart - $qtySold);
+
+                    $lineSold = $qtySold * $unitPrice;
+
+                    // ====== PAYMENT LOGIC ======
+                    // Kalau qtyBayar = 0 -> anggap batal / tidak ada transaksi
+                    // Balikin field payment ke 0/null & status ke draft (biar bisa diubah lagi)
+                    if ($qtyBayar === 0) {
+
+                        // kalau ada bukti lama, hapus biar gak numpuk & biar bener-bener reset
+                        if ($item->payment_transfer_proof_path) {
+                            Storage::disk('public')->delete($item->payment_transfer_proof_path);
+                            $item->payment_transfer_proof_path = null;
+                        }
+
+                        $item->payment_qty           = 0;
+                        $item->payment_method        = null;
+                        $item->payment_amount        = 0;
+                        $item->payment_status        = 'draft';
+                        $item->payment_reject_reason = null;
+
+                    } else {
+                        // qtyBayar > 0 => metode wajib
+                        if (!$method) {
+                            throw new \RuntimeException("Metode payment wajib diisi (Item ID: {$item->id}).");
+                        }
+
+                        // nominal dibatasi max = unitPrice * qtySold
+                        $maxNominal = $unitPrice * $qtySold;
+                        $nominal    = (int) ($row['payment_amount'] ?? 0);
+                        if ($nominal < 0) $nominal = 0;
+                        if ($nominal > $maxNominal) $nominal = $maxNominal;
+
+                        // transfer & nominal > 0 => butuh bukti (baru atau existing)
+                        if ($method === 'transfer' && $nominal > 0 && !$proofFile && !$item->payment_transfer_proof_path) {
+                            throw new \RuntimeException("Bukti transfer wajib diupload (Item ID: {$item->id}).");
+                        }
+
+                        // kalau method bukan transfer, bersihin proof lama biar gak nyangkut
+                        if ($method !== 'transfer' && $item->payment_transfer_proof_path) {
+                            Storage::disk('public')->delete($item->payment_transfer_proof_path);
+                            $item->payment_transfer_proof_path = null;
+                        }
+
+                        // replace proof jika upload baru
+                        if ($proofFile) {
+                            if ($item->payment_transfer_proof_path) {
+                                Storage::disk('public')->delete($item->payment_transfer_proof_path);
+                            }
+                            $item->payment_transfer_proof_path = $proofFile->store('handover_item_transfer_proofs', 'public');
+                        }
+
+                        $item->payment_qty           = $qtyBayar;
+                        $item->payment_method        = $method;
+                        $item->payment_amount        = $nominal;
+                        $item->payment_status        = 'pending';
+                        $item->payment_reject_reason = null;
+                    }
+
+                    // ====== SIMPAN SOLD/RETURNED/LINE SOLD (INI BIAR UI KEISI & WH BISA PROSES) ======
+                    $item->unit_price      = $unitPrice;
+                    $item->qty_sold        = $qtySold;
+                    $item->qty_returned    = $qtyReturned;
+                    $item->line_total_sold = $lineSold;
+
+                    // (optional aman) pastiin line_total_start kebentuk kalau masih 0
+                    if ((int) $item->line_total_start <= 0) {
+                        $item->line_total_start = $qtyStart * $unitPrice;
+                    }
+
                     $item->save();
-                    continue;
+
+                    $totalSold += $lineSold;
+                    $touched++;
                 }
 
-                // ================================
-                // Validasi basic (kalau ada isi)
-                // ================================
-                if ($qty < 0) {
-                    throw new \RuntimeException("Qty bayar untuk {$item->product->name} tidak boleh minus.");
+                if ($touched <= 0) {
+                    throw new \RuntimeException('Tidak ada item yang bisa diubah. Item PENDING/APPROVED terkunci.');
                 }
 
-                if ($qty > $item->qty_sold && $item->qty_sold > 0) {
-                    throw new \RuntimeException("Qty bayar untuk {$item->product->name} tidak boleh melebihi qty terjual.");
-                }
+                // update header biar report gak 0 terus
+                $handover->total_sold_amount       = $totalSold;
+                $handover->evening_filled_by_sales = true;
+                $handover->evening_filled_at       = now();
+                $handover->save();
+            });
 
-                if (! $method) {
-                    throw new \RuntimeException("Metode pembayaran wajib diisi untuk {$item->product->name}.");
-                }
-
-                if ($amount <= 0) {
-                    throw new \RuntimeException("Nominal pembayaran untuk {$item->product->name} harus lebih dari 0.");
-                }
-
-                // ================================
-                // Bukti transfer
-                // ================================
-                $proofPath = $item->payment_transfer_proof_path;
-                if ($method === 'transfer') {
-                    if ($request->hasFile("items.$key.payment_proof")) {
-                        $file = $request->file("items.$key.payment_proof");
-
-                        // hapus file lama kalau ada
-                        if ($proofPath && Storage::disk('public')->exists($proofPath)) {
-                            Storage::disk('public')->delete($proofPath);
-                        }
-
-                        $proofPath = $file->store('handover_item_payments', 'public');
-                    } elseif (! $proofPath) {
-                        throw new \RuntimeException("Bukti transfer wajib diupload untuk {$item->product->name}.");
-                    }
-                } else {
-                    // cash -> kalau ada file baru, simpan; kalau tidak, abaikan
-                    if ($request->hasFile("items.$key.payment_proof")) {
-                        $file = $request->file("items.$key.payment_proof");
-
-                        if ($proofPath && Storage::disk('public')->exists($proofPath)) {
-                            Storage::disk('public')->delete($proofPath);
-                        }
-
-                        $proofPath = $file->store('handover_item_payments', 'public');
-                    }
-                }
-
-                // ================================
-                // Isi & set status ke pending
-                // (karena memang sudah diisi payment)
-                // ================================
-                $item->payment_qty                 = $qty;
-                $item->payment_method              = $method;
-                $item->payment_amount              = $amount;
-                $item->payment_transfer_proof_path = $proofPath;
-                $item->payment_status              = 'pending';
-                $item->payment_reject_reason       = null;
-                $item->save();
-            }
-
-            // Update summary di header (buat report + flag sore sudah diisi sales)
-            $handover->cash_amount = (int) $handover->items()
-                ->where('payment_method', 'cash')
-                ->sum('payment_amount');
-
-            $handover->transfer_amount = (int) $handover->items()
-                ->where('payment_method', 'transfer')
-                ->sum('payment_amount');
-
-            // >>> FLAG: sore sudah diisi sales <<<
-            $handover->evening_filled_by_sales = true;
-            $handover->evening_filled_at       = now();
-
-            $handover->save();
-
-            DB::commit();
         } catch (\Throwable $e) {
-            DB::rollBack();
-
-            return back()
-                ->with('error', 'Gagal menyimpan payment: ' . $e->getMessage())
-                ->withInput();
+            return back()->with('error', 'Gagal simpan payment: '.$e->getMessage());
         }
 
-        return back()->with('success', 'Payment per item berhasil disimpan. Menunggu approval admin gudang.');
+        return back()->with('success', 'Data payment berhasil disimpan, menunggu approval admin warehouse.');
     }
+
+
 }

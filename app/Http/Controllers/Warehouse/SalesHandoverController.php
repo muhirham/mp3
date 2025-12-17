@@ -1205,50 +1205,67 @@ class SalesHandoverController extends Controller
             'cancelled'           => 'Cancelled',
         ];
 
+        // ===== FIX UTAMA: yang masih OPEN jangan hilang karena filter tanggal =====
+        $openStatuses = [
+            'waiting_morning_otp',
+            'on_sales',
+            'waiting_evening_otp',
+        ];
+
         $query = SalesHandover::with(['warehouse'])
             ->where('sales_id', $me->id)
-            ->whereBetween('handover_date', [$dateFrom, $dateTo])
             ->orderBy('handover_date', 'desc')
             ->orderBy('code');
 
         if ($status !== 'all') {
             $query->where('status', $status);
+
+            // kalau status yang dipilih BUKAN open, baru pakai filter tanggal
+            if (!in_array($status, $openStatuses, true)) {
+                $query->whereBetween('handover_date', [$dateFrom, $dateTo]);
+            }
+        } else {
+            // status all: tampilkan periode + SEMUA yang masih open (walau di luar periode)
+            $query->where(function ($sub) use ($dateFrom, $dateTo, $openStatuses) {
+                $sub->whereBetween('handover_date', [$dateFrom, $dateTo])
+                    ->orWhereIn('status', $openStatuses);
+            });
         }
 
         // ==== RESPONSE AJAX (JSON) ====
         if ($request->ajax()) {
             $handovers = $query->get();
 
-        $rows = $handovers->values()->map(function (SalesHandover $h, int $idx) {
-            $badgeClass = match ($h->status) {
-                'closed'               => 'bg-label-success',
-                'on_sales'             => 'bg-label-info',
-                'waiting_morning_otp',
-                'waiting_evening_otp'  => 'bg-label-warning',
-                'cancelled'            => 'bg-label-danger',
-                default                => 'bg-label-secondary',
-            };
+            $rows = $handovers->values()->map(function (SalesHandover $h, int $idx) {
+                $badgeClass = match ($h->status) {
+                    'closed'               => 'bg-label-success',
+                    'on_sales'             => 'bg-label-info',
+                    'waiting_morning_otp',
+                    'waiting_evening_otp'  => 'bg-label-warning',
+                    'cancelled'            => 'bg-label-danger',
+                    default                => 'bg-label-secondary',
+                };
 
-            $warehouseName = optional($h->warehouse)->warehouse_name
-                        ?? optional($h->warehouse)->name
-                        ?? '-';
+                $warehouseName = optional($h->warehouse)->warehouse_name
+                    ?? optional($h->warehouse)->name
+                    ?? '-';
 
-            [$morningPlain] = $this->splitOtpField($h->morning_otp_hash);
-            [$eveningPlain] = $this->splitOtpField($h->evening_otp_hash);
+                [$morningPlain] = $this->splitOtpField($h->morning_otp_hash);
+                [$eveningPlain] = $this->splitOtpField($h->evening_otp_hash);
 
-            return [
-                'no'                  => $idx + 1,
-                'date'                => optional($h->handover_date)->format('Y-m-d'),
-                'code'                => $h->code,
-                'warehouse'           => $warehouseName,
-                'status'              => $h->status,
-                'status_badge_class'  => $badgeClass,
-                'morning_otp_plain'   => $morningPlain,
-                'morning_otp_sent_at' => optional($h->morning_otp_sent_at)->format('H:i'),
-                'evening_otp_plain'   => $eveningPlain,
-                'evening_otp_sent_at' => optional($h->evening_otp_sent_at)->format('H:i'),
-            ];
-        });
+                return [
+                    'no'                  => $idx + 1,
+                    'date'                => optional($h->handover_date)->format('Y-m-d'),
+                    'code'                => $h->code,
+                    'warehouse'           => $warehouseName,
+                    'status'              => $h->status,
+                    'status_badge_class'  => $badgeClass,
+                    'morning_otp_plain'   => $morningPlain,
+                    'morning_otp_sent_at' => optional($h->morning_otp_sent_at)->format('H:i'),
+                    'evening_otp_plain'   => $eveningPlain,
+                    'evening_otp_sent_at' => optional($h->evening_otp_sent_at)->format('H:i'),
+                ];
+            });
 
             return response()->json([
                 'success' => true,
@@ -1268,6 +1285,7 @@ class SalesHandoverController extends Controller
             'statusOptions' => $statusOptions,
         ]);
     }
+
 
         /**
      * FORM APPROVAL PAYMENT PER ITEM (WAREHOUSE)
@@ -1324,147 +1342,184 @@ class SalesHandoverController extends Controller
  */
     public function paymentApprovalSave(Request $request, SalesHandover $handover)
     {
+        $me = $request->user();
+
         $data = $request->validate([
             'decisions'              => ['required', 'array'],
             'decisions.*.status'     => ['required', 'in:approved,rejected'],
             'decisions.*.reason'     => ['nullable', 'string', 'max:500'],
         ]);
 
-        // butuh items + product + sales buat hitung & email
-        $handover->load(['items.product', 'sales']);
-
-        if ($handover->status === 'closed') {
-            return back()->with('error', 'Handover sudah CLOSED. Approval tidak bisa diubah lagi.');
-        }
-
-        $autoOtpGenerated = false;
-        $generatedOtpCode = null;
-
         try {
-            DB::beginTransaction();
+            DB::transaction(function () use ($handover, $data, $me) {
 
-            // ===== 1. SIMPAN KEPUTUSAN PER ITEM =====
-            foreach ($handover->items as $item) {
-                $key = (string) $item->id;
-                if (! isset($data['decisions'][$key])) {
-                    continue;
+                $handover->load(['items.product']);
+
+                $totalCash     = 0;
+                $totalTransfer = 0;
+
+                foreach ($handover->items as $item) {
+                    if (!isset($data['decisions'][$item->id])) {
+                        continue;
+                    }
+
+                    $row    = $data['decisions'][$item->id];
+                    $status = $row['status'];
+
+                    $item->payment_status = $status;
+
+                    $item->payment_reject_reason = ($status === 'rejected')
+                        ? ($row['reason'] ?? null)
+                        : null;
+
+                    // recap hanya dari yang approved
+                    if ($status === 'approved') {
+                        if ($item->payment_method === 'cash') {
+                            $totalCash += (int) $item->payment_amount;
+                        } elseif ($item->payment_method === 'transfer') {
+                            $totalTransfer += (int) $item->payment_amount;
+                        }
+                    }
+
+                    $item->save();
                 }
 
-                $row    = $data['decisions'][$key];
-                $status = $row['status'];
-
-                if ($status === 'approved') {
-                    $item->payment_status        = 'approved';
-                    $item->payment_reject_reason = null;
-                } else {
-                    $item->payment_status        = 'rejected';
-                    $item->payment_reject_reason = $row['reason'] ?? null;
-                }
-
-                $item->save();
-            }
-
-            // ===== 2. SINKRON QTY JUAL / KEMBALI & NILAI TERJUAL DARI PAYMENT_QTY =====
-            $totalSoldAmount = 0;
-
-            foreach ($handover->items as $item) {
-                $qtyStart = (int) $item->qty_start;
-                $payQty   = max(0, (int) $item->payment_qty);   // qty bayar dari sales
-
-                if ($payQty > $qtyStart) {
-                    $payQty = $qtyStart;
-                }
-
-                $qtySold     = $payQty;
-                $qtyReturned = max(0, $qtyStart - $qtySold);
-
-                $unitPrice = $item->unit_price ?: (int) ($item->product->selling_price ?? 0);
-                $lineSold  = $qtySold * $unitPrice;
-
-                $item->qty_sold        = $qtySold;
-                $item->qty_returned    = $qtyReturned;
-                $item->unit_price      = $unitPrice;
-                $item->line_total_sold = $lineSold;
-                $item->save();
-
-                $totalSoldAmount += $lineSold;
-            }
-
-            // update total penjualan di header
-            $handover->total_sold_amount = $totalSoldAmount;
-            $handover->save();
-
-            // ===== 3. CEK LAYAK AUTO-GENERATE OTP SORE =====
-            $itemsSold = $handover->items
-                ->filter(fn ($it) => (int) $it->qty_sold > 0);
-
-            $allApproved = $itemsSold->count() > 0
-                && $itemsSold->every(fn ($it) => $it->payment_status === 'approved');
-
-            $hasEveningOtp = ! empty($handover->evening_otp_hash);
-
-            if ($allApproved && ! $hasEveningOtp) {
-                $generatedOtpCode = (string) random_int(100000, 999999);
-
-                // simpan "PLAIN|HASH" di kolom evening_otp_hash
-                $handover->evening_otp_hash    = $this->packOtp($generatedOtpCode);
-                $handover->evening_otp_sent_at = now();
-                $handover->status              = 'waiting_evening_otp';
+                $handover->cash_amount     = $totalCash;
+                $handover->transfer_amount = $totalTransfer;
                 $handover->save();
 
-                $autoOtpGenerated = true;
-            }
+                // ================================
+                // AUTO CLOSE (INI YANG LO MAU)
+                // Close kalau SEMUA item yg terjual (qty_sold>0) sudah APPROVED
+                // ================================
+                if ($handover->status !== 'closed') {
 
-            DB::commit();
+                    $itemsSold = $handover->items->where('qty_sold', '>', 0);
+                    $allApproved = $itemsSold->every(fn($it) => $it->payment_status === 'approved');
+
+                    if ($allApproved) {
+
+                        foreach ($handover->items as $item) {
+                            $product = $item->product;
+                            if (!$product) continue;
+
+                            $qtyStart = (int) $item->qty_start;
+
+                            // safety: kalau ada mismatch, paksa konsisten
+                            $qtySold = (int) $item->qty_sold;
+                            if ($qtySold < 0) $qtySold = 0;
+                            if ($qtySold > $qtyStart) $qtySold = $qtyStart;
+
+                            $qtyRet = (int) $item->qty_returned;
+                            $expectedRet = max(0, $qtyStart - $qtySold);
+                            if ($qtyRet !== $expectedRet) {
+                                $qtyRet = $expectedRet;
+                                $item->qty_returned = $qtyRet;
+                                $item->save();
+                            }
+
+                            // Stok sales: kurangi semua qty_start
+                            $salesStock = DB::table('stock_levels')
+                                ->where('owner_type', 'sales')
+                                ->where('owner_id', $handover->sales_id)
+                                ->where('product_id', $product->id)
+                                ->lockForUpdate()
+                                ->first();
+
+                            if (!$salesStock || $salesStock->quantity < $qtyStart) {
+                                throw new \RuntimeException("Stok sales kurang untuk produk {$product->name}.");
+                            }
+
+                            DB::table('stock_levels')
+                                ->where('id', $salesStock->id)
+                                ->update([
+                                    'quantity'   => $salesStock->quantity - $qtyStart,
+                                    'updated_at' => now(),
+                                ]);
+
+                            // Qty kembali: sales -> warehouse
+                            if ($qtyRet > 0) {
+                                $whStock = DB::table('stock_levels')
+                                    ->where('owner_type', 'warehouse')
+                                    ->where('owner_id', $handover->warehouse_id)
+                                    ->where('product_id', $product->id)
+                                    ->lockForUpdate()
+                                    ->first();
+
+                                if ($whStock) {
+                                    DB::table('stock_levels')
+                                        ->where('id', $whStock->id)
+                                        ->update([
+                                            'quantity'   => $whStock->quantity + $qtyRet,
+                                            'updated_at' => now(),
+                                        ]);
+                                } else {
+                                    DB::table('stock_levels')->insert([
+                                        'owner_type' => 'warehouse',
+                                        'owner_id'   => $handover->warehouse_id,
+                                        'product_id' => $product->id,
+                                        'quantity'   => $qtyRet,
+                                        'created_at' => now(),
+                                        'updated_at' => now(),
+                                    ]);
+                                }
+
+                                $movement = [
+                                    'product_id' => $product->id,
+                                    'from_type'  => 'sales',
+                                    'from_id'    => $handover->sales_id,
+                                    'to_type'    => 'warehouse',
+                                    'to_id'      => $handover->warehouse_id,
+                                    'quantity'   => $qtyRet,
+                                    'note'       => "Handover {$handover->code} (return sore - auto close)",
+                                    'created_at' => now(),
+                                    'updated_at' => now(),
+                                ];
+
+                                if (Schema::hasColumn('stock_movements', 'status')) {
+                                    $movement['status'] = 'completed';
+                                }
+
+                                DB::table('stock_movements')->insert($movement);
+                            }
+
+                            // Qty terjual: sales -> customer
+                            if ($qtySold > 0) {
+                                $movement = [
+                                    'product_id' => $product->id,
+                                    'from_type'  => 'sales',
+                                    'from_id'    => $handover->sales_id,
+                                    'to_type'    => 'sales',
+                                    'to_id'      => 0,
+                                    'quantity'   => $qtySold,
+                                    'note'       => "Handover {$handover->code} (sold closing - auto close)",
+                                    'created_at' => now(),
+                                    'updated_at' => now(),
+                                ];
+
+                                if (Schema::hasColumn('stock_movements', 'status')) {
+                                    $movement['status'] = 'completed';
+                                }
+
+                                DB::table('stock_movements')->insert($movement);
+                            }
+                        }
+
+                        $handover->status                  = 'closed';
+                        $handover->closed_by               = $me->id;
+                        $handover->evening_otp_verified_at = now(); // biar konsisten field waktu closing
+                        $handover->save();
+                    }
+                }
+            });
+
         } catch (\Throwable $e) {
-            DB::rollBack();
-
-            return back()->with('error', 'Gagal menyimpan approval payment: '.$e->getMessage());
+            return back()->with('error', 'Gagal simpan approval: '.$e->getMessage());
         }
 
-        // ===== 4. KIRIM EMAIL OTP KALAU BARU DIGENERATE =====
-        if ($autoOtpGenerated && $handover->sales && $handover->sales->email) {
-
-            $itemsForMail = $handover->items->map(function ($it) {
-                return [
-                    'name'  => $it->product->name ?? ('Produk #'.$it->product_id),
-                    'code'  => $it->product->product_code ?? '',
-                    'qty'   => (int) $it->qty_sold,
-                    'price' => (int) $it->unit_price,
-                    'total' => (int) $it->line_total_sold,
-                ];
-            })->toArray();
-
-            $grandTotal = (int) $handover->cash_amount + (int) $handover->transfer_amount;
-            if ($grandTotal <= 0) {
-                $grandTotal = (int) $handover->items->sum('payment_amount');
-            }
-
-            try {
-                Mail::to($handover->sales->email)
-                    ->send(new SalesHandoverOtpMail($handover, $generatedOtpCode, $itemsForMail, $grandTotal));
-            } catch (\Throwable $e) {
-                return redirect()
-                    ->route('warehouse.handovers.payments.form', ['handover' => $handover->id])
-                    ->with(
-                        'success',
-                        'Approval payment tersimpan & OTP sore otomatis dibuat, '
-                        .'tetapi email gagal dikirim: '.e($e->getMessage())
-                    );
-            }
-        }
-
-        $msg = 'Approval payment per item berhasil disimpan.';
-        if ($autoOtpGenerated) {
-            $msg .= '<br>Semua item terjual sudah <b>APPROVED</b>, OTP sore otomatis dibuat '
-                . 'dan status handover berubah menjadi <b>WAITING_EVENING_OTP</b>.';
-        }
-
-        return redirect()
-            ->route('warehouse.handovers.payments.form', ['handover' => $handover->id])
-            ->with('success', $msg);
+        return back()->with('success', 'Approval payment berhasil disimpan. Jika semua item terjual sudah APPROVED, handover otomatis CLOSED.');
     }
-        
+    
     public function generateEveningOtp(SalesHandover $handover)
     {
         if ($handover->status === 'closed') {
@@ -1520,7 +1575,6 @@ class SalesHandoverController extends Controller
 
         return back()->with('success', 'OTP sore berhasil dibuat dan dikirim ke sales.');
     }
-
 
 
 }

@@ -193,7 +193,7 @@
             Masukkan OTP pagi terlebih dahulu untuk melihat daftar barang.
           </div>
         @else
-          <form method="POST"
+          <form id="paymentForm" method="POST"
                 action="{{ route('sales.otp.items.payments.save') }}"
                 enctype="multipart/form-data">
             @csrf
@@ -211,7 +211,6 @@
                   <th class="text-end" style="width:10%">Nilai Dibawa</th>
                   <th class="text-end" style="width:10%">Nilai Terjual</th>
 
-                  {{-- PAYMENT --}}
                   <th class="text-end" style="width:7%">Qty Bayar</th>
                   <th class="text-center" style="width:10%">Metode</th>
                   <th class="text-end" style="width:10%">Nominal</th>
@@ -219,108 +218,131 @@
                   <th style="width:12%">Status Payment</th>
                 </tr>
                 </thead>
+
                 <tbody>
-                @forelse($items as $row)
-                  @php
-                    $status      = $row->payment_status ?? 'draft';
-                    $statusBadge = $paymentBadgeMap[$status] ?? 'bg-label-secondary';
+                @foreach($items as $row)
+                    @php
+                        $unitPrice = (int) $row->unit_price;
 
-                    // Boleh edit kalau status = draft / rejected & user masih boleh edit
-                    $disabled = !($canEditPayment && in_array($status, ['draft', 'rejected'], true));
-                  @endphp
-                  <tr>
-                    <td data-label="Produk">
-                      <div class="product-name">
-                        {{ $row->product->name ?? $row->product->product_name ?? '-' }}
-                      </div>
-                      <div class="small text-muted product-code">
-                        {{ $row->product->product_code ?? '' }}
-                      </div>
-                    </td>
-                    <td data-label="Dibawa" class="text-end">{{ (int) $row->qty_start }}</td>
-                    <td data-label="Kembali" class="text-end">{{ (int) $row->qty_returned }}</td>
-                    <td data-label="Terjual" class="text-end">{{ (int) $row->qty_sold }}</td>
-                    <td data-label="Harga" class="text-end">
-                      {{ 'Rp ' . number_format((int) $row->unit_price, 0, ',', '.') }}
-                    </td>
-                    <td data-label="Nilai Dibawa" class="text-end">
-                      {{ 'Rp ' . number_format((int) $row->line_total_start, 0, ',', '.') }}
-                    </td>
-                    <td data-label="Nilai Terjual" class="text-end">
-                      {{ 'Rp ' . number_format((int) $row->line_total_sold, 0, ',', '.') }}
-                    </td>
+                        // ✅ FIX: jangan ngunci pakai qty_sold doang (sering 0).
+                        // Prioritas: qty_sold (kalau sudah ada) -> payment_qty (kalau ada history) -> qty_start (fallback).
+                        $maxQty = (int) $row->qty_sold;
+                        if ($maxQty <= 0) $maxQty = (int) ($row->payment_qty ?? 0);
+                        if ($maxQty <= 0) $maxQty = (int) $row->qty_start;
 
-                    {{-- PAYMENT INPUT --}}
-                    <td data-label="Qty Bayar" class="text-end">
-                      <input type="number"
-                             min="0"
-                             class="form-control form-control-sm text-end"
-                             name="items[{{ $row->id }}][payment_qty]"
-                             value="{{ old("items.$row->id.payment_qty", $row->payment_qty) }}"
-                             @if($disabled) disabled @endif>
-                    </td>
-                    <td data-label="Metode" class="text-center">
-                      <select class="form-select form-select-sm"
-                              name="items[{{ $row->id }}][payment_method]"
-                              @if($disabled) disabled @endif>
-                        <option value="">- Pilih -</option>
-                        <option value="cash"
-                          @selected(old("items.$row->id.payment_method", $row->payment_method) === 'cash')>
-                          Cash
-                        </option>
-                        <option value="transfer"
-                          @selected(old("items.$row->id.payment_method", $row->payment_method) === 'transfer')>
-                          Transfer
-                        </option>
-                      </select>
-                    </td>
-                    <td data-label="Nominal" class="text-end">
-                      <input type="number"
-                             min="0"
-                             class="form-control form-control-sm text-end"
-                             name="items[{{ $row->id }}][payment_amount]"
-                             value="{{ old("items.$row->id.payment_amount", $row->payment_amount) }}"
-                             @if($disabled) disabled @endif>
-                    </td>
-                    <td data-label="Bukti TF">
-                      @if($row->payment_transfer_proof_path)
-                        <div class="mb-1">
-                          <a href="{{ asset('storage/'.$row->payment_transfer_proof_path) }}"
-                             target="_blank">
-                            Lihat bukti
-                          </a>
-                        </div>
-                      @endif
+                        $maxNominal = $unitPrice * $maxQty;
 
-                      @if(!$disabled)
-                        <input type="file"
-                               class="form-control form-control-sm"
-                               name="items[{{ $row->id }}][payment_proof]">
-                        <div class="form-text small">
-                          Wajib diisi untuk metode transfer.
-                        </div>
-                      @endif
-                    </td>
-                    <td data-label="Status Payment">
-                      <span class="badge {{ $statusBadge }}">
-                        {{ strtoupper($status) }}
-                      </span>
-                      @if($status === 'rejected' && $row->payment_reject_reason)
-                        <div class="small text-danger mt-1">
-                          {{ $row->payment_reject_reason }}
-                        </div>
-                      @endif
-                    </td>
-                  </tr>
-                @empty
-                  <tr>
-                    <td colspan="12" class="text-center text-muted">
-                      Tidak ada item pada handover ini.
-                    </td>
-                  </tr>
-                @endforelse
+                        $productName = $row->product?->name ?? ('Produk #' . $row->product_id);
+                        $productCode = $row->product?->product_code ?? '';
+
+                        $lineStart = (int) ($row->line_total_start ?? ($row->qty_start * $unitPrice));
+                        $lineSold  = (int) ($row->line_total_sold  ?? ($row->qty_sold  * $unitPrice));
+
+                        $payStatusKey = $row->payment_status ?: 'draft';
+                        $payBadge     = $paymentBadgeMap[$payStatusKey] ?? $paymentBadgeMap['draft'];
+
+                        // ✅ LOCK: pending/approved terkunci, rejected/draft boleh edit
+                        $isLocked = ! $canEditPayment || in_array($payStatusKey, ['pending','approved'], true);
+                    @endphp
+
+                    <tr class="js-payment-row"
+                        data-unit-price="{{ $unitPrice }}"
+                        data-max-qty="{{ $maxQty }}"
+                        data-max-amount="{{ $maxNominal }}">
+
+                        {{-- PRODUK --}}
+                        <td data-label="Produk">
+                            <div class="product-name">{{ $productName }}</div>
+                            @if($productCode)
+                                <div class="product-code text-muted">{{ $productCode }}</div>
+                            @endif
+                        </td>
+
+                        {{-- DIBAWA --}}
+                        <td class="text-end" data-label="Dibawa">{{ (int) $row->qty_start }}</td>
+
+                        {{-- KEMBALI --}}
+                        <td class="text-end" data-label="Kembali">{{ (int) $row->qty_returned }}</td>
+
+                        {{-- TERJUAL --}}
+                        <td class="text-end" data-label="Terjual">{{ (int) $row->qty_sold }}</td>
+
+                        {{-- HARGA --}}
+                        <td class="text-end" data-label="Harga">{{ number_format($unitPrice, 0, ',', '.') }}</td>
+
+                        {{-- NILAI DIBAWA --}}
+                        <td class="text-end" data-label="Nilai Dibawa">{{ number_format($lineStart, 0, ',', '.') }}</td>
+
+                        {{-- NILAI TERJUAL --}}
+                        <td class="text-end" data-label="Nilai Terjual">{{ number_format($lineSold, 0, ',', '.') }}</td>
+
+                        {{-- QTY BAYAR --}}
+                        <td data-label="Qty Bayar">
+                            <input type="number"
+                                  class="form-control form-control-sm js-qty-bayar"
+                                  name="items[{{ $row->id }}][payment_qty]"
+                                  min="0"
+                                  max="{{ $maxQty }}"
+                                  value="{{ old("items.$row->id.payment_qty", $row->payment_qty) }}"
+                                  @disabled($isLocked)>
+                        </td>
+
+                        {{-- METODE --}}
+                        <td data-label="Metode">
+                            @php
+                                $oldMethod = old("items.$row->id.payment_method");
+                                $valMethod = $oldMethod !== null ? $oldMethod : $row->payment_method;
+                            @endphp
+                            <select name="items[{{ $row->id }}][payment_method]"
+                                    class="form-select form-select-sm"
+                                    @disabled($isLocked)>
+                                <option value="">- Pilih -</option>
+                                <option value="cash"     @selected($valMethod === 'cash')>Cash</option>
+                                <option value="transfer" @selected($valMethod === 'transfer')>Transfer</option>
+                            </select>
+                        </td>
+
+                        {{-- NOMINAL --}}
+                        <td data-label="Nominal">
+                            <input type="number"
+                                  class="form-control form-control-sm js-nominal"
+                                  name="items[{{ $row->id }}][payment_amount]"
+                                  min="0"
+                                  max="{{ $maxNominal }}"
+                                  value="{{ old("items.$row->id.payment_amount", $row->payment_amount) }}"
+                                  @disabled($isLocked)>
+                        </td>
+
+                        {{-- BUKTI TF --}}
+                        <td data-label="Bukti TF">
+                            @if($row->payment_transfer_proof_path)
+                                <div class="mb-1">
+                                    <a href="{{ asset('storage/'.$row->payment_transfer_proof_path) }}" target="_blank">
+                                        Lihat Bukti
+                                    </a>
+                                </div>
+                            @endif
+                            <input type="file"
+                                  class="form-control form-control-sm"
+                                  name="items[{{ $row->id }}][payment_proof]"
+                                  @disabled($isLocked)>
+                        </td>
+
+                        {{-- STATUS PAYMENT --}}
+                        <td data-label="Status Payment">
+                            <span class="badge {{ $payBadge }}">
+                                {{ strtoupper($payStatusKey) }}
+                            </span>
+                            @if($row->payment_status === 'rejected' && $row->payment_reject_reason)
+                                <div class="small text-danger mt-1">
+                                    {{ $row->payment_reject_reason }}
+                                </div>
+                            @endif
+                        </td>
+                    </tr>
+                @endforeach
                 </tbody>
-              </table>
+              </table> {{-- ✅ ini yang tadi ketutup --}}
             </div>
 
             @if($canEditPayment && $items->count())
@@ -350,7 +372,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const tokenMeta     = document.querySelector('meta[name="csrf-token"]');
     const token         = tokenMeta ? tokenMeta.getAttribute('content') : '';
 
-    // ================== OTP MODAL PAGI ==================
     if (hasHandover && !isOtpVerified) {
         showOtpModal();
     }
@@ -370,16 +391,12 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         let json;
-        try {
-            json = await res.json();
-        } catch (e) {
-            throw new Error('Server mengembalikan respon tidak valid.');
-        }
+        try { json = await res.json(); }
+        catch (e) { throw new Error('Server mengembalikan respon tidak valid.'); }
 
         if (!res.ok || !json.success) {
             throw new Error(json.message || 'Gagal verifikasi OTP.');
         }
-
         return json;
     }
 
@@ -390,11 +407,7 @@ document.addEventListener('DOMContentLoaded', function () {
             input: 'text',
             inputLabel: 'Kode OTP',
             inputPlaceholder: 'Contoh: 123456',
-            inputAttributes: {
-                maxlength: 10,
-                autocapitalize: 'off',
-                autocorrect: 'off'
-            },
+            inputAttributes: { maxlength: 10, autocapitalize: 'off', autocorrect: 'off' },
             allowOutsideClick: false,
             showCancelButton: false,
             confirmButtonText: 'Verifikasi',
@@ -405,13 +418,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     Swal.showValidationMessage('Kode OTP tidak boleh kosong.');
                     return false;
                 }
-
-                try {
-                    await submitOtp(code);
-                } catch (err) {
-                    Swal.showValidationMessage(err.message);
-                    return false;
-                }
+                try { await submitOtp(code); }
+                catch (err) { Swal.showValidationMessage(err.message); return false; }
             }
         });
 
@@ -423,43 +431,84 @@ document.addEventListener('DOMContentLoaded', function () {
                 timer: 1500,
                 showConfirmButton: false
             });
-
             window.location.reload();
         }
     }
 
-    // ================== SWEETALERT FLASH MESSAGE ==================
-
     @if (session('success'))
-        Swal.fire({
-            icon: 'success',
-            title: 'Berhasil',
-            html: {!! json_encode(session('success')) !!},
-        });
+        Swal.fire({ icon: 'success', title: 'Berhasil', html: {!! json_encode(session('success')) !!} });
     @endif
 
     @if (session('error'))
-        Swal.fire({
-            icon: 'error',
-            title: 'Gagal',
-            html: {!! json_encode(session('error')) !!},
-        });
+        Swal.fire({ icon: 'error', title: 'Gagal', html: {!! json_encode(session('error')) !!} });
     @endif
 
     @if ($errors->any())
         const errorList = {!! json_encode($errors->all()) !!};
         let errorHtml = '<ul style="text-align:left;margin:0;padding-left:20px;">';
-        errorList.forEach(function (msg) {
-            errorHtml += '<li>' + msg + '</li>';
-        });
+        errorList.forEach(function (msg) { errorHtml += '<li>' + msg + '</li>'; });
         errorHtml += '</ul>';
 
-        Swal.fire({
-            icon: 'error',
-            title: 'Validasi gagal',
-            html: errorHtml,
-        });
+        Swal.fire({ icon: 'error', title: 'Validasi gagal', html: errorHtml });
     @endif
 });
+
+(function () {
+    const form = document.getElementById('paymentForm');
+    if (!form) return;
+
+    const rows = document.querySelectorAll('.js-payment-row');
+
+    function clampNumber(value, min, max) {
+        let v = parseInt(value || 0, 10);
+        if (isNaN(v)) v = 0;
+        if (v < min) v = min;
+        if (v > max) v = max;
+        return v;
+    }
+
+    rows.forEach(row => {
+        const unitPrice    = parseInt(row.dataset.unitPrice || '0', 10);
+        const maxQty       = parseInt(row.dataset.maxQty || '0', 10);
+        const maxAmount    = parseInt(row.dataset.maxAmount || '0', 10);
+        const qtyInput     = row.querySelector('.js-qty-bayar');
+        const nominalInput = row.querySelector('.js-nominal');
+
+        if (!qtyInput || !nominalInput) return;
+
+        qtyInput.addEventListener('input', function () {
+            let qty = clampNumber(this.value, 0, maxQty);
+            this.value = qty;
+
+            let nominal = qty * unitPrice;
+            if (nominal > maxAmount) nominal = maxAmount;
+            if (nominal < 0) nominal = 0;
+
+            nominalInput.value = nominal;
+        });
+
+        nominalInput.addEventListener('input', function () {
+            let val = clampNumber(this.value, 0, maxAmount);
+            this.value = val;
+        });
+    });
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        Swal.fire({
+            title: 'Simpan data penjualan?',
+            text: 'Pastikan qty & nominal sudah benar. Setelah disimpan, data akan dikunci untuk approval admin.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Ya, sudah benar',
+            cancelButtonText: 'Cek lagi'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                form.submit();
+            }
+        });
+    });
+})();
 </script>
 @endpush
