@@ -99,13 +99,6 @@ Route::middleware(['auth','active'])->group(function () {
         ->except(['create','edit','show'])
         ->middleware('menu:products');
 
-     // key: stockproducts
-
-    // key: stock_adjustments
-    Route::get('stock-adjustments', [StockAdjustmentController::class, 'index'])
-        ->name('stock-adjustments.index')
-        ->middleware('menu:stock_adjustments');
-
 // Stock Adjustments
 Route::get('stock-adjustments', [StockAdjustmentController::class, 'index'])
     ->name('stock-adjustments.index')
@@ -206,13 +199,14 @@ Route::get('/stock-adjustments/export/excel', [StockAdjustmentController::class,
         ->name('po.cancel')
         ->middleware('menu:po');
         
-    Route::post('/{po}/approve',      [PreOController::class, 'approve'])
+    Route::post('/po/{po}/approve', [PreOController::class, 'approve'])
         ->name('po.approve')
         ->middleware('menu:po');
 
+
     Route::post('/po/{po}/approve-proc', [PreOController::class,'approveProcurement'])
-    ->name('po.approve.proc')
-    ->middleware('menu:po');
+        ->name('po.approve.proc')
+        ->middleware('menu:po');
 
     Route::post('/po/{po}/reject-proc', [PreOController::class,'rejectProcurement'])
         ->name('po.reject.proc')

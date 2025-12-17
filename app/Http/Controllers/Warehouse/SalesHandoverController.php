@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use App\Mail\SalesHandoverOtpMail;
+use Illuminate\Support\Collection;
 
 class SalesHandoverController extends Controller
 {
@@ -621,218 +622,97 @@ class SalesHandoverController extends Controller
      * - update stok (sales -> warehouse & sales -> customer)
      * - status: waiting_evening_otp -> closed
      */
-    public function verifyEveningOtp(Request $request)
-    {
-        $data = $request->validate([
-            'handover_id' => ['required', 'exists:sales_handovers,id'],
-            'otp_code'    => ['required', 'digits:6'],
-        ]);
 
-        $handover = SalesHandover::with(['items.product', 'warehouse', 'sales'])
-            ->findOrFail($data['handover_id']);
-
-        if ($handover->status !== 'waiting_evening_otp') {
-            return back()->with('error', "Status handover harus 'waiting_evening_otp' untuk verifikasi OTP sore.");
-        }
-        
-        [$storedPlain, $storedHash] = $this->splitOtpField($handover->evening_otp_hash);
-
-        if (! $storedHash || ! Hash::check($data['otp_code'], $storedHash)) {
-            return back()->with('error', 'OTP sore tidak valid.');
-        }
-
-        // >>> NEW: pastikan semua payment item sudah APPROVED <<<
-        $hasUnapproved = $handover->items()
-            ->where('qty_sold', '>', 0)                 // cuma yang benar-benar terjual
-            ->where('payment_status', '!=', 'approved') // pending / rejected
-            ->exists();
-
-        if ($hasUnapproved) {
-            return back()->with('error', 'Masih ada item terjual yang payment-nya belum APPROVED.');
-        }
-        // <<< END NEW >>>
-
-        $me = auth()->user();
-
-        try {
-            DB::beginTransaction();
-
-            foreach ($handover->items as $item) {
-                $product = $item->product;
-                if (! $product) {
-                    continue;
-                }
-
-                $qtyStart = (int) $item->qty_start;
-                $qtyRet   = (int) $item->qty_returned;
-                $qtySold  = (int) $item->qty_sold;
-
-                // Stok sales: kurangi semua qty_start
-                $salesStock = DB::table('stock_levels')
-                    ->where('owner_type', 'sales')
-                    ->where('owner_id', $handover->sales_id)
-                    ->where('product_id', $product->id)
-                    ->lockForUpdate()
-                    ->first();
-
-                if (! $salesStock || $salesStock->quantity < $qtyStart) {
-                    throw new \RuntimeException("Stok sales kurang untuk produk {$product->name}.");
-                }
-
-                DB::table('stock_levels')
-                    ->where('id', $salesStock->id)
-                    ->update([
-                        'quantity'   => $salesStock->quantity - $qtyStart,
-                        'updated_at' => now(),
-                    ]);
-
-                // Qty kembali: sales -> warehouse
-                if ($qtyRet > 0) {
-                    $whStock = DB::table('stock_levels')
-                        ->where('owner_type', 'warehouse')
-                        ->where('owner_id', $handover->warehouse_id)
-                        ->where('product_id', $product->id)
-                        ->lockForUpdate()
-                        ->first();
-
-                    if ($whStock) {
-                        DB::table('stock_levels')
-                            ->where('id', $whStock->id)
-                            ->update([
-                                'quantity'   => $whStock->quantity + $qtyRet,
-                                'updated_at' => now(),
-                            ]);
-                    } else {
-                        DB::table('stock_levels')->insert([
-                            'owner_type' => 'warehouse',
-                            'owner_id'   => $handover->warehouse_id,
-                            'product_id' => $product->id,
-                            'quantity'   => $qtyRet,
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ]);
-                    }
-
-                    $movement = [
-                        'product_id' => $product->id,
-                        'from_type'  => 'sales',
-                        'from_id'    => $handover->sales_id,
-                        'to_type'    => 'warehouse',
-                        'to_id'      => $handover->warehouse_id,
-                        'quantity'   => $qtyRet,
-                        'note'       => "Handover {$handover->code} (return sore)",
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ];
-
-                    if (Schema::hasColumn('stock_movements', 'status')) {
-                        $movement['status'] = 'completed';
-                    }
-
-                    DB::table('stock_movements')->insert($movement);
-                }
-
-                // Qty terjual: sales -> customer
-                if ($qtySold > 0) {
-                    $movement = [
-                        'product_id' => $product->id,
-                        'from_type'  => 'sales',
-                        'from_id'    => $handover->sales_id,
-                        'to_type'    => 'sales',
-                        'to_id'      => 0,
-                        'quantity'   => $qtySold,
-                        'note'       => "Handover {$handover->code} (sold closing)",
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ];
-
-                    if (Schema::hasColumn('stock_movements', 'status')) {
-                        $movement['status'] = 'completed';
-                    }
-
-                    DB::table('stock_movements')->insert($movement);
-                }
-            }
-
-            $handover->status                  = 'closed';
-            $handover->closed_by               = $me->id;
-            $handover->evening_otp_verified_at = now();
-            $handover->save();
-
-            DB::commit();
-        } catch (\Throwable $e) {
-            DB::rollBack();
-
-            return back()->with('error', 'Gagal verifikasi OTP sore: ' . $e->getMessage());
-        }
-
-        return back()->with(
-            'success',
-            "OTP sore valid. Stok sudah diupdate dan handover {$handover->code} ditutup (closed)."
-        );
-    }
 
     /**
      * DAILY REPORT (ADMIN/WAREHOUSE VIEW)
      */
     public function warehouseSalesReport(Request $request)
     {
+        return $this->reportIndex($request);
+    }
+
+    public function salesReport(Request $request)
+    {
+        return $this->reportIndex($request);
+    }
+
+    private function reportIndex(Request $request)
+    {
         $me    = auth()->user();
         $roles = $me?->roles ?? collect();
 
         $isWarehouse = $roles->contains('slug', 'warehouse');
         $isSales     = $roles->contains('slug', 'sales');
-        $isAdminLike = $roles->contains('slug', 'admin')
-                       || $roles->contains('slug', 'superadmin');
+        $isAdminLike = $roles->contains('slug', 'admin') || $roles->contains('slug', 'superadmin');
 
-        $dateFrom = $request->query('date_from', now()->format('Y-m-d'));
-        $dateTo   = $request->query('date_to',   now()->format('Y-m-d'));
-        if ($dateFrom > $dateTo) {
-            [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
-        }
+        $dateFrom = $request->query('date_from', now()->toDateString());
+        $dateTo   = $request->query('date_to',   now()->toDateString());
+        if ($dateFrom > $dateTo) [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
 
-        $status      = $request->query('status', 'all');
+        $status      = (string) $request->query('status', 'all');
         $warehouseId = $request->query('warehouse_id');
         $salesId     = $request->query('sales_id');
-        $search      = trim($request->query('q', ''));
+        $search      = trim((string) $request->query('q', ''));
+
+        // view: handover | sales | daily
+        $view = (string) $request->query('view', 'handover');
+        if (!in_array($view, ['handover','sales','daily'], true)) $view = 'handover';
 
         $statusOptions = [
             'all'                 => 'Semua Status',
             'draft'               => 'Draft',
             'waiting_morning_otp' => 'Menunggu OTP Pagi',
             'on_sales'            => 'On Sales',
-            'waiting_evening_otp' => 'Menunggu OTP Sore',
+            'waiting_evening_otp' => 'Menunggu Closing (Legacy)',
             'closed'              => 'Closed',
             'cancelled'           => 'Cancelled',
         ];
 
-        // Admin warehouse murni -> kunci ke warehouse dia
+        // ===== LOCK RULES (ini yang bikin sales cuma lihat data dia) =====
         if ($isWarehouse && $me->warehouse_id && ! $isAdminLike) {
             $warehouseId = $me->warehouse_id;
         }
 
-        $query = SalesHandover::with(['warehouse', 'sales'])
+        if ($isSales && ! $isAdminLike && ! $isWarehouse) {
+            $salesId = $me->id;
+            if ($me->warehouse_id) $warehouseId = $me->warehouse_id;
+        }
+
+        // ===== QUERY HANDOVER =====
+        $query = SalesHandover::with(['warehouse','sales'])
             ->whereBetween('handover_date', [$dateFrom, $dateTo]);
 
-        if ($status !== 'all') {
-            $query->where('status', $status);
-        }
+        if ($status !== 'all') $query->where('status', $status);
+        if ($warehouseId)      $query->where('warehouse_id', $warehouseId);
+        if ($salesId)          $query->where('sales_id', $salesId);
 
-        if ($warehouseId) {
-            $query->where('warehouse_id', $warehouseId);
-        }
-
-        if ($salesId) {
-            $query->where('sales_id', $salesId);
-        }
+        // ===== SEARCH (FIX: jangan pernah sentuh column warehouses.name kalau kolomnya ga ada) =====
+        $hasWhNameCol = Schema::hasColumn('warehouses', 'warehouse_name');
+        $hasWhCodeCol = Schema::hasColumn('warehouses', 'warehouse_code');
+        $hasWhNameLegacyCol = Schema::hasColumn('warehouses', 'name'); // jaga-jaga kalau DB lama masih ada
 
         if ($search !== '') {
             $q = "%{$search}%";
-            $query->where(function ($sub) use ($q) {
+            $query->where(function ($sub) use ($q, $hasWhNameCol, $hasWhCodeCol, $hasWhNameLegacyCol) {
                 $sub->where('code', 'like', $q)
-                    ->orWhereHas('warehouse', function ($w) use ($q) {
-                        $w->where('warehouse_name', 'like', $q)
-                          ->orWhere('warehouse_code', 'like', $q);
+                    ->orWhereHas('warehouse', function ($w) use ($q, $hasWhNameCol, $hasWhCodeCol, $hasWhNameLegacyCol) {
+                        // NOTE: builder pertama pakai where, sisanya orWhere (biar ga error SQL)
+                        $first = true;
+
+                        if ($hasWhNameCol) {
+                            $w->where('warehouse_name', 'like', $q);
+                            $first = false;
+                        }
+
+                        if ($hasWhNameLegacyCol) {
+                            $first ? $w->where('name', 'like', $q) : $w->orWhere('name', 'like', $q);
+                            $first = false;
+                        }
+
+                        if ($hasWhCodeCol) {
+                            $first ? $w->where('warehouse_code', 'like', $q) : $w->orWhere('warehouse_code', 'like', $q);
+                        }
                     })
                     ->orWhereHas('sales', function ($s) use ($q) {
                         $s->where('name', 'like', $q);
@@ -840,253 +720,461 @@ class SalesHandoverController extends Controller
             });
         }
 
-        $handovers = $query->orderBy('handover_date', 'desc')
-            ->orderBy('code')
-            ->get();
+        $handovers = $query->orderBy('handover_date', 'desc')->orderBy('code')->get();
+
+        [$rows, $summary] = $this->makeReportData($handovers, $statusOptions, $dateFrom, $dateTo, $view);
 
         if ($request->ajax()) {
-            return $this->buildReportJson($handovers, $statusOptions, $dateFrom, $dateTo);
+            return response()->json([
+                'success' => true,
+                'view'    => $view,
+                'rows'    => $rows,
+                'summary' => $summary,
+            ]);
         }
 
-        $totalDispatched = (int) $handovers->sum('total_dispatched_amount');
-        $totalSold       = (int) $handovers->sum('total_sold_amount');
-        $totalDiff       = max(0, $totalDispatched - $totalSold);
-
-        // ===== Dropdown warehouse & sales =====
+        // ===== DROPDOWN DATA (FIX UTAMA: jangan select warehouses.name kalau kolom ga ada) =====
         $whQuery = Warehouse::query();
-        if ($isWarehouse && $me->warehouse_id && ! $isAdminLike) {
-            $whQuery->where('id', $me->warehouse_id);
+
+        // warehouse user => kunci ke warehouse dia
+        // sales murni => kunci ke warehouse dia juga (biar UI sama & aman)
+        if (($isWarehouse && $me->warehouse_id && ! $isAdminLike) || ($isSales && ! $isAdminLike && ! $isWarehouse && $me->warehouse_id)) {
+            $whQuery->where('id', $warehouseId);
         }
 
-        $warehouses = $whQuery
-            ->orderBy(DB::raw('COALESCE(warehouse_name, warehouse_code, id)'))
-            ->get(['id', 'warehouse_name', 'warehouse_code']);
+        // orderBy aman (tanpa "name")
+        $whQuery->orderBy(DB::raw('COALESCE(warehouse_name, warehouse_code, id)'));
 
-        $salesQuery = User::whereHas('roles', fn ($q) => $q->where('slug', 'sales'));
+        $whSelect = ['id'];
+        if ($hasWhNameCol) $whSelect[] = 'warehouse_name';
+        if ($hasWhCodeCol) $whSelect[] = 'warehouse_code';
+        if ($hasWhNameLegacyCol) $whSelect[] = 'name'; // cuma kalau kolomnya beneran ada
+        $warehouses = $whQuery->get($whSelect);
 
-        if ($warehouseId) {
-            $salesQuery->where('warehouse_id', $warehouseId);
-        } elseif ($isWarehouse && $me->warehouse_id && ! $isAdminLike) {
-            $salesQuery->where('warehouse_id', $me->warehouse_id);
+        $salesQuery = User::whereHas('roles', fn($q) => $q->where('slug','sales'));
+        if ($warehouseId) $salesQuery->where('warehouse_id', $warehouseId);
+
+        // sales murni => list cuma dirinya
+        if ($isSales && ! $isAdminLike && ! $isWarehouse) {
+            $salesQuery->where('id', $me->id);
         }
 
-        $salesList = $salesQuery->orderBy('name')->get(['id', 'name']);
+        $salesList = $salesQuery->orderBy('name')->get(['id','name']);
 
         return view('wh.handover_report', [
-            'me'              => $me,
-            'handovers'       => $handovers,
-            'dateFrom'        => $dateFrom,
-            'dateTo'          => $dateTo,
-            'status'          => $status,
-            'statusOptions'   => $statusOptions,
-            'warehouseId'     => $warehouseId,
-            'salesId'         => $salesId,
-            'warehouses'      => $warehouses,
-            'salesList'       => $salesList,
-            'totalDispatched' => $totalDispatched,
-            'totalSold'       => $totalSold,
-            'totalDiff'       => $totalDiff,
-            'search'          => $search,
+            'me'            => $me,
+            'rows'          => $rows,
+            'summary'       => $summary,
+            'view'          => $view,
+
+            'dateFrom'      => $dateFrom,
+            'dateTo'        => $dateTo,
+            'status'        => $status,
+            'statusOptions' => $statusOptions,
+
+            'warehouseId'   => $warehouseId,
+            'salesId'       => $salesId,
+            'warehouses'    => $warehouses,
+            'salesList'     => $salesList,
+            'search'        => $search,
         ]);
     }
 
-    /**
-     * DAILY REPORT versi halaman SALES (tapi view-nya sama)
-     */
-    public function salesReport(Request $request)
+    private function makeReportData($handovers, array $statusOptions, string $dateFrom, string $dateTo, string $view): array
     {
+        // ===== SUMMARY (TOP) =====
+        $totalHdo = (int) $handovers->count();
+
+        $totalSoldClosed = (int) $handovers
+            ->where('status', 'closed')
+            ->sum(fn($h) => (int) ($h->total_sold_amount ?? 0));
+
+        $totalDiff = (int) $handovers->sum(function ($h) {
+            $dispatched = (int) ($h->total_dispatched_amount ?? 0);
+            $sold       = (int) ($h->total_sold_amount ?? 0);
+            return max(0, $dispatched - $sold);
+        });
+
+        $summary = [
+            'total_hdo_text'        => $totalHdo . ' HDO',
+            'total_sold_formatted'  => $this->formatRp($totalSoldClosed),
+            'total_diff_formatted'  => $this->formatRp($totalDiff),
+            'period_text'           => $dateFrom . ' s/d ' . $dateTo,
+            'view'                  => $view,
+        ];
+
+        // ===== ROWS =====
+        $rows = [];
+
+        if ($view === 'handover') {
+            foreach ($handovers->values() as $i => $h) {
+                $wh = $h->warehouse;
+                $warehouseLabel = $wh->warehouse_name ?? $wh->name ?? $wh->warehouse_code ?? ('Warehouse #'.$h->warehouse_id);
+
+                $salesLabel = optional($h->sales)->name ?? ('Sales #'.$h->sales_id);
+
+                $dispatched = (int) ($h->total_dispatched_amount ?? 0);
+                $sold       = (int) ($h->total_sold_amount ?? 0);
+                $diff       = max(0, $dispatched - $sold);
+
+                $stLabel = $statusOptions[$h->status] ?? $h->status;
+
+                $badgeClass = 'bg-label-secondary';
+                if ($h->status === 'closed') $badgeClass = 'bg-label-success';
+                elseif ($h->status === 'on_sales') $badgeClass = 'bg-label-info';
+                elseif ($h->status === 'waiting_morning_otp' || $h->status === 'waiting_evening_otp') $badgeClass = 'bg-label-warning';
+                elseif ($h->status === 'cancelled') $badgeClass = 'bg-label-danger';
+
+                $dateText = $h->handover_date ? (string) $h->handover_date : null;
+                if ($h->handover_date instanceof \Carbon\CarbonInterface) $dateText = $h->handover_date->toDateString();
+
+                $rows[] = [
+                    'no'                 => $i + 1,
+                    'id'                 => $h->id,
+                    'date'               => $dateText,
+                    'code'               => $h->code,
+                    'warehouse'          => $warehouseLabel,
+                    'sales'              => $salesLabel,
+                    'status_label'       => $stLabel,
+                    'status_badge_class' => $badgeClass,
+                    'amount_dispatched'  => $this->formatRp($dispatched),
+                    'amount_sold'        => $this->formatRp($sold),
+                    'amount_diff'        => $this->formatRp($diff),
+                ];
+            }
+
+            return [$rows, $summary];
+        }
+
+        if ($view === 'sales') {
+            $grouped = $handovers->groupBy('sales_id');
+
+            $idx = 1;
+            foreach ($grouped as $salesId => $list) {
+                $first = $list->first();
+
+                $wh = optional($first)->warehouse;
+                $warehouseLabel = $wh?->warehouse_name ?? $wh?->name ?? $wh?->warehouse_code ?? ('Warehouse #'.($first->warehouse_id ?? '-'));
+
+                $salesLabel = optional($first->sales)->name ?? ('Sales #'.$salesId);
+
+                $handoverCount = (int) $list->count();
+                $sumDispatched = (int) $list->sum(fn($h) => (int) ($h->total_dispatched_amount ?? 0));
+                $sumSoldClosed = (int) $list->where('status','closed')->sum(fn($h) => (int) ($h->total_sold_amount ?? 0));
+                $sumSetor      = (int) $list->sum(function ($h) {
+                    $cash = (int) ($h->cash_amount ?? 0);
+                    $tf   = (int) ($h->transfer_amount ?? 0);
+                    return $cash + $tf;
+                });
+
+                $rows[] = [
+                    'no'               => $idx++,
+                    'sales_id'         => (int) $salesId,
+                    'sales'            => $salesLabel,
+                    'warehouse'         => $warehouseLabel,
+                    'handover_count'   => $handoverCount,
+                    'amount_dispatched'=> $this->formatRp($sumDispatched),
+                    'amount_sold'      => $this->formatRp($sumSoldClosed),
+                    'amount_setor'     => $this->formatRp($sumSetor),
+                ];
+            }
+
+            return [$rows, $summary];
+        }
+
+        // view === 'daily'
+        $grouped = $handovers->groupBy(function ($h) {
+            if ($h->handover_date instanceof \Carbon\CarbonInterface) return $h->handover_date->toDateString();
+            return (string) $h->handover_date;
+        });
+
+        $dates = $grouped->keys()->sortDesc()->values();
+
+        foreach ($dates as $i => $date) {
+            $list = $grouped[$date];
+
+            $handoverCount = (int) $list->count();
+            $sumDispatched = (int) $list->sum(fn($h) => (int) ($h->total_dispatched_amount ?? 0));
+            $sumSoldClosed = (int) $list->where('status','closed')->sum(fn($h) => (int) ($h->total_sold_amount ?? 0));
+            $sumSetor      = (int) $list->sum(function ($h) {
+                $cash = (int) ($h->cash_amount ?? 0);
+                $tf   = (int) ($h->transfer_amount ?? 0);
+                return $cash + $tf;
+            });
+
+            $rows[] = [
+                'no'               => $i + 1,
+                'date'             => $date,
+                'handover_count'   => $handoverCount,
+                'amount_dispatched'=> $this->formatRp($sumDispatched),
+                'amount_sold'      => $this->formatRp($sumSoldClosed),
+                'amount_setor'     => $this->formatRp($sumSetor),
+            ];
+        }
+
+        return [$rows, $summary];
+    }
+
+    private function formatRp(int $num): string
+    {
+        return 'Rp ' . number_format($num, 0, ',', '.');
+    }
+
+    // =========================
+    // DETAIL (JSON FOR MODAL)
+    // =========================
+    public function warehouseSalesReportDetail(SalesHandover $handover, Request $request)
+    {
+        return $this->detailJson($handover);
+    }
+
+    public function salesReportDetail(SalesHandover $handover, Request $request)
+    {
+        // safety: sales murni cuma boleh lihat handover dia sendiri
         $me    = auth()->user();
         $roles = $me?->roles ?? collect();
 
         $isWarehouse = $roles->contains('slug', 'warehouse');
         $isSales     = $roles->contains('slug', 'sales');
-        $isAdminLike = $roles->contains('slug', 'admin')
-                       || $roles->contains('slug', 'superadmin');
+        $isAdminLike = $roles->contains('slug', 'admin') || $roles->contains('slug', 'superadmin');
 
-        // ===== Filter dasar =====
-        $dateFrom = $request->query('date_from', now()->format('Y-m-d'));
-        $dateTo   = $request->query('date_to',   now()->format('Y-m-d'));
-        if ($dateFrom > $dateTo) {
-            [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
-        }
-
-        $status      = $request->query('status', 'all');
-        $warehouseId = $request->query('warehouse_id');
-        $salesId     = $request->query('sales_id');
-        $search      = trim($request->query('q', ''));
-
-        $statusOptions = [
-            'all'                 => 'Semua Status',
-            'draft'               => 'Draft',
-            'waiting_morning_otp' => 'Menunggu OTP Pagi',
-            'on_sales'            => 'On Sales',
-            'waiting_evening_otp' => 'Menunggu OTP Sore',
-            'closed'              => 'Closed',
-            'cancelled'           => 'Cancelled',
-        ];
-
-        // ===== Batasan khusus SALES murni =====
         if ($isSales && ! $isAdminLike && ! $isWarehouse) {
-            $salesId     = $me->id;
-            $warehouseId = $me->warehouse_id ?: null;
+            if ((int) $handover->sales_id !== (int) $me->id) {
+                abort(403);
+            }
         }
 
-        // ===== Query utama =====
-        $query = SalesHandover::with(['warehouse', 'sales'])
-            ->whereBetween('handover_date', [$dateFrom, $dateTo]);
-
-        if ($status !== 'all') {
-            $query->where('status', $status);
-        }
-
-        if ($warehouseId) {
-            $query->where('warehouse_id', $warehouseId);
-        }
-
-        if ($salesId) {
-            $query->where('sales_id', $salesId);
-        }
-
-        if ($search !== '') {
-            $q = "%{$search}%";
-            $query->where(function ($sub) use ($q) {
-                $sub->where('code', 'like', $q)
-                    ->orWhereHas('warehouse', function ($w) use ($q) {
-                        $w->where('warehouse_name', 'like', $q)
-                          ->orWhere('warehouse_code', 'like', $q);
-                    })
-                    ->orWhereHas('sales', function ($s) use ($q) {
-                        $s->where('name', 'like', $q);
-                    });
-            });
-        }
-
-        $handovers = $query->orderBy('handover_date', 'desc')
-            ->orderBy('code')
-            ->get();
-
-        if ($request->ajax()) {
-            return $this->buildReportJson($handovers, $statusOptions, $dateFrom, $dateTo);
-        }
-
-        $totalDispatched = (int) $handovers->sum('total_dispatched_amount');
-        $totalSold       = (int) $handovers->sum('total_sold_amount');
-        $totalDiff       = max(0, $totalDispatched - $totalSold);
-
-        // ===== Data dropdown WAREHOUSE & SALES =====
-        $whQuery = Warehouse::query();
-
-        // Sales murni -> kalau punya warehouse_id, kunci ke situ
-        if ($isSales && ! $isAdminLike && ! $isWarehouse && $me->warehouse_id) {
-            $whQuery->where('id', $me->warehouse_id);
-        }
-
-        $warehouses = $whQuery
-            ->orderBy(DB::raw('COALESCE(warehouse_name, warehouse_code, id)'))
-            ->get(['id', 'warehouse_name', 'warehouse_code']);
-
-        $salesQuery = User::whereHas('roles', fn ($q) => $q->where('slug', 'sales'));
-
-        if ($warehouseId) {
-            $salesQuery->where('warehouse_id', $warehouseId);
-        }
-
-        $salesList = $salesQuery->orderBy('name')->get(['id', 'name']);
-
-        return view('wh.handover_report', [
-            'me'              => $me,
-            'handovers'       => $handovers,
-            'dateFrom'        => $dateFrom,
-            'dateTo'          => $dateTo,
-            'status'          => $status,
-            'statusOptions'   => $statusOptions,
-            'warehouseId'     => $warehouseId,
-            'salesId'         => $salesId,
-            'warehouses'      => $warehouses,
-            'salesList'       => $salesList,
-            'totalDispatched' => $totalDispatched,
-            'totalSold'       => $totalSold,
-            'totalDiff'       => $totalDiff,
-            'search'          => $search,
-        ]);
+        return $this->detailJson($handover);
     }
 
-    /**
-     * DETAIL HANDOVER – dipakai modal (sales & warehouse report)
-     */
-    public function salesReportDetail(SalesHandover $handover)
+    private function detailJson(SalesHandover $handover)
     {
-        return $this->buildHandoverDetailResponse($handover);
-    }
+        // load relations kalau ada
+        $handover->loadMissing(['warehouse','sales','items.product']);
 
-    public function warehouseSalesReportDetail(SalesHandover $handover)
-    {
-        return $this->buildHandoverDetailResponse($handover);
-    }
+        $wh = $handover->warehouse;
+        $sales = $handover->sales;
 
-    protected function buildHandoverDetailResponse(SalesHandover $handover)
-    {
-        $handover->load(['warehouse', 'sales', 'items.product']);
+        // bukti transfer (support beberapa nama kolom biar ga ilang lagi)
+        $proofPath = $handover->transfer_proof_path
+            ?? $handover->transfer_proof
+            ?? $handover->transfer_proof_file
+            ?? null;
 
-        $items = $handover->items->map(function (SalesHandoverItem $item) {
-            $p = $item->product;
+        $proofUrl = null;
+        if (!empty($handover->transfer_proof_url)) {
+            $proofUrl = $handover->transfer_proof_url;
+        } elseif ($proofPath) {
+            $proofUrl = Storage::url($proofPath);
+        }
 
-            return [
-                'product_id'   => $item->product_id,
-                'product_name' => $p?->name ?? ('Produk #' . $item->product_id),
-                'product_code' => $p?->product_code ?? '',
-                'qty_start'    => (int) $item->qty_start,
-                'qty_returned' => (int) $item->qty_returned,
-                'qty_sold'     => (int) $item->qty_sold,
-                'unit_price'   => (int) $item->unit_price,
-                'line_start'   => (int) $item->line_total_start,
-                'line_sold'    => (int) $item->line_total_sold,
+        $items = [];
+        if ($handover->relationLoaded('items') && $handover->items) {
+            foreach ($handover->items as $it) {
+                $p = $it->product ?? null;
 
-                // >>> NEW: info payment per item <<<
-                'payment_qty'          => (int) $item->payment_qty,
-                'payment_method'       => $item->payment_method,
-                'payment_amount'       => (int) $item->payment_amount,
-                'payment_status'       => $item->payment_status,
-                'payment_reject_reason'=> $item->payment_reject_reason,
-                'payment_proof_url'    => $item->payment_transfer_proof_path
-                                            ? asset('storage/'.$item->payment_transfer_proof_path)
-                                            : null,
-            ];
-        });
+                $qtyStart    = (int) ($it->qty_start ?? 0);
+                $qtyReturned = (int) ($it->qty_returned ?? 0);
+                $qtySold     = (int) ($it->qty_sold ?? 0);
+                $unitPrice   = (int) ($it->unit_price ?? 0);
 
-        $warehouseName = optional($handover->warehouse)->warehouse_name
-                      ?? optional($handover->warehouse)->name
-                      ?? null;
+                $items[] = [
+                    'product_name' => $p->name ?? $it->product_name ?? '-',
+                    'product_code' => $p->code ?? $it->product_code ?? null,
+                    'qty_start'    => $qtyStart,
+                    'qty_returned' => $qtyReturned,
+                    'qty_sold'     => $qtySold,
+                    'unit_price'   => $unitPrice,
+                    'line_start'   => $qtyStart * $unitPrice,
+                    'line_sold'    => $qtySold * $unitPrice,
+                ];
+            }
+        }
+
+        $totalDispatched = (int) ($handover->total_dispatched_amount ?? 0);
+        $totalSold       = (int) ($handover->total_sold_amount ?? 0);
+        $selisihStock    = max(0, $totalDispatched - $totalSold);
+
+        $cashAmount     = (int) ($handover->cash_amount ?? 0);
+        $transferAmount = (int) ($handover->transfer_amount ?? 0);
+        $setorTotal     = $cashAmount + $transferAmount;
+        $selisihJualSetor = max(0, $totalSold - $setorTotal);
 
         return response()->json([
-            'success'  => true,
+            'success' => true,
             'handover' => [
-                'id'                    => $handover->id,
-                'code'                  => $handover->code,
-                'handover_date'         => optional($handover->handover_date)->format('Y-m-d'),
-                'status'                => $handover->status,
-                'warehouse_name'        => $warehouseName,
-                'sales_name'            => $handover->sales->name ?? null,
-                'total_dispatched'      => (int) $handover->total_dispatched_amount,
-                'total_sold'            => (int) $handover->total_sold_amount,
-                'cash_amount'           => (int) $handover->cash_amount,
-                'transfer_amount'       => (int) $handover->transfer_amount,
-                'setor_total'           => (int) $handover->cash_amount + (int) $handover->transfer_amount,
-                'selisih_jual_vs_setor' => (int) $handover->total_sold_amount
-                                            - ((int) $handover->cash_amount + (int) $handover->transfer_amount),
-                'selisih_stock_value'   => (int) $handover->total_dispatched_amount
-                                            - (int) $handover->total_sold_amount,
-                'transfer_proof_url'    => $handover->transfer_proof_path
-                                            ? asset('storage/' . $handover->transfer_proof_path)
-                                            : null,
-                'morning_otp_sent_at'     => optional($handover->morning_otp_sent_at)->format('Y-m-d H:i'),
-                'morning_otp_verified_at' => optional($handover->morning_otp_verified_at)->format('Y-m-d H:i'),
-                'evening_otp_sent_at'     => optional($handover->evening_otp_sent_at)->format('Y-m-d H:i'),
-                'evening_otp_verified_at' => optional($handover->evening_otp_verified_at)->format('Y-m-d H:i'),
+                'id' => $handover->id,
+                'code' => $handover->code,
+                'status' => $handover->status,
+                'handover_date' => $handover->handover_date instanceof \Carbon\CarbonInterface
+                    ? $handover->handover_date->toDateString()
+                    : (string) $handover->handover_date,
+
+                'warehouse_name' => $wh?->warehouse_name ?? $wh?->name ?? $wh?->warehouse_code ?? '-',
+                'sales_name'     => $sales?->name ?? '-',
+
+                'morning_otp_sent_at'     => $handover->morning_otp_sent_at,
+                'morning_otp_verified_at' => $handover->morning_otp_verified_at,
+                'evening_otp_sent_at'     => $handover->evening_otp_sent_at,
+                'evening_otp_verified_at' => $handover->evening_otp_verified_at,
+
+                'total_dispatched' => $totalDispatched,
+                'total_sold'       => $totalSold,
+                'selisih_stock_value' => $selisihStock,
+
+                'cash_amount'     => $cashAmount,
+                'transfer_amount' => $transferAmount,
+                'transfer_proof_url' => $proofUrl,
+
+                'setor_total' => $setorTotal,
+                'selisih_jual_vs_setor' => $selisihJualSetor,
             ],
-            'items'   => $items,
+            'items' => $items,
         ]);
     }
+
+
+
+
+// =========================
+// VIEW: DETAIL HANDOVER ROWS
+// =========================
+protected function buildRowsByHandover(Collection $handovers, array $statusLabels): array
+{
+    return $handovers->values()->map(function (SalesHandover $h, int $idx) use ($statusLabels) {
+
+        $dispatched = (int) $h->total_dispatched_amount;
+        $sold       = (int) $h->total_sold_amount;
+        $diff       = $dispatched - $sold;
+
+        $stLabel = $statusLabels[$h->status] ?? $h->status;
+
+        $badgeClass = match ($h->status) {
+            'closed'               => 'bg-label-success',
+            'on_sales'             => 'bg-label-info',
+            'waiting_morning_otp',
+            'waiting_evening_otp'  => 'bg-label-warning',
+            'cancelled'            => 'bg-label-danger',
+            default                => 'bg-label-secondary',
+        };
+
+        $whName = optional($h->warehouse)->warehouse_name
+               ?? optional($h->warehouse)->name
+               ?? '-';
+
+        $salesName = optional($h->sales)->name ?? ('Sales #' . $h->sales_id);
+
+        return [
+            'id'                 => $h->id,
+            'no'                 => $idx + 1,
+            'date'               => optional($h->handover_date)->format('Y-m-d'),
+            'code'               => $h->code,
+            'warehouse'          => $whName,
+            'sales'              => $salesName,
+            'status'             => $h->status,
+            'status_label'       => $stLabel,
+            'status_badge_class' => $badgeClass,
+            'amount_dispatched'  => $this->formatRupiah($dispatched),
+            'amount_sold'        => $this->formatRupiah($sold),
+            'amount_diff'        => $this->formatRupiah($diff),
+        ];
+    })->toArray();
+}
+
+
+// =========================
+// VIEW: REKAP PER SALES ROWS
+// =========================
+protected function buildRowsBySales(Collection $handovers): array
+{
+    $group = $handovers->groupBy('sales_id');
+
+    $rows = [];
+    $i = 1;
+
+    foreach ($group as $salesId => $list) {
+        /** @var Collection $list */
+        $first = $list->first();
+
+        $salesName = optional($first->sales)->name ?? ('Sales #'.$salesId);
+        $whName = optional($first->warehouse)->warehouse_name
+               ?? optional($first->warehouse)->name
+               ?? '-';
+
+        $totalDispatched = (int) $list->sum('total_dispatched_amount');
+        $totalSoldClosed = (int) $list->where('status','closed')->sum('total_sold_amount');
+        $totalSetor      = (int) $list->sum(fn($h)=> (int)($h->cash_amount ?? 0) + (int)($h->transfer_amount ?? 0));
+        $diffStock       = $totalDispatched - $totalSoldClosed;
+        $diffJualSetor   = $totalSoldClosed - $totalSetor;
+
+        $rows[] = [
+            'no'                 => $i++,
+            'sales_id'           => (int) $salesId,
+            'warehouse_id'       => (int) ($first->warehouse_id ?? 0),
+            'sales'              => $salesName,
+            'warehouse'          => $whName,
+            'handover_count'     => (int) $list->count(),
+            'closed_count'       => (int) $list->where('status','closed')->count(),
+            'amount_dispatched'  => $this->formatRupiah($totalDispatched),
+            'amount_sold'        => $this->formatRupiah($totalSoldClosed),
+            'amount_setor'       => $this->formatRupiah($totalSetor),
+            'amount_diff_stock'  => $this->formatRupiah($diffStock),
+            'amount_diff_setor'  => $this->formatRupiah($diffJualSetor),
+        ];
+    }
+
+    // sort by sold desc biar enak kebaca
+    usort($rows, function($a,$b){
+        // strip "Rp " tidak perlu, pakai angka? yaudah fallback by string
+        return 0;
+    });
+
+    return $rows;
+}
+
+
+// =======================
+// VIEW: REKAP PER HARI ROWS
+// =======================
+protected function buildRowsByDay(Collection $handovers): array
+{
+    $group = $handovers->groupBy(function($h){
+        return optional($h->handover_date)->format('Y-m-d') ?? 'unknown';
+    });
+
+    $rows = [];
+    $i = 1;
+
+    foreach ($group as $date => $list) {
+        /** @var Collection $list */
+        $totalDispatched = (int) $list->sum('total_dispatched_amount');
+        $totalSoldClosed = (int) $list->where('status','closed')->sum('total_sold_amount');
+        $totalSetor      = (int) $list->sum(fn($h)=> (int)($h->cash_amount ?? 0) + (int)($h->transfer_amount ?? 0));
+
+        $diffStock     = $totalDispatched - $totalSoldClosed;
+        $diffJualSetor = $totalSoldClosed - $totalSetor;
+
+        $rows[] = [
+            'no'                 => $i++,
+            'date'               => $date,
+            'handover_count'     => (int) $list->count(),
+            'closed_count'       => (int) $list->where('status','closed')->count(),
+            'amount_dispatched'  => $this->formatRupiah($totalDispatched),
+            'amount_sold'        => $this->formatRupiah($totalSoldClosed),
+            'amount_setor'       => $this->formatRupiah($totalSetor),
+            'amount_diff_stock'  => $this->formatRupiah($diffStock),
+            'amount_diff_setor'  => $this->formatRupiah($diffJualSetor),
+        ];
+    }
+
+    // sort by date desc
+    usort($rows, fn($a,$b) => strcmp($b['date'],$a['date']));
+    // re-number
+    foreach ($rows as $k => $r) $rows[$k]['no'] = $k+1;
+
+    return $rows;
+}
+
 
 
     // ================== HELPER ==================
@@ -1099,63 +1187,7 @@ class SalesHandoverController extends Controller
     /**
      * Dipakai oleh salesReport() & warehouseSalesReport() untuk response AJAX
      */
-    protected function buildReportJson($handovers, array $statusLabels, string $dateFrom, string $dateTo)
-    {
-        $totalDispatched = (int) $handovers->sum('total_dispatched_amount');
-        $totalSold       = (int) $handovers->sum('total_sold_amount');
-        $totalDiff       = max(0, $totalDispatched - $totalSold);
 
-        $rows = $handovers->values()->map(function (SalesHandover $h, int $idx) use ($statusLabels) {
-            $dispatched = (int) $h->total_dispatched_amount;
-            $sold       = (int) $h->total_sold_amount;
-            $diff       = max(0, $dispatched - $sold);
-
-            $stLabel = $statusLabels[$h->status] ?? $h->status;
-            $badgeClass = match ($h->status) {
-                'closed'               => 'bg-label-success',
-                'on_sales'             => 'bg-label-info',
-                'waiting_morning_otp',
-                'waiting_evening_otp'  => 'bg-label-warning',
-                'cancelled'            => 'bg-label-danger',
-                default                => 'bg-label-secondary',
-            };
-
-            $whName = optional($h->warehouse)->warehouse_name
-                   ?? optional($h->warehouse)->name
-                   ?? '-';
-
-            $salesName = optional($h->sales)->name ?? ('Sales #' . $h->sales_id);
-
-            return [
-                'id'                 => $h->id,
-                'no'                 => $idx + 1,
-                'date'               => optional($h->handover_date)->format('Y-m-d'),
-                'code'               => $h->code,
-                'warehouse'          => $whName,
-                'sales'              => $salesName,
-                'status'             => $h->status,
-                'status_label'       => $stLabel,
-                'status_badge_class' => $badgeClass,
-                'amount_dispatched'  => $this->formatRupiah($dispatched),
-                'amount_sold'        => $this->formatRupiah($sold),
-                'amount_diff'        => $this->formatRupiah($diff),
-            ];
-        });
-
-        return response()->json([
-            'success' => true,
-            'rows'    => $rows,
-            'summary' => [
-                'total_dispatched'           => $totalDispatched,
-                'total_sold'                 => $totalSold,
-                'total_diff'                 => $totalDiff,
-                'total_dispatched_formatted' => $this->formatRupiah($totalDispatched),
-                'total_sold_formatted'       => $this->formatRupiah($totalSold),
-                'total_diff_formatted'       => $this->formatRupiah($totalDiff),
-                'period_text'                => "{$dateFrom} s/d {$dateTo}",
-            ],
-        ]);
-    }
 
      protected function packOtp(string $otp): string
     {
@@ -1520,61 +1552,7 @@ class SalesHandoverController extends Controller
         return back()->with('success', 'Approval payment berhasil disimpan. Jika semua item terjual sudah APPROVED, handover otomatis CLOSED.');
     }
     
-    public function generateEveningOtp(SalesHandover $handover)
-    {
-        if ($handover->status === 'closed') {
-            return back()->with('error', 'Handover ini sudah CLOSED.');
-        }
 
-        $handover->loadMissing(['items.product', 'sales']);
-
-        $itemsSold = $handover->items->where('qty_sold', '>', 0);
-        if ($itemsSold->isEmpty()) {
-            return back()->with('error', 'Belum ada item terjual, tidak bisa generate OTP sore.');
-        }
-
-        $allApproved = $itemsSold->every(fn($item) => $item->payment_status === 'approved');
-        if (! $allApproved) {
-            return back()->with('error', 'Masih ada payment yang belum APPROVED.');
-        }
-
-        $otpCode = (string) random_int(100000, 999999);
-
-        // simpan "PLAIN|HASH" di kolom evening_otp_hash
-        $handover->evening_otp_hash    = $this->packOtp($otpCode);
-        $handover->evening_otp_sent_at = now();
-        $handover->status              = 'waiting_evening_otp';
-        $handover->save();
-
-        if ($handover->sales && $handover->sales->email) {
-            $itemsForMail = $handover->items->map(function ($it) {
-                return [
-                    'name'  => $it->product->name ?? ('Produk #'.$it->product_id),
-                    'code'  => $it->product->product_code ?? '',
-                    'qty'   => (int) $it->qty_sold,
-                    'price' => (int) $it->unit_price,
-                    'total' => (int) $it->line_total_sold,
-                ];
-            })->toArray();
-
-            $grandTotal = (int) $handover->cash_amount + (int) $handover->transfer_amount;
-            if ($grandTotal <= 0) {
-                $grandTotal = (int) $handover->items->sum('payment_amount');
-            }
-
-            try {
-                Mail::to($handover->sales->email)
-                    ->send(new SalesHandoverOtpMail($handover, $otpCode, $itemsForMail, $grandTotal));
-            } catch (\Throwable $e) {
-                return back()->with(
-                    'success',
-                    'OTP sore dibuat, tetapi pengiriman email gagal: '.$e->getMessage()
-                );
-            }
-        }
-
-        return back()->with('success', 'OTP sore berhasil dibuat dan dikirim ke sales.');
-    }
 
 
 }
