@@ -13,11 +13,14 @@ class Authenticate
         if (!Auth::check()) {
             return redirect()->route('login');
         }
-        // Role check (punya lo)
+
+        $user = $request->user(); // << WAJIB ADA
+
         if (!empty($slugs)) {
             $ok = $user->roles()->whereIn('slug', $slugs)->exists()
-                || in_array(($user->role ?? ''), $slugs, true); // fallback
-            if (!$ok) abort(403, 'Unauthorized');
+                || in_array(($user->role ?? ''), $slugs, true);
+
+            abort_unless($ok, 403, 'Unauthorized');
         }
 
         return $next($request);

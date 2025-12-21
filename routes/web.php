@@ -48,10 +48,17 @@ Route::middleware('guest')->group(function () {
 Route::get('/dashboard', function () {
     $u = auth()->user();
     if (!$u) return redirect()->route('login');
-    // mendarat ke home_route role pertama yg punya nilai
+
     $home = $u->roles()->whereNotNull('home_route')->value('home_route') ?: 'admin.dashboard';
+
+    // anti infinite redirect kalau home_route salah
+    if ($home === 'dashboard' || !\Illuminate\Support\Facades\Route::has($home)) {
+        $home = 'admin.dashboard';
+    }
+
     return redirect()->route($home);
 })->middleware(['auth','active'])->name('dashboard');
+
 
 
 Route::get('/', fn() => redirect()->route('dashboard'))->middleware(['auth','active']);

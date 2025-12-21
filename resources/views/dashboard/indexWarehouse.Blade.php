@@ -142,7 +142,7 @@
     <div class="col-12 col-xl-4">
       <div class="card h-100 card-hover" data-reveal>
         <div class="card-header">
-          <h6 class="mb-0 fw-semibold">Aksi Cepat</h6>
+          <h6 class="mb-0 fw-semibold">Short Cut</h6>
         </div>
         <div class="card-body">
           <div class="list-group" data-stagger data-step="70">

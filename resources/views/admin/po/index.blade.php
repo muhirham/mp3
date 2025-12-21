@@ -9,6 +9,7 @@
     $isSuperadmin  = $roles->contains('slug', 'superadmin');
     $isProcurement = $roles->contains('slug', 'procurement');
     $isCeo         = $roles->contains('slug', 'ceo');
+    $isWarehouse   = $roles->contains('slug', 'warehouse'); // ✅ tambah
 
     // ===== fallback kalau controller belum ngirim =====
     $statusOptions = $statusOptions ?? [
@@ -37,6 +38,8 @@
         ->get();
 
     $perPage = (int) request('per_page', 10);
+
+    $myWhId = $me->warehouse_id ?? null; // ✅ buat validasi PO milik warehouse sendiri
 @endphp
 
 <style>
@@ -111,7 +114,7 @@
             action="{{ route('po.index') }}"
             class="po-filters">
 
-          {{-- q diambil dari globalSearch navbar --}}
+        {{-- q diambil dari globalSearch navbar --}}
         <input type="hidden" name="q" value="{{ request('q') }}">
 
         <div class="row g-2 align-items-end">
@@ -205,15 +208,32 @@
           <tbody>
             @forelse($pos as $po)
               @php
-                // apakah sudah punya GR
                 $hasGr = (int)($po->gr_count ?? 0) > 0;
 
-                // Receive hanya superadmin + status ordered + approved + belum pernah GR
-                $canReceive = $isSuperadmin
-                              && !$hasGr
+                // PO dari request restock (warehouse)
+                $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
+
+                // warehouse yang terlibat di PO
+                $poWhIds = $po->items->pluck('warehouse_id')->filter()->unique();
+                $isMyWarehousePo = !$myWhId || $poWhIds->contains($myWhId);
+
+                // ✅ RULE GR FINAL
+                $canReceive = !$hasGr
                               && $po->status === 'ordered'
                               && $po->approval_status === 'approved'
-                              && $po->items_count > 0;
+                              && $po->items_count > 0
+                              && (
+                                  ($fromRequest && $isWarehouse && $isMyWarehousePo)
+                                  || (!$fromRequest && $isSuperadmin)
+                              );
+
+                // tombol blocked untuk superadmin (biar keluar swal)
+                $showBlockedReceive = $isSuperadmin
+                                      && $fromRequest
+                                      && !$hasGr
+                                      && $po->status === 'ordered'
+                                      && $po->approval_status === 'approved'
+                                      && $po->items_count > 0;
 
                 // ==== SUMMARY SUPPLIER ====
                 $supplierNames = collect();
@@ -237,18 +257,13 @@
                 }
 
                 // ==== SUMMARY WAREHOUSE ====
-                $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
-
                 if (! $fromRequest) {
                     $warehouseLabel = 'Central Stock';
                 } else {
                     $warehouseNames = collect();
                     foreach ($po->items as $it) {
                         if ($it->warehouse) {
-                            $warehouseNames->push(
-                                $it->warehouse->warehouse_name
-                                ?? $it->warehouse->name
-                            );
+                            $warehouseNames->push($it->warehouse->warehouse_name ?? $it->warehouse->name);
                         }
                     }
                     $warehouseNames = $warehouseNames->filter()->unique()->values();
@@ -311,13 +326,19 @@
                   <div class="btn-group">
                     <a class="btn btn-sm btn-primary" href="{{ route('po.edit',$po->id) }}">Open</a>
 
-                    {{-- Tombol Receive (GR) hanya SUPERADMIN & PO APPROVED --}}
+                    {{-- ✅ Receive sesuai rule --}}
                     @if($canReceive)
                       <button type="button"
                               class="btn btn-sm btn-success"
                               data-bs-toggle="modal"
                               data-bs-target="#mdlGR-{{ $po->id }}">
                         <i class="bx bx-download"></i> Receive
+                      </button>
+                    @elseif($showBlockedReceive)
+                      <button type="button"
+                              class="btn btn-sm btn-outline-success js-gr-blocked"
+                              data-po="{{ $po->po_code }}">
+                        <i class="bx bx-info-circle"></i> Receive
                       </button>
                     @endif
                   </div>
@@ -346,16 +367,22 @@
       {{-- ======= MODAL GR PER PO ======= --}}
       @foreach($pos as $po)
         @php
-          $hasGr      = (int)($po->gr_count ?? 0) > 0;
-          $canReceive = $isSuperadmin
-                        && !$hasGr
+          $hasGr = (int)($po->gr_count ?? 0) > 0;
+          $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
+
+          $poWhIds = $po->items->pluck('warehouse_id')->filter()->unique();
+          $isMyWarehousePo = !$myWhId || $poWhIds->contains($myWhId);
+
+          $canReceive = !$hasGr
                         && $po->status === 'ordered'
                         && $po->approval_status === 'approved'
-                        && $po->items_count > 0;
+                        && $po->items_count > 0
+                        && (
+                            ($fromRequest && $isWarehouse && $isMyWarehousePo)
+                            || (!$fromRequest && $isSuperadmin)
+                        );
 
-          if (! $canReceive) {
-              continue;
-          }
+          if (! $canReceive) { continue; }
 
           // summary supplier
           $supplierNames = collect();
@@ -379,7 +406,6 @@
           }
 
           // summary warehouse
-          $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
           if (! $fromRequest) {
               $whLabel = 'Central Stock';
           } else {
@@ -606,13 +632,10 @@
       }
 
       wrapper.innerHTML = newWrapper.innerHTML;
-
-      // re-bind karena DOM diganti
-      bindGrValidation();
     }
 
     function applyFilters(historyMode = 'replace') {
-      syncQFromGlobal();      // <= ambil value globalSearch ke hidden q
+      syncQFromGlobal();
       if (!validateRange()) return;
 
       syncExportHidden();
@@ -626,25 +649,20 @@
       });
     }
 
-    // prevent submit reload
     filterForm.addEventListener('submit', function (e) {
       e.preventDefault();
       applyFilters('replace');
     });
 
-    // ===== SEARCH: pakai globalSearch navbar =====
     if (globalSearch) {
-      // optional biar context PO lebih jelas
       globalSearch.setAttribute('placeholder', 'Cari PO code...');
       globalSearch.addEventListener('input', debounce(() => applyFilters('replace'), 450));
     }
 
-    // AUTO: select/date langsung jalan
     filterForm.querySelectorAll('select, input[type="date"]').forEach(el => {
       el.addEventListener('change', () => applyFilters('replace'));
     });
 
-    // pagination (delegation)
     wrapper.addEventListener('click', function (e) {
       const a = e.target.closest('.pagination a');
       if (!a) return;
@@ -658,9 +676,7 @@
       });
     });
 
-    // back/forward browser
     window.addEventListener('popstate', function () {
-      // sync q dari URL (biar globalSearch ikut berubah kalau user back)
       const urlQ = new URL(location.href).searchParams.get('q') || '';
       if (qHidden) qHidden.value = urlQ;
       syncGlobalFromHidden();
@@ -669,46 +685,53 @@
       syncExportHidden();
     });
 
-    // sebelum export, pastiin hidden paling update
-// sebelum export, pastiin hidden paling update + sweetalert kalau export ALL
-if (exportForm) {
-  exportForm.addEventListener('submit', function (e) {
-    // update q dari globalSearch & sync hidden export
-    syncQFromGlobal();
-    syncExportHidden();
+    if (exportForm) {
+      exportForm.addEventListener('submit', function (e) {
+        syncQFromGlobal();
+        syncExportHidden();
 
-    const q  = (exportForm.querySelector('input[name="q"]')?.value || '').trim();
-    const st = (exportForm.querySelector('input[name="status"]')?.value || '').trim();
-    const ap = (exportForm.querySelector('input[name="approval_status"]')?.value || '').trim();
-    const wh = (exportForm.querySelector('input[name="warehouse_id"]')?.value || '').trim();
-    const fr = (exportForm.querySelector('input[name="from"]')?.value || '').trim();
-    const to = (exportForm.querySelector('input[name="to"]')?.value || '').trim();
+        const q  = (exportForm.querySelector('input[name="q"]')?.value || '').trim();
+        const st = (exportForm.querySelector('input[name="status"]')?.value || '').trim();
+        const ap = (exportForm.querySelector('input[name="approval_status"]')?.value || '').trim();
+        const wh = (exportForm.querySelector('input[name="warehouse_id"]')?.value || '').trim();
+        const fr = (exportForm.querySelector('input[name="from"]')?.value || '').trim();
+        const to = (exportForm.querySelector('input[name="to"]')?.value || '').trim();
 
-    const hasFilter = !!(q || st || ap || wh || fr || to);
+        const hasFilter = !!(q || st || ap || wh || fr || to);
+        if (hasFilter) return;
 
-    // ✅ kalau ada filter -> langsung submit (tanpa sweetalert)
-    if (hasFilter) return;
+        e.preventDefault();
 
-    // ❗ kalau tidak ada filter -> confirm export ALL
-    e.preventDefault();
+        Swal.fire({
+          icon: 'warning',
+          title: 'Export semua data?',
+          text: 'Kamu belum pakai filter. Ini akan export SEMUA PO dan bisa lama / file besar.',
+          showCancelButton: true,
+          confirmButtonText: 'Ya, export semua',
+          cancelButtonText: 'Batal',
+        }).then((res) => {
+          if (res.isConfirmed) {
+            HTMLFormElement.prototype.submit.call(exportForm);
+          }
+        });
+      });
+    }
 
-    Swal.fire({
-      icon: 'warning',
-      title: 'Export semua data?',
-      text: 'Kamu belum pakai filter. Ini akan export SEMUA PO dan bisa lama / file besar.',
-      showCancelButton: true,
-      confirmButtonText: 'Ya, export semua',
-      cancelButtonText: 'Batal',
-    }).then((res) => {
-      if (res.isConfirmed) {
-        // submit native biar gak ke-trigger listener lagi
-        HTMLFormElement.prototype.submit.call(exportForm);
-      }
-    });
-  });
-}    // init
-    syncGlobalFromHidden(); // set globalSearch sesuai request('q')
+    syncGlobalFromHidden();
     syncExportHidden();
   })();
+
+  // ✅ Sweetalert: superadmin klik "Receive" untuk PO dari request
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.js-gr-blocked');
+    if (!btn) return;
+
+    const poCode = btn.getAttribute('data-po') || '';
+    Swal.fire({
+      icon: 'info',
+      title: 'Tidak bisa GR dari Superadmin',
+      text: `PO ${poCode} berasal dari Request Restock (Warehouse). Goods Received wajib dilakukan oleh Admin Warehouse terkait.`,
+    });
+  });
 </script>
 @endsection
