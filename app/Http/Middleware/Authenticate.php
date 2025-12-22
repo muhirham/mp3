@@ -14,11 +14,13 @@ class Authenticate
             return redirect()->route('login');
         }
 
+        $user = $request->user(); // << WAJIB ADA
+
         if (!empty($slugs)) {
-            $user = Auth::user();
-            $ok   = $user->roles()->whereIn('slug', $slugs)->exists()
-                 || in_array(($user->role ?? ''), $slugs, true); // fallback
-            if (!$ok) abort(403, 'Unauthorized');
+            $ok = $user->roles()->whereIn('slug', $slugs)->exists()
+                || in_array(($user->role ?? ''), $slugs, true);
+
+            abort_unless($ok, 403, 'Unauthorized');
         }
 
         return $next($request);

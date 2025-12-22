@@ -52,7 +52,7 @@ return [
         ],
         [
             'key'   => 'wh_stocklevel',
-            'label' => 'Stock Gudang',
+            'label' => 'Warehouse Stock Level',
             'route' => 'stocklevel.index',
             'group' => 'warehouse',
             'icon'  => 'bx bx-layer',
@@ -116,6 +116,20 @@ return [
             'route' => 'daily.sales.report',
             'group' => 'sales',
             'icon'  => 'bx bx-calendar-check',
+        ],
+        [
+            'key'   => 'sales_otp',  // <=== KEY BARU
+            'label' => 'OTP Pagi & Barang Dibawa',
+            'route' => 'sales.otp.items',
+            'group' => 'sales',
+            'icon'  => 'bx bx-key', // bebas mau ganti icon apa
+        ],
+        [
+            'key'        => 'sales-handover-otp',
+            'label'      => 'OTP Handover',
+            'route'      => 'sales.handover.otps',
+            'group'      => 'sales',
+            'icon'       => 'bx bx-key',
         ],
         [
             'key'   => 'sales_return',

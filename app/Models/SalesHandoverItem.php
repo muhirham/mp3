@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class SalesHandoverItem extends Model
 {
@@ -20,15 +20,25 @@ class SalesHandoverItem extends Model
         'unit_price',
         'line_total_start',
         'line_total_sold',
+
+        // payment per item
+        'payment_qty',
+        'payment_method',
+        'payment_amount',
+        'payment_transfer_proof_path',
+        'payment_status',
+        'payment_reject_reason',
     ];
 
     protected $casts = [
-        'qty_start'        => 'integer',
-        'qty_returned'     => 'integer',
-        'qty_sold'         => 'integer',
-        'unit_price'       => 'float',
-        'line_total_start' => 'float',
-        'line_total_sold'  => 'float',
+        'qty_start'          => 'integer',
+        'qty_returned'       => 'integer',
+        'qty_sold'           => 'integer',
+        'unit_price'         => 'integer',
+        'line_total_start'   => 'integer',
+        'line_total_sold'    => 'integer',
+        'payment_qty'        => 'integer',
+        'payment_amount'     => 'integer',
     ];
 
     public function handover()

@@ -135,18 +135,23 @@ class StockLevelController extends Controller
                 DB::raw('products.id as product_id'),
                 DB::raw('products.product_code'),
                 DB::raw('products.name as product_name'),
+
                 $pkgNameCol
                     ? DB::raw("COALESCE(pk.$pkgNameCol, '-') as package_name")
                     : DB::raw("'-' as package_name"),
+
                 $catNameCol
                     ? DB::raw("COALESCE(c.$catNameCol, '-') as category_name")
                     : DB::raw("'-' as category_name"),
+
                 $hasSuppliers
                     ? DB::raw("COALESCE(s.name, '-') as supplier_name")
                     : DB::raw("'-' as supplier_name"),
-                DB::raw('COALESCE(st.quantity,0) as quantity'),
-            ]);
 
+                DB::raw('COALESCE(st.quantity,0) as quantity'),
+                DB::raw('COALESCE(products.stock_minimum,0) as stock_minimum'),
+                DB::raw('COALESCE(products.selling_price,0) as selling_price'),
+            ]);
             // ==== Search ====
             if ($search !== '') {
                 $like = "%{$search}%";
@@ -177,30 +182,51 @@ class StockLevelController extends Controller
             $recordsFiltered = (clone $base)->count();
 
             // ==== Ordering ====
-            $orderMap = [
-                1 => 'products.product_code',
-                2 => 'product_name',
-                3 => 'package_name',
-                4 => 'category_name',
-                5 => 'supplier_name',
-                6 => 'quantity',
-            ];
+                $orderMap = [
+                    1 => 'products.product_code',
+                    2 => 'product_name',
+                    3 => 'package_name',
+                    4 => 'category_name',
+                    5 => 'supplier_name',
+                    6 => 'quantity',
+                    7 => 'stock_minimum',
+                    9 => 'selling_price',
+                ];
+
             $orderCol = $orderMap[$orderColIdx] ?? 'products.product_code';
             $base->orderBy($orderCol, $orderDir);
 
             // ==== Paging + render ====
-            $rows = $base->skip($start)->take($length)->get()
-                ->map(function ($r, $idx) use ($start) {
-                    return [
-                        'rownum'        => $start + $idx + 1,
-                        'product_code'  => e($r->product_code),
-                        'product_name'  => e($r->product_name),
-                        'package_name'  => e($r->package_name ?? '-'),
-                        'category_name' => e($r->category_name ?? '-'),
-                        'supplier_name' => e($r->supplier_name ?? '-'),
-                        'quantity'      => number_format((int)($r->quantity ?? 0), 0, ',', '.'),
-                    ];
-                });
+                $rows = $base->skip($start)->take($length)->get()
+                    ->map(function ($r, $idx) use ($start) {
+
+                        $qty = (int) ($r->quantity ?? 0);
+                        $min = (int) ($r->stock_minimum ?? 0);
+
+                        if ($qty <= 0) {
+                            $badge = '<span class="badge bg-label-danger">OUT</span>';
+                        } elseif ($min > 0 && $qty <= $min) {
+                            $badge = '<span class="badge bg-label-warning">LOW</span>';
+                        } else {
+                            $badge = '<span class="badge bg-label-success">OK</span>';
+                        }
+
+                        $selling = (float) ($r->selling_price ?? 0);
+
+                        return [
+                            'rownum'        => $start + $idx + 1,
+                            'product_code'  => e($r->product_code),
+                            'product_name'  => e($r->product_name),
+                            'package_name'  => e($r->package_name ?? '-'),
+                            'category_name' => e($r->category_name ?? '-'),
+                            'supplier_name' => e($r->supplier_name ?? '-'),
+                            'quantity'      => number_format($qty, 0, ',', '.'),
+                            'stock_minimum' => number_format($min, 0, ',', '.'),
+                            'status'        => $badge,
+                            'selling_price' => 'Rp' . number_format($selling, 0, ',', '.'),
+                        ];
+                    });
+
 
             return response()->json([
                 'draw'            => $draw,

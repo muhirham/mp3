@@ -9,30 +9,97 @@
     $isSuperadmin  = $roles->contains('slug', 'superadmin');
     $isProcurement = $roles->contains('slug', 'procurement');
     $isCeo         = $roles->contains('slug', 'ceo');
+    $isWarehouse   = $roles->contains('slug', 'warehouse'); // ✅ tambah
+
+    // ===== fallback kalau controller belum ngirim =====
+    $statusOptions = $statusOptions ?? [
+        '' => 'All Status',
+        'draft' => 'Draft',
+        'ordered' => 'Ordered',
+        'partially_received' => 'Partially Received',
+        'received' => 'Received',
+        'completed' => 'Completed',
+        'cancelled' => 'Cancelled',
+    ];
+
+    $approvalOptions = $approvalOptions ?? [
+        '' => 'All Approval',
+        'draft' => 'Draft',
+        'waiting_procurement' => 'Waiting Procurement',
+        'waiting_ceo' => 'Waiting CEO',
+        'approved' => 'Approved',
+        'rejected' => 'Rejected',
+    ];
+
+    // kalau controller belum kirim warehouses, ambil dari model (biar view lu gak error)
+    $warehouses = $warehouses ?? \App\Models\Warehouse::query()
+        ->select('id','warehouse_name')
+        ->orderBy('warehouse_name')
+        ->get();
+
+    $perPage = (int) request('per_page', 10);
+
+    $myWhId = $me->warehouse_id ?? null; // ✅ buat validasi PO milik warehouse sendiri
 @endphp
+
+<style>
+  /* ===== PO FILTER UI (compact + responsive) ===== */
+  .po-card-title { font-size: 1rem; }
+  .po-filters .form-label { font-size: .75rem; color: #6c757d; margin-bottom: .25rem; }
+  .po-filters .form-control,
+  .po-filters .form-select,
+  .po-filters .input-group-text { font-size: .8125rem; }
+  .po-filters .input-group-text { padding: .25rem .5rem; }
+  .po-filters .form-control-sm,
+  .po-filters .form-select-sm { padding-top: .35rem; padding-bottom: .35rem; }
+
+  /* ===== TABLE compact ===== */
+  .po-table thead th { font-size: .75rem; letter-spacing: .02em; text-transform: uppercase; color: #6c757d; }
+  .po-table tbody td { font-size: .8125rem; }
+  .po-table .badge { font-size: .7rem; }
+  .po-muted { font-size: .75rem; }
+
+  @media (max-width: 576px) {
+    .po-actions { width: 100%; justify-content: flex-start !important; }
+    .po-actions form { width: 100%; }
+    .po-actions .btn { width: 100%; }
+  }
+</style>
 
 <div class="container-xxl flex-grow-1 container-p-y">
 
   <div class="card">
-    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-      <h5 class="mb-0 fw-bold">Purchase Orders</h5>
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
+      <div class="d-flex flex-column">
+        <h5 class="mb-0 fw-bold po-card-title">Purchase Orders</h5>
+        <span class="text-muted po-muted">Filter otomatis (AJAX) — tanpa tombol apply.</span>
+      </div>
 
-      <div class="d-flex flex-wrap gap-2 ms-auto">
-        {{-- Search PO --}}
-        <form class="d-flex gap-2" id="po-search-form" method="get">
-          <input id="po-search"
-                 class="form-control"
-                 name="q"
-                 value="{{ $q ?? '' }}"
-                 placeholder="Cari PO code...">
-          <button class="btn btn-outline-secondary" type="submit">Cari</button>
+      <div class="d-flex flex-wrap gap-2 ms-auto po-actions justify-content-end">
+        {{-- Export Excel (1 format aja) --}}
+        <form id="po-export-form"
+              method="GET"
+              action="{{ route('po.export.index') }}"
+              class="d-flex align-items-center">
+
+          {{-- hidden filter (diupdate JS biar export konsisten walau ajax) --}}
+          <input type="hidden" name="q" value="{{ request('q') }}">
+          <input type="hidden" name="status" value="{{ request('status') }}">
+          <input type="hidden" name="approval_status" value="{{ request('approval_status') }}">
+          <input type="hidden" name="warehouse_id" value="{{ request('warehouse_id') }}">
+          <input type="hidden" name="from" value="{{ request('from') }}">
+          <input type="hidden" name="to" value="{{ request('to') }}">
+
+          <button class="btn btn-outline-success btn-sm" type="submit">
+            <i class="bx bx-download"></i> Excel
+          </button>
         </form>
 
         {{-- Create new PO (biasanya hanya superadmin) --}}
         @if($isSuperadmin)
-          <form action="{{ route('po.store') }}" method="POST">
+          <form action="{{ route('po.store') }}" method="POST" class="d-flex align-items-center">
             @csrf
-            <button type="submit" class="btn btn-primary">
+            <button type="submit" class="btn btn-primary btn-sm">
               <i class="bx bx-plus"></i> New PO
             </button>
           </form>
@@ -40,8 +107,77 @@
       </div>
     </div>
 
-    <div class="card-body pt-2 pb-0">
-      <div class="alert alert-info small py-2 mb-0">
+    <div class="card-body pt-3 pb-2">
+      {{-- FILTER + SEARCH (AJAX) --}}
+      <form id="po-filter-form"
+            method="get"
+            action="{{ route('po.index') }}"
+            class="po-filters">
+
+        {{-- q diambil dari globalSearch navbar --}}
+        <input type="hidden" name="q" value="{{ request('q') }}">
+
+        <div class="row g-2 align-items-end">
+
+          <div class="col-6 col-sm-3 col-lg-2">
+            <label class="form-label">From</label>
+            <input type="date"
+                   class="form-control form-control-sm"
+                   name="from"
+                   value="{{ request('from') }}">
+          </div>
+
+          <div class="col-6 col-sm-3 col-lg-2">
+            <label class="form-label">To</label>
+            <input type="date"
+                   class="form-control form-control-sm"
+                   name="to"
+                   value="{{ request('to') }}">
+          </div>
+
+          <div class="col-12 col-sm-6 col-lg-2">
+            <label class="form-label">Status</label>
+            <select name="status" class="form-select form-select-sm">
+              @foreach($statusOptions as $k => $v)
+                <option value="{{ $k }}" @selected((string)request('status','') === (string)$k)>{{ $v }}</option>
+              @endforeach
+            </select>
+          </div>
+
+          <div class="col-12 col-sm-6 col-lg-2">
+            <label class="form-label">Approval</label>
+            <select name="approval_status" class="form-select form-select-sm">
+              @foreach($approvalOptions as $k => $v)
+                <option value="{{ $k }}" @selected((string)request('approval_status','') === (string)$k)>{{ $v }}</option>
+              @endforeach
+            </select>
+          </div>
+
+          <div class="col-12 col-sm-6 col-lg-2">
+            <label class="form-label">Warehouse</label>
+            <select name="warehouse_id" class="form-select form-select-sm">
+              <option value="" @selected(request('warehouse_id','')==='')>All Warehouse</option>
+              <option value="central" @selected(request('warehouse_id','')==='central')>Central Stock</option>
+              @foreach($warehouses as $w)
+                <option value="{{ $w->id }}" @selected((string)request('warehouse_id','') === (string)$w->id)>
+                  {{ $w->warehouse_name }}
+                </option>
+              @endforeach
+            </select>
+          </div>
+
+          <div class="col-6 col-sm-3 col-lg-2">
+            <label class="form-label">Per Page</label>
+            <select name="per_page" class="form-select form-select-sm">
+              @foreach([10,25,50,100] as $n)
+                <option value="{{ $n }}" @selected($perPage === $n)>{{ $n }}/page</option>
+              @endforeach
+            </select>
+          </div>
+        </div>
+      </form>
+
+      <div class="alert alert-info small py-2 mt-3 mb-0">
         <strong>Rule Approval:</strong>
         <ul class="mb-0 ps-3">
           <li>Grand total &le; Rp 1.000.000 → cukup disetujui <strong>Procurement</strong>.</li>
@@ -54,10 +190,10 @@
     <div id="po-table-wrapper">
 
       <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
+        <table class="table table-hover table-sm align-middle mb-0 po-table">
           <thead>
             <tr>
-              <th>PO CODE</th>
+              <th class="text-nowrap">PO CODE</th>
               <th>Supplier</th>
               <th>Status</th>
               <th>Approval</th>
@@ -66,21 +202,38 @@
               <th class="text-end">Grand</th>
               <th>Lines</th>
               <th>Warehouse</th>
-              <th class="text-end">Actions</th>
+              <th class="text-end text-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody>
             @forelse($pos as $po)
               @php
-                // apakah sudah punya GR
                 $hasGr = (int)($po->gr_count ?? 0) > 0;
 
-                // Receive hanya superadmin + status ordered + approved + belum pernah GR
-                $canReceive = $isSuperadmin
-                              && !$hasGr
+                // PO dari request restock (warehouse)
+                $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
+
+                // warehouse yang terlibat di PO
+                $poWhIds = $po->items->pluck('warehouse_id')->filter()->unique();
+                $isMyWarehousePo = !$myWhId || $poWhIds->contains($myWhId);
+
+                // ✅ RULE GR FINAL
+                $canReceive = !$hasGr
                               && $po->status === 'ordered'
                               && $po->approval_status === 'approved'
-                              && $po->items_count > 0;
+                              && $po->items_count > 0
+                              && (
+                                  ($fromRequest && $isWarehouse && $isMyWarehousePo)
+                                  || (!$fromRequest && $isSuperadmin)
+                              );
+
+                // tombol blocked untuk superadmin (biar keluar swal)
+                $showBlockedReceive = $isSuperadmin
+                                      && $fromRequest
+                                      && !$hasGr
+                                      && $po->status === 'ordered'
+                                      && $po->approval_status === 'approved'
+                                      && $po->items_count > 0;
 
                 // ==== SUMMARY SUPPLIER ====
                 $supplierNames = collect();
@@ -104,18 +257,13 @@
                 }
 
                 // ==== SUMMARY WAREHOUSE ====
-                $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
-
                 if (! $fromRequest) {
                     $warehouseLabel = 'Central Stock';
                 } else {
                     $warehouseNames = collect();
                     foreach ($po->items as $it) {
                         if ($it->warehouse) {
-                            $warehouseNames->push(
-                                $it->warehouse->warehouse_name
-                                ?? $it->warehouse->name
-                            );
+                            $warehouseNames->push($it->warehouse->warehouse_name ?? $it->warehouse->name);
                         }
                     }
                     $warehouseNames = $warehouseNames->filter()->unique()->values();
@@ -151,7 +299,7 @@
               @endphp
 
               <tr>
-                <td class="fw-bold">{{ $po->po_code }}</td>
+                <td class="fw-semibold">{{ $po->po_code }}</td>
                 <td>{{ $supplierLabel }}</td>
                 <td>
                   <span class="badge bg-label-info text-uppercase">{{ $po->status }}</span>
@@ -162,7 +310,7 @@
 
                 <td>
                   {!! $approvalBadge !!}
-                  <div class="small text-muted mt-1">
+                  <div class="po-muted text-muted mt-1">
                     Proc: {{ $procName }}<br>
                     CEO&nbsp;: {{ $ceoName }}
                   </div>
@@ -178,13 +326,19 @@
                   <div class="btn-group">
                     <a class="btn btn-sm btn-primary" href="{{ route('po.edit',$po->id) }}">Open</a>
 
-                    {{-- Tombol Receive (GR) hanya SUPERADMIN & PO APPROVED --}}
+                    {{-- ✅ Receive sesuai rule --}}
                     @if($canReceive)
                       <button type="button"
                               class="btn btn-sm btn-success"
                               data-bs-toggle="modal"
                               data-bs-target="#mdlGR-{{ $po->id }}">
                         <i class="bx bx-download"></i> Receive
+                      </button>
+                    @elseif($showBlockedReceive)
+                      <button type="button"
+                              class="btn btn-sm btn-outline-success js-gr-blocked"
+                              data-po="{{ $po->po_code }}">
+                        <i class="bx bx-info-circle"></i> Receive
                       </button>
                     @endif
                   </div>
@@ -213,16 +367,22 @@
       {{-- ======= MODAL GR PER PO ======= --}}
       @foreach($pos as $po)
         @php
-          $hasGr      = (int)($po->gr_count ?? 0) > 0;
-          $canReceive = $isSuperadmin
-                        && !$hasGr
+          $hasGr = (int)($po->gr_count ?? 0) > 0;
+          $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
+
+          $poWhIds = $po->items->pluck('warehouse_id')->filter()->unique();
+          $isMyWarehousePo = !$myWhId || $poWhIds->contains($myWhId);
+
+          $canReceive = !$hasGr
                         && $po->status === 'ordered'
                         && $po->approval_status === 'approved'
-                        && $po->items_count > 0;
+                        && $po->items_count > 0
+                        && (
+                            ($fromRequest && $isWarehouse && $isMyWarehousePo)
+                            || (!$fromRequest && $isSuperadmin)
+                        );
 
-          if (! $canReceive) {
-              continue;
-          }
+          if (! $canReceive) { continue; }
 
           // summary supplier
           $supplierNames = collect();
@@ -246,7 +406,6 @@
           }
 
           // summary warehouse
-          $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
           if (! $fromRequest) {
               $whLabel = 'Central Stock';
           } else {
@@ -381,77 +540,198 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-  // FLASH
-  document.addEventListener('DOMContentLoaded', function () {
-    @if(session('success'))
-      Swal.fire({
-        icon: 'success',
-        title: 'Berhasil',
-        text: @json(session('success')),
-        timer: 2500,
-        showConfirmButton: false
+  // ===== AJAX FILTER + PAGINATION (NO RELOAD, NO APPLY BUTTON) =====
+  (function () {
+    const filterForm   = document.getElementById('po-filter-form');
+    const exportForm   = document.getElementById('po-export-form');
+    const wrapper      = document.getElementById('po-table-wrapper');
+    const globalSearch = document.getElementById('globalSearch'); // <= navbar input
+
+    if (!filterForm || !wrapper) return;
+
+    const actionUrl = filterForm.getAttribute('action');
+    const qHidden   = filterForm.querySelector('input[name="q"]');
+
+    const debounce = (fn, ms = 450) => {
+      let t;
+      return (...args) => {
+        clearTimeout(t);
+        t = setTimeout(() => fn(...args), ms);
+      };
+    };
+
+    function sameMonth(fromStr, toStr) {
+      if (!fromStr || !toStr) return true;
+      return fromStr.slice(0,7) === toStr.slice(0,7);
+    }
+
+    function buildQueryFromForm(formEl) {
+      const fd = new FormData(formEl);
+      const params = new URLSearchParams();
+      fd.forEach((v,k) => {
+        v = String(v ?? '').trim();
+        if (v !== '') params.append(k, v);
       });
-    @endif
+      return params.toString();
+    }
 
-    @if(session('error'))
-      Swal.fire({
-        icon: 'error',
-        title: 'Gagal',
-        text: @json(session('error')),
+    function syncQFromGlobal() {
+      if (!qHidden) return;
+      const val = (globalSearch?.value || '').trim();
+      qHidden.value = val;
+    }
+
+    function syncGlobalFromHidden() {
+      if (!globalSearch || !qHidden) return;
+      globalSearch.value = qHidden.value || '';
+    }
+
+    function syncExportHidden() {
+      if (!exportForm) return;
+
+      const getVal = (name) => (filterForm.querySelector(`[name="${name}"]`)?.value || '');
+
+      exportForm.querySelector('input[name="q"]').value = getVal('q');
+      exportForm.querySelector('input[name="status"]').value = getVal('status');
+      exportForm.querySelector('input[name="approval_status"]').value = getVal('approval_status');
+      exportForm.querySelector('input[name="warehouse_id"]').value = getVal('warehouse_id');
+      exportForm.querySelector('input[name="from"]').value = getVal('from');
+      exportForm.querySelector('input[name="to"]').value = getVal('to');
+    }
+
+    function validateRange() {
+      const fromVal = filterForm.querySelector('[name="from"]')?.value || '';
+      const toVal   = filterForm.querySelector('[name="to"]')?.value || '';
+
+      if (fromVal && toVal && fromVal > toVal) {
+        Swal.fire({ icon:'error', title:'Range salah', text:'Tanggal "from" harus <= "to".' });
+        return false;
+      }
+
+      if (!sameMonth(fromVal, toVal)) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Range salah',
+          text: 'Range maksimal 1 bulan. From & To harus di bulan yang sama.'
+        });
+        return false;
+      }
+      return true;
+    }
+
+    async function loadPage(url) {
+      const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      const html = await res.text();
+
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const newWrapper = doc.querySelector('#po-table-wrapper');
+
+      if (!newWrapper) {
+        Swal.fire({ icon:'error', title:'Gagal', text:'Wrapper table tidak ditemukan di response.' });
+        return;
+      }
+
+      wrapper.innerHTML = newWrapper.innerHTML;
+    }
+
+    function applyFilters(historyMode = 'replace') {
+      syncQFromGlobal();
+      if (!validateRange()) return;
+
+      syncExportHidden();
+
+      const qs  = buildQueryFromForm(filterForm);
+      const url = actionUrl + (qs ? ('?' + qs) : '');
+
+      loadPage(url).then(() => {
+        if (historyMode === 'push') history.pushState({}, '', url);
+        else history.replaceState({}, '', url);
       });
-    @endif
-  });
+    }
 
-  // VALIDASI DI MODAL GR
-  function bindGrValidation() {
-    document.querySelectorAll('.mdl-gr-po').forEach(function (modalEl) {
-      modalEl.addEventListener('input', function (e) {
-        if (!e.target.classList.contains('js-qty-good') &&
-            !e.target.classList.contains('js-qty-damaged')) {
-          return;
-        }
+    filterForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      applyFilters('replace');
+    });
 
-        const row = e.target.closest('tr');
-        if (!row) return;
+    if (globalSearch) {
+      globalSearch.setAttribute('placeholder', 'Cari PO code...');
+      globalSearch.addEventListener('input', debounce(() => applyFilters('replace'), 450));
+    }
 
-        const goodEl  = row.querySelector('.js-qty-good');
-        const badEl   = row.querySelector('.js-qty-damaged');
-        const remCell = row.querySelector('.js-remaining');
-        const msgEl   = row.querySelector('.js-row-msg');
+    filterForm.querySelectorAll('select, input[type="date"]').forEach(el => {
+      el.addEventListener('change', () => applyFilters('replace'));
+    });
 
-        const maxRem = parseInt(remCell.dataset.remaining || '0', 10);
+    wrapper.addEventListener('click', function (e) {
+      const a = e.target.closest('.pagination a');
+      if (!a) return;
+      e.preventDefault();
 
-        let good = parseInt(goodEl.value || '0', 10);
-        let bad  = parseInt(badEl.value  || '0', 10);
+      syncQFromGlobal();
+      syncExportHidden();
 
-        if (isNaN(good) || good < 0) good = 0;
-        if (isNaN(bad)  || bad  < 0) bad  = 0;
-
-        let total = good + bad;
-
-        if (total > maxRem) {
-          if (e.target === goodEl) {
-            good = Math.max(0, maxRem - bad);
-            goodEl.value = good;
-          } else {
-            bad = Math.max(0, maxRem - good);
-            badEl.value = bad;
-          }
-          total = good + bad;
-
-          if (msgEl) {
-            msgEl.textContent = 'Total Good + Damaged max ' + maxRem + '.';
-            setTimeout(() => { msgEl.textContent = ''; }, 2500);
-          }
-        }
-
-        remCell.textContent = maxRem - total;
+      loadPage(a.href).then(() => {
+        history.pushState({}, '', a.href);
       });
     });
-  }
 
-  bindGrValidation();
+    window.addEventListener('popstate', function () {
+      const urlQ = new URL(location.href).searchParams.get('q') || '';
+      if (qHidden) qHidden.value = urlQ;
+      syncGlobalFromHidden();
 
-  // Pencarian & pagination AJAX (opsional, kalau mau tetap pakai bisa lanjutkan logic lama di sini)
+      loadPage(location.href);
+      syncExportHidden();
+    });
+
+    if (exportForm) {
+      exportForm.addEventListener('submit', function (e) {
+        syncQFromGlobal();
+        syncExportHidden();
+
+        const q  = (exportForm.querySelector('input[name="q"]')?.value || '').trim();
+        const st = (exportForm.querySelector('input[name="status"]')?.value || '').trim();
+        const ap = (exportForm.querySelector('input[name="approval_status"]')?.value || '').trim();
+        const wh = (exportForm.querySelector('input[name="warehouse_id"]')?.value || '').trim();
+        const fr = (exportForm.querySelector('input[name="from"]')?.value || '').trim();
+        const to = (exportForm.querySelector('input[name="to"]')?.value || '').trim();
+
+        const hasFilter = !!(q || st || ap || wh || fr || to);
+        if (hasFilter) return;
+
+        e.preventDefault();
+
+        Swal.fire({
+          icon: 'warning',
+          title: 'Export semua data?',
+          text: 'Kamu belum pakai filter. Ini akan export SEMUA PO dan bisa lama / file besar.',
+          showCancelButton: true,
+          confirmButtonText: 'Ya, export semua',
+          cancelButtonText: 'Batal',
+        }).then((res) => {
+          if (res.isConfirmed) {
+            HTMLFormElement.prototype.submit.call(exportForm);
+          }
+        });
+      });
+    }
+
+    syncGlobalFromHidden();
+    syncExportHidden();
+  })();
+
+  // ✅ Sweetalert: superadmin klik "Receive" untuk PO dari request
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.js-gr-blocked');
+    if (!btn) return;
+
+    const poCode = btn.getAttribute('data-po') || '';
+    Swal.fire({
+      icon: 'info',
+      title: 'Tidak bisa GR dari Superadmin',
+      text: `PO ${poCode} berasal dari Request Restock (Warehouse). Goods Received wajib dilakukan oleh Admin Warehouse terkait.`,
+    });
+  });
 </script>
 @endsection

@@ -23,9 +23,12 @@ use App\Http\Controllers\Admin\CompanyController;
 // WAREHOUSE
 use App\Http\Controllers\Warehouse\WarehouseDashboardController;
 use App\Http\Controllers\Warehouse\SalesController as WhSalesController;
-use App\Http\Controllers\Warehouse\SalesHandoverController;
 use App\Http\Controllers\Warehouse\StockWhController;
 use App\Http\Controllers\Warehouse\GRController;  
+
+// SALES
+use App\Http\Controllers\Warehouse\SalesHandoverController;
+use App\Http\Controllers\Sales\HandoverOtpItemsController;
 
 // OTHERS
 use App\Http\Controllers\ReportController;
@@ -45,17 +48,27 @@ Route::middleware('guest')->group(function () {
 Route::get('/dashboard', function () {
     $u = auth()->user();
     if (!$u) return redirect()->route('login');
-    // mendarat ke home_route role pertama yg punya nilai
+
     $home = $u->roles()->whereNotNull('home_route')->value('home_route') ?: 'admin.dashboard';
+
+    // anti infinite redirect kalau home_route salah
+    if ($home === 'dashboard' || !\Illuminate\Support\Facades\Route::has($home)) {
+        $home = 'admin.dashboard';
+    }
+
     return redirect()->route($home);
-})->middleware('auth')->name('dashboard');
+})->middleware(['auth','active'])->name('dashboard');
 
-Route::get('/', fn() => redirect()->route('dashboard'))->middleware('auth');
 
-Route::post('/logout', [LoginController::class,'logout'])->name('logout')->middleware('auth');
+
+Route::get('/', fn() => redirect()->route('dashboard'))->middleware(['auth','active']);
+
+
+Route::post('/logout', [LoginController::class,'logout'])->name('logout')->middleware(['auth','active']);
+
 
 /* ===== Protected by menu keys ===== */
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth','active'])->group(function () {
 
     // ===== Dashboard (cukup auth, TIDAK pakai menu:xxx) =====
     Route::get('/admin',     [AdminController::class,'index'])->name('admin.dashboard');
@@ -93,20 +106,34 @@ Route::middleware('auth')->group(function () {
         ->except(['create','edit','show'])
         ->middleware('menu:products');
 
-     // key: stockproducts
+// Stock Adjustments
+Route::get('stock-adjustments', [StockAdjustmentController::class, 'index'])
+    ->name('stock-adjustments.index')
+    ->middleware('menu:stock_adjustments');
 
-    // key: stock_adjustments
-    Route::get('stock-adjustments', [StockAdjustmentController::class, 'index'])
-        ->name('stock-adjustments.index')
-        ->middleware('menu:stock_adjustments');
+Route::get('stock-adjustments/datatable', [StockAdjustmentController::class, 'datatable'])
+    ->name('stock-adjustments.datatable')
+    ->middleware('menu:stock_adjustments');
 
-    Route::post('stock-adjustments', [StockAdjustmentController::class, 'store'])
-        ->name('stock-adjustments.store')
-        ->middleware('menu:stock_adjustments');
+Route::get('stock-adjustments/products', [StockAdjustmentController::class, 'products'])
+    ->name('stock-adjustments.products')
+    ->middleware('menu:stock_adjustments');
 
-    Route::get('stock-adjustments/ajax-products', [StockAdjustmentController::class, 'ajaxProducts'])
-        ->name('stock-adjustments.ajax-products')
-        ->middleware('menu:stock_adjustments');
+Route::get('stock-adjustments/{adjustment}/detail', [StockAdjustmentController::class, 'detail'])
+    ->name('stock-adjustments.detail')
+    ->middleware('menu:stock_adjustments');
+
+Route::get('stock-adjustments/ajax-products', [StockAdjustmentController::class, 'ajaxProducts'])
+    ->name('stock-adjustments.ajax-products')
+    ->middleware('menu:stock_adjustments');
+
+Route::post('stock-adjustments', [StockAdjustmentController::class, 'store'])
+    ->name('stock-adjustments.store')
+    ->middleware('menu:stock_adjustments');
+
+Route::get('/stock-adjustments/export/excel', [StockAdjustmentController::class, 'exportIndexExcel'])
+    ->name('stock-adjustments.exportIndexExcel')
+    ->middleware('menu:stock_adjustments');
 
 
     // key: suppliers
@@ -179,13 +206,14 @@ Route::middleware('auth')->group(function () {
         ->name('po.cancel')
         ->middleware('menu:po');
         
-    Route::post('/{po}/approve',      [PreOController::class, 'approve'])
+    Route::post('/po/{po}/approve', [PreOController::class, 'approve'])
         ->name('po.approve')
         ->middleware('menu:po');
 
+
     Route::post('/po/{po}/approve-proc', [PreOController::class,'approveProcurement'])
-    ->name('po.approve.proc')
-    ->middleware('menu:po');
+        ->name('po.approve.proc')
+        ->middleware('menu:po');
 
     Route::post('/po/{po}/reject-proc', [PreOController::class,'rejectProcurement'])
         ->name('po.reject.proc')
@@ -199,17 +227,26 @@ Route::middleware('auth')->group(function () {
     Route::post('/po/{po}/reject-ceo', [PreOController::class,'rejectCeo'])
         ->name('po.reject.ceo')
         ->middleware('menu:po');
-
-    // === Goods Received dari PO MANUAL (1 GR per PO) ===
-
     
     Route::get('/po/{po}/pdf',        [PreOController::class,'exportPdf'])
-    ->name('po.pdf')
-    ->middleware('menu:po');
+        ->name('po.pdf')
+        ->middleware('menu:po');
     
     Route::get('/po/{po}/excel',      [PreOController::class,'exportExcel'])
-    ->name('po.excel')
-    ->middleware('menu:po');
+        ->name('po.excel')
+        ->middleware('menu:po');
+
+        Route::get('/po/table', [PreOController::class, 'table'])
+        ->name('po.table')
+        ->middleware('menu:po');
+
+    Route::get('/po/export/index', [PreOController::class, 'exportIndexExcel'])
+        ->name('po.export.index')
+        ->middleware('menu:po');
+
+    Route::get('/po/export/monthly', [PreOController::class, 'exportMonthlyExcel'])
+        ->name('po.export.monthly')
+        ->middleware('menu:po');
     
     Route::post('/po/{po}/gr', [GoodReceivedController::class, 'storeFromPo'])
         ->name('po.gr.store')
@@ -228,8 +265,8 @@ Route::middleware('auth')->group(function () {
 
 
     Route::get('/good-received/{po}/detail', [GoodReceivedController::class, 'detail'])
-    ->name('goodreceived.detail')
-    ->middleware('menu:goodreceived');
+        ->name('goodreceived.detail')
+        ->middleware('menu:goodreceived');
         
     // Halaman daftar permohonan
     // ================== MASTER COMPANY ==================
@@ -297,6 +334,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/restocks/{restock}/receive',[StockWhController::class,'receive'])
         ->name('restocks.receive')
         ->middleware('menu:wh_restock');
+    Route::get('/restocks/export/excel', [StockWhController::class, 'exportExcel'])
+        ->name('restocks.export.excel')
+        ->middleware('menu:wh_restock');
+
 
     Route::get('/sales/handover/morning', [SalesHandoverController::class, 'morningForm'])
         ->name('sales.handover.morning')
@@ -319,14 +360,24 @@ Route::middleware('auth')->group(function () {
         ->name('sales.handover.items')
         ->middleware('menu:wh_reconcile');
 
-    Route::post('/sales/handover/{handover}/evening/save', [SalesHandoverController::class, 'eveningSaveAndSendOtp'])
+    Route::post('/sales/handover/{handover}/evening/save', [SalesHandoverController::class, 'eveningSave'])
         ->name('sales.handover.evening.save')
         ->middleware('menu:wh_reconcile');
+
 
     Route::post('/sales/handover/evening/verify', [SalesHandoverController::class, 'verifyEveningOtp'])
         ->name('sales.handover.evening.verify')
         ->middleware('menu:wh_reconcile');
+
+    // GENERATE OTP SORE (untuk closing handover)
+    Route::post('/warehouse/handovers/{handover}/evening/generate-otp',[SalesHandoverController::class, 'generateEveningOtp'])
+        ->name('warehouse.handovers.evening.generate-otp')
+        ->middleware('menu:wh_sales_reports');
+
+
     /* === Sales pages (SALES KEYS) === */
+
+    // === Sales pages (SALES & WAREHOUSE) ===
 
     Route::get('/warehouse/sales-reports', [SalesHandoverController::class,'warehouseSalesReport'])
         ->name('sales.report')
@@ -336,7 +387,7 @@ Route::middleware('auth')->group(function () {
         ->name('sales.report.detail')
         ->middleware('menu:wh_sales_reports');
 
-        Route::get('/sales/report', [SalesHandoverController::class,'salesReport'])
+    Route::get('/sales/report', [SalesHandoverController::class,'salesReport'])
         ->name('daily.sales.report')
         ->middleware('menu:sales_daily');
 
@@ -344,8 +395,39 @@ Route::middleware('auth')->group(function () {
         ->name('daily.report.detail')
         ->middleware('menu:sales_daily');
 
-        // key: sales_daily
+    // key: sales_otp
+    Route::get('/sales/otp-items', [HandoverOtpItemsController::class, 'index'])
+        ->name('sales.otp.items')
+        ->middleware('menu:sales_otp');
 
+    Route::post('/sales/otp-items/verify', [HandoverOtpItemsController::class, 'verify'])
+        ->name('sales.otp.items.verify')
+        ->middleware('menu:sales_otp');
+
+    Route::get('/sales/handover/otps', [SalesHandoverController::class, 'salesOtpIndex'])
+        ->name('sales.handover.otps')
+        ->middleware('menu:sales-handover-otp');
+
+    Route::post('/sales/otp-items/payments', [HandoverOtpItemsController::class, 'savePayments'])
+        ->name('sales.otp.items.payments.save')
+        ->middleware('menu:sales_otp');
+
+    // ====== WAREHOUSE: APPROVAL PEMBAYARAN HANDOVER ======
+// FORM APPROVAL (GET) – sudah benar
+    Route::get('/warehouse/handovers/{handover}/payments', [SalesHandoverController::class, 'paymentApprovalForm'])
+        ->name('warehouse.handovers.payments.form')
+        ->middleware('menu:wh_sales_reports');
+
+    // SIMPAN APPROVAL (POST)
+    Route::post('/warehouse/handovers/{handover}/payments', [SalesHandoverController::class, 'paymentApprovalSave'])
+        ->name('warehouse.handovers.payments.approve')
+        ->middleware('menu:wh_sales_reports');
+
+
+    // Reject 1 item payment (dipanggil via AJAX dari tabel item)
+    Route::post('/warehouse/handovers/{handover}/payments/reject', [SalesHandoverController::class, 'rejectPayment'])
+        ->name('warehouse.handovers.payments.reject')
+        ->middleware('menu:wh_sales_reports');
 
     // key: sales_return
     Route::get('/sales/return', [WhSalesController::class,'return'])
@@ -356,5 +438,6 @@ Route::middleware('auth')->group(function () {
     Route::resource('/reports', ReportController::class)
         ->only(['index'])
         ->middleware('menu:reports');
+
         
 });

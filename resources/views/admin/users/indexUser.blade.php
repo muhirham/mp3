@@ -23,11 +23,11 @@
                 </div>
                 <div class="col-12 col-md-4">
                     <label class="form-label mb-1">Status</label>
-                    <select id="f_status" class="form-select">
-                        <option value="">Select Status</option>
-                        <option value="Active">Active</option>
-                        <option value="Inactive">Inactive</option>
-                    </select>
+                        <select id="f_status" class="form-select">
+                            <option value="">Select Status</option>
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
                 </div>
             </div>
 
@@ -124,7 +124,13 @@
                         </td>
                         <td>{{ $roleText ?: '-' }}</td>
                         <td>{{ $u->warehouse?->warehouse_name ?? '-' }}</td>
-                        <td>{{ ucfirst($u->status) }}</td>
+                        <td>
+                            @if($u->status === 'active')
+                                <span class="badge bg-success">Active</span>
+                            @else
+                                <span class="badge bg-secondary">Inactive</span>
+                            @endif
+                        </td>
                         <td>{{ $u->created_at?->format('Y-m-d') }}</td>
                         <td>{{ $u->updated_at?->format('Y-m-d H:i') }}</td>
                         <td>
@@ -169,10 +175,11 @@
 {{-- ADD USER – Glass modal --}}
 <div class="modal fade" id="glassAddUser" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0" style="background:rgba(17,22,28,.6);backdrop-filter:blur(14px)">
+        <div class="modal-content border-0" style="background:#fff;">
+
             <div class="modal-header border-0">
-                <h5 class="modal-title text-white">Add User</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title">Add User</h5>
+                <button type="button" class="btn-close btn-" data-bs-dismiss="modal"></button>
             </div>
 
             @if ($errors->any() && !session('edit_open_id'))
@@ -191,50 +198,50 @@
             <form id="formAddUser"
                   method="POST"
                   action="{{ route('users.store') }}"
-                  class="modal-body text-white"
+                  class="modal-body "
                   enctype="multipart/form-data">
                 @csrf
 
                 <div class="mb-3">
-                    <label class="form-label text-white">Name</label>
-                    <input name="name" value="{{ old('name') }}" class="form-control bg-transparent text-white border-secondary" required>
+                    <label class="form-label">Name</label>
+                    <input name="name" value="{{ old('name') }}" class="form-control bg-transparent border-secondary" required>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label text-white">Username</label>
-                    <input name="username" value="{{ old('username') }}" class="form-control bg-transparent text-white border-secondary" required>
+                    <label class="form-label">Username</label>
+                    <input name="username" value="{{ old('username') }}" class="form-control bg-transparent border-secondary" required>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label text-white">Email</label>
-                    <input name="email" type="email" value="{{ old('email') }}" class="form-control bg-transparent text-white border-secondary" required>
+                    <label class="form-label">Email</label>
+                    <input name="email" type="email" value="{{ old('email') }}" class="form-control bg-transparent border-secondary" required>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label text-white">Phone</label>
-                    <input name="phone" value="{{ old('phone') }}" class="form-control bg-transparent text-white border-secondary">
+                    <label class="form-label">Phone</label>
+                    <input name="phone" value="{{ old('phone') }}" class="form-control bg-transparent border-secondary">
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label text-white">Position (optional)</label>
-                    <input name="position" value="{{ old('position') }}" class="form-control bg-transparent text-white border-secondary">
+                    <label class="form-label">Position (optional)</label>
+                    <input name="position" value="{{ old('position') }}" class="form-control bg-transparent border-secondary">
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label text-white">Signature (optional)</label>
-                    <input type="file" name="signature" class="form-control bg-transparent text-white border-secondary">
-                    <small class="text-white-50">Format: jpg, jpeg, png, webp — max 2MB.</small>
+                    <label class="form-label">Signature (optional)</label>
+                    <input type="file" name="signature" class="form-control bg-transparent border-secondary">
+                    <small class=-50">Format: jpg, jpeg, png, webp — max 2MB.</small>
                 </div>
 
                 <div class="row g-2">
                     <div class="col-md-6">
-                        <label class="form-label text-white">Roles</label>
+                        <label class="form-label">Roles</label>
                         @if($isWarehouseUser)
                             {{-- Admin WH: selalu Sales --}}
                             <input type="hidden" name="roles[]" value="sales">
-                            <input class="form-control bg-transparent text-white border-secondary" value="Sales" disabled>
+                            <input class="form-control bg-transparent border-secondary" value="Sales" disabled>
                         @else
-                            <select name="roles[]" id="add_roles" class="form-select bg-transparent text-white border-secondary" required>
+                            <select name="roles[]" id="add_roles" class="form-select bg-transparent border-secondary" required>
                                 <option value="">— Choose role —</option>
                                 @foreach ($allRoles as $r)
                                     <option value="{{ $r->slug }}" {{ (old('roles.0') == $r->slug) ? 'selected' : '' }}>
@@ -245,8 +252,8 @@
                         @endif
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label text-white">Status</label>
-                        <select name="status" class="form-select bg-transparent text-white border-secondary" required>
+                        <label class="form-label">Status</label>
+                        <select name="status" class="form-select bg-transparent border-secondary" required>
                             <option value="active"  {{ old('status')==='active' ? 'selected':'' }}>Active</option>
                             <option value="inactive"{{ old('status')==='inactive' ? 'selected':'' }}>Inactive</option>
                         </select>
@@ -254,13 +261,13 @@
                 </div>
 
                 <div class="mt-3" id="wrap_add_wh" style="{{ $isWarehouseUser ? '' : 'display:none' }}">
-                    <label class="form-label text-white">Warehouse</label>
+                    <label class="form-label">Warehouse</label>
                     @if($isWarehouseUser)
                         <input type="hidden" name="warehouse_id" value="{{ $me->warehouse_id }}">
-                        <input class="form-control bg-transparent text-white border-secondary"
+                        <input class="form-control bg-transparent border-secondary"
                                value="{{ $me->warehouse?->warehouse_name ?? 'My Warehouse' }}" disabled>
                     @else
-                        <select name="warehouse_id" class="form-select bg-transparent text-white border-secondary">
+                        <select name="warehouse_id" class="form-select bg-transparent border-secondary">
                             <option value="">— Choose warehouse —</option>
                             @foreach($warehouses as $w)
                                 <option value="{{ $w->id }}" {{ old('warehouse_id') == $w->id ? 'selected':'' }}>
@@ -273,16 +280,16 @@
 
                 <div class="row g-2 mt-3">
                     <div class="col">
-                        <input name="password" type="password" placeholder="Password" class="form-control bg-transparent text-white border-secondary" required>
+                        <input name="password" type="password" placeholder="Password" class="form-control bg-transparent border-secondary" required>
                     </div>
                     <div class="col">
-                        <input name="password_confirmation" type="password" placeholder="Confirm" class="form-control bg-transparent text-white border-secondary" required>
+                        <input name="password_confirmation" type="password" placeholder="Confirm" class="form-control bg-transparent border-secondary" required>
                     </div>
                 </div>
 
                 <div class="mt-4 d-flex gap-2 justify-content-end">
-                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Cancel</button>
-                    <button class="btn btn-light text-dark">Submit</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-primary text-white">Submit</button>
                 </div>
             </form>
         </div>
@@ -292,60 +299,60 @@
 {{-- EDIT USER – Glass modal --}}
 <div class="modal fade" id="glassEditUser" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0" style="background:rgba(17,22,28,.6);backdrop-filter:blur(14px)">
+        <div class="modal-content border-0" style="background:rgb(255, 255, 255);backdrop-filter:blur(14px)">
             <div class="modal-header border-0">
-                <h5 class="modal-title text-white">Edit User</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title">Edit User</h5>
+                <button type="button" class="btn-close btn-" data-bs-dismiss="modal"></button>
             </div>
 
             <form id="formEditUser"
                   method="POST"
-                  class="modal-body text-white"
+                  class="modal-body"
                   enctype="multipart/form-data">
                 @csrf
                 @method('PUT')
                 <input type="hidden" id="edit_id">
 
                 <div class="mb-3">
-                    <label class="form-label text-white">Name</label>
-                    <input id="edit_name" name="name" class="form-control bg-transparent text-white border-secondary" required>
+                    <label class="form-label">Name</label>
+                    <input id="edit_name" name="name" class="form-control bg-transparent border-secondary" required>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label text-white">Username</label>
-                    <input id="edit_username" name="username" class="form-control bg-transparent text-white border-secondary" required>
+                    <label class="form-label">Username</label>
+                    <input id="edit_username" name="username" class="form-control bg-transparent border-secondary" required>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label text-white">Email</label>
-                    <input id="edit_email" name="email" type="email" class="form-control bg-transparent text-white border-secondary" required>
+                    <label class="form-label">Email</label>
+                    <input id="edit_email" name="email" type="email" class="form-control bg-transparent border-secondary" required>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label text-white">Phone</label>
-                    <input id="edit_phone" name="phone" class="form-control bg-transparent text-white border-secondary">
+                    <label class="form-label">Phone</label>
+                    <input id="edit_phone" name="phone" class="form-control bg-transparent border-secondary">
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label text-white">Position (optional)</label>
-                    <input id="edit_position" name="position" class="form-control bg-transparent text-white border-secondary">
+                    <label class="form-label">Position (optional)</label>
+                    <input id="edit_position" name="position" class="form-control bg-transparent border-secondary">
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label text-white">Signature (optional)</label>
-                    <input type="file" name="signature" class="form-control bg-transparent text-white border-secondary">
-                    <small class="text-white-50">Kosongkan bila tidak ingin mengubah tanda tangan.</small>
+                    <label class="form-label">Signature (optional)</label>
+                    <input type="file" name="signature" class="form-control bg-transparent border-secondary">
+                    <small class=-50">Kosongkan bila tidak ingin mengubah tanda tangan.</small>
                 </div>
 
                 <div class="row g-2">
                     <div class="col-md-6">
-                        <label class="form-label text-white">Roles</label>
+                        <label class="form-label">Roles</label>
                         @if($isWarehouseUser)
                             {{-- Admin WH: selalu Sales --}}
                             <input type="hidden" name="roles[]" id="edit_roles_force" value="sales">
-                            <input class="form-control bg-transparent text-white border-secondary" value="Sales" disabled>
+                            <input class="form-control bg-transparent border-secondary" value="Sales" disabled>
                         @else
-                            <select id="edit_roles" name="roles[]" class="form-select bg-transparent text-white border-secondary" required>
+                            <select id="edit_roles" name="roles[]" class="form-select bg-transparent border-secondary" required>
                                 @foreach($allRoles as $r)
                                     <option value="{{ $r->slug }}">{{ $r->name }}</option>
                                 @endforeach
@@ -353,8 +360,8 @@
                         @endif
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label text-white">Status</label>
-                        <select id="edit_status" name="status" class="form-select bg-transparent text-white border-secondary" required>
+                        <label class="form-label">Status</label>
+                        <select id="edit_status" name="status" class="form-select bg-transparent border-secondary" required>
                             @foreach(['active','inactive'] as $s)
                                 <option value="{{ $s }}">{{ ucfirst($s) }}</option>
                             @endforeach
@@ -363,13 +370,13 @@
                 </div>
 
                 <div class="mt-3" id="wrap_edit_wh" style="display:none">
-                    <label class="form-label text-white">Warehouse</label>
+                    <label class="form-label">Warehouse</label>
                     @if($isWarehouseUser)
                         <input type="hidden" name="warehouse_id" id="edit_warehouse_id" value="{{ $me->warehouse_id }}">
-                        <input class="form-control bg-transparent text-white border-secondary"
+                        <input class="form-control bg-transparent border-secondary"
                                value="{{ $me->warehouse?->warehouse_name ?? 'My Warehouse' }}" disabled>
                     @else
-                        <select id="edit_warehouse_id" name="warehouse_id" class="form-select bg-transparent text-white border-secondary">
+                        <select id="edit_warehouse_id" name="warehouse_id" class="form-select bg-transparent border-secondary">
                             <option value="">— Choose warehouse —</option>
                             @foreach($warehouses as $w)
                                 <option value="{{ $w->id }}">{{ $w->warehouse_name }}</option>
@@ -380,16 +387,16 @@
 
                 <div class="row g-2 mt-3">
                     <div class="col">
-                        <input name="password" type="password" placeholder="New password (optional)" class="form-control bg-transparent text-white border-secondary">
+                        <input name="password" type="password" placeholder="New password (optional)" class="form-control bg-transparent border-secondary">
                     </div>
                     <div class="col">
-                        <input name="password_confirmation" type="password" placeholder="Confirm" class="form-control bg-transparent text-white border-secondary">
+                        <input name="password_confirmation" type="password" placeholder="Confirm" class="form-control bg-transparent border-secondary">
                     </div>
                 </div>
 
                 <div class="mt-4 d-flex gap-2 justify-content-end">
-                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Cancel</button>
-                    <button class="btn btn-light text-dark" type="submit">Save</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-primary text-white" type="submit">Save</button>
                 </div>
             </form>
         </div>
@@ -406,8 +413,7 @@
         font-size: 0.75rem;
     }
     #tblUsers thead th,
-    #tblUsers tbody td {
-        white-space: nowrap;
+    #tblUsers tbody t-space: nowrap;
         padding: .35rem .45rem;
     }
 
@@ -463,9 +469,18 @@ $(function () {
     });
 
     $('#f_status').on('change', function(){
-        const v = this.value;
-        table.column(10).search(v ? '^'+v+'$' : '', true, false).draw();
+        const v = (this.value || '').toLowerCase();
+
+        if (!v) {
+            table.column(10).search('').draw();
+            return;
+        }
+
+        // Karena isi kolom adalah badge "Active/Inactive"
+        const label = (v === 'active') ? 'Active' : 'Inactive';
+        table.column(10).search(label, false, true).draw(); // contains, case-insensitive
     });
+
 
     $('#checkAll').on('change', function(){
         $('#tblUsers tbody .row-check:not(:disabled)').prop('checked', this.checked);
@@ -562,7 +577,8 @@ $(function () {
             $('#edit_roles').val(roles[0] || '');
         @endif
 
-        $('#edit_status').val(d.status || 'active');
+        $('#edit_status').val((d.status || 'active').toLowerCase());
+
         $('#edit_warehouse_id').val(d.warehouse_id || '');
         toggleEditWarehouse();
 

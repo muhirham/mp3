@@ -4,334 +4,342 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
 
 @php
-    $me = $me ?? auth()->user();
+    $me           = $me ?? auth()->user();
+    $handover     = $handover ?? null;
+    $handoverList = $handoverList ?? collect();
+
+    $roles       = $me?->roles ?? collect();
+    $isWarehouse = $roles->contains('slug', 'warehouse');
+    $isSales     = $roles->contains('slug', 'sales');
+    $isAdminLike = $roles->contains('slug', 'admin')
+                    || $roles->contains('slug', 'superadmin');
+
+    $isApprovalMode = ! is_null($handover);
+
+    $statusLabelMap = [
+        'draft'               => 'Draft',
+        'waiting_morning_otp' => 'Menunggu OTP Pagi',
+        'on_sales'            => 'On Sales',
+        'waiting_evening_otp' => 'Menunggu OTP Sore', // biarin untuk data lama yang keburu ada
+        'closed'              => 'Closed',
+        'cancelled'           => 'Cancelled',
+    ];
+
+    $badgeClassMap = [
+        'closed'              => 'bg-label-success',
+        'on_sales'            => 'bg-label-info',
+        'waiting_morning_otp' => 'bg-label-warning',
+        'waiting_evening_otp' => 'bg-label-warning',
+        'cancelled'           => 'bg-label-danger',
+        'default'             => 'bg-label-secondary',
+    ];
+
+    if ($isApprovalMode) {
+        $statusKey   = $handover->status;
+        $statusLabel = $statusLabelMap[$statusKey] ?? $statusKey;
+        $badgeClass  = $badgeClassMap[$statusKey] ?? $badgeClassMap['default'];
+
+        // edit approval hanya kalau belum closed
+        $canEdit = $handover->status !== 'closed';
+    }
 @endphp
 
 <div class="container-xxl flex-grow-1 container-p-y">
 
-  {{-- STEP 1: INPUT HASIL & GENERATE OTP SORE --}}
+  <h4 class="fw-bold py-2 mb-3">
+    <span class="text-muted fw-light">
+      Warehouse /
+    </span>
+    Reconcile (Approval Payment)
+  </h4>
+
+  {{-- FLASH MESSAGE --}}
+  @if(session('success'))
+    <div class="alert alert-success">{{ session('success') }}</div>
+  @endif
+  @if(session('error'))
+    <div class="alert alert-danger">{{ session('error') }}</div>
+  @endif
+
+  {{-- ================== PILIH HANDOVER UNTUK APPROVAL ================== --}}
   <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
-      <h5 class="mb-0 fw-bold">Rekonsiliasi Sore – Input Hasil & Kirim OTP</h5>
+      <h5 class="mb-0 fw-bold">Pilih Handover untuk Approval Payment</h5>
+      <small class="text-muted">
+        Handover akan tampil jika sudah diisi oleh sales.
+      </small>
     </div>
     <div class="card-body">
-
-      <div class="row g-2 align-items-end mb-3">
-        <div class="col-md-6">
-          <label class="form-label">Pilih Handover (Status ON_SALES)</label>
-          <select id="selHandover" class="form-select">
+      <form method="GET" action="{{ url()->current() }}" class="row g-2 align-items-end">
+        <div class="col-md-7">
+          <label class="form-label">Handover</label>
+          <select name="handover_id" class="form-select">
             <option value="">— Pilih —</option>
-            @foreach(($onSales ?? []) as $h)
+            @foreach($handoverList as $h)
+              @php
+                  $stKey   = $h->status;
+                  $stLabel = $statusLabelMap[$stKey] ?? $stKey;
+              @endphp
               <option value="{{ $h->id }}"
-                      data-code="{{ $h->code }}"
-                      data-sales="{{ $h->sales->name ?? ('Sales #'.$h->sales_id) }}"
-                      data-date="{{ \Carbon\Carbon::parse($h->handover_date)->format('Y-m-d') }}">
-                {{ $h->code }} — {{ $h->sales->name ?? ('Sales #'.$h->sales_id) }}
+                @selected($handover && $handover->id === $h->id)>
+                {{ $h->code }}
+                — {{ $h->sales->name ?? ('Sales #'.$h->sales_id) }}
                 ({{ \Carbon\Carbon::parse($h->handover_date)->format('Y-m-d') }})
-              </option>
-            @endforeach
-          </select>
-          <div class="form-text">Hanya handover yang sudah lock OTP pagi (status <b>ON_SALES</b>).</div>
-        </div>
-        <div class="col-md-3">
-          <button id="btnLoadItems" class="btn btn-primary w-100" disabled>
-            <i class="bx bx-download"></i> Load Items
-          </button>
-        </div>
-        <div class="col-md-3">
-          <button id="btnClear" class="btn btn-light w-100" disabled>Clear</button>
-        </div>
-      </div>
-
-      <form id="formEveningSave" method="POST" enctype="multipart/form-data">
-        @csrf
-
-        <div class="row g-2 mb-3">
-          <div class="col-md-3">
-            <label class="form-label">Kode Handover</label>
-            <input type="text" id="txtCode" class="form-control" readonly>
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Sales</label>
-            <input type="text" id="txtSales" class="form-control" readonly>
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Tanggal</label>
-            <input type="text" id="txtDate" class="form-control" readonly>
-          </div>
-        </div>
-
-        <div class="table-responsive">
-          <table class="table table-sm align-middle" id="tblReturn">
-            <thead>
-            <tr>
-              <th style="width:40%">Produk</th>
-              <th class="text-end" style="width:12%">Dibawa</th>
-              <th class="text-end" style="width:12%">Kembali (Qty)</th>
-              <th class="text-end" style="width:12%">Terjual</th>
-              <th style="width:24%">Harga</th>
-            </tr>
-            </thead>
-            <tbody>
-            {{-- diisi via JS --}}
-            </tbody>
-          </table>
-        </div>
-
-        {{-- Setoran uang --}}
-        <div class="row g-2 mt-3">
-          <div class="col-md-3">
-            <label class="form-label">Setor Tunai (Rp)</label>
-            <input type="number" name="cash_amount" class="form-control" min="0" value="0">
-            <div class="form-text">Isi 0 kalau tidak ada tunai.</div>
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Setor Transfer (Rp)</label>
-            <input type="number" name="transfer_amount" class="form-control" min="0" value="0">
-            <div class="form-text">Isi 0 kalau semua tunai.</div>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">Bukti Transfer (jpg/png/pdf)</label>
-            <input type="file" name="transfer_proof" class="form-control" accept=".jpg,.jpeg,.png,.pdf">
-            <div class="form-text">Wajib diupload kalau ada nominal transfer.</div>
-          </div>
-        </div>
-
-        <div class="d-flex justify-content-end gap-2 mt-3">
-          <button type="submit" class="btn btn-primary" id="btnSubmit" disabled>
-            Simpan Hasil &amp; Kirim OTP Sore
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  {{-- STEP 2: VERIFIKASI OTP SORE --}}
-  <div class="card">
-    <div class="card-header">
-      <h5 class="mb-0 fw-bold">Verifikasi OTP Sore (Closing)</h5>
-    </div>
-    <div class="card-body">
-      <form method="POST" action="{{ route('sales.handover.evening.verify') }}" class="row g-2 align-items-end">
-        @csrf
-        <div class="col-md-5">
-          <label class="form-label">Pilih Handover (Waiting OTP Sore)</label>
-          <select name="handover_id" class="form-select" required>
-            <option value="">— Pilih —</option>
-            @foreach(($waitingEvening ?? []) as $h)
-              <option value="{{ $h->id }}">
-                {{ $h->code }} — {{ $h->sales->name ?? ('Sales #'.$h->sales_id) }}
-                ({{ \Carbon\Carbon::parse($h->handover_date)->format('Y-m-d') }})
+                [{{ $stLabel }}]
               </option>
             @endforeach
           </select>
         </div>
-        <div class="col-md-3">
-          <label class="form-label">OTP Sore</label>
-          <input type="text" name="otp_code" class="form-control"
-                 inputmode="numeric" pattern="[0-9]*" placeholder="6 digit" required>
+
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-primary w-100">Lihat</button>
         </div>
-        <div class="col-md-4">
-          <button type="submit" class="btn btn-success w-100 mt-3 mt-md-0">
-            Verifikasi OTP &amp; Tutup Handover
-          </button>
+
+        <div class="col-md-3">
+          @if($handover)
+            <a href="{{ url()->current() }}" class="btn btn-outline-secondary w-100">
+              Clear Pilihan
+            </a>
+          @endif
         </div>
       </form>
+
       <div class="form-text mt-2">
-        Setelah OTP sore valid, stok sales akan di-clear dan sisa stok kembali ke gudang. Status menjadi <b>CLOSED</b>.
+        Kalau handover belum muncul di sini, pastikan sales sudah mengisi penjualan &amp; payment.
       </div>
     </div>
   </div>
+
+  {{-- ================== JIKA SUDAH PILIH HANDOVER: TAMPILKAN APPROVAL ================== --}}
+  @if($isApprovalMode)
+
+    {{-- HEADER HANDOVER --}}
+    <div class="card mb-4">
+      <div class="card-body">
+        <div class="row">
+          <div class="col-md-4 mb-2">
+            <div class="small text-muted fw-semibold">Kode Handover</div>
+            <div class="fs-6 fw-bold">{{ $handover->code }}</div>
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <div class="small text-muted fw-semibold">Tanggal</div>
+            <div>{{ optional($handover->handover_date)->format('Y-m-d') }}</div>
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <div class="small text-muted fw-semibold">Warehouse</div>
+            <div>
+              {{ optional($handover->warehouse)->warehouse_name
+                    ?? optional($handover->warehouse)->name
+                    ?? '-' }}
+            </div>
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <div class="small text-muted fw-semibold">Sales</div>
+            <div>{{ optional($handover->sales)->name ?? '-' }}</div>
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <div class="small text-muted fw-semibold">Status</div>
+            <span class="badge {{ $badgeClass }}">{{ $statusLabel }}</span>
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <div class="small text-muted fw-semibold">Info OTP Pagi</div>
+            <div class="small">
+              OTP Pagi dikirim:
+              {{ optional($handover->morning_otp_sent_at)->format('Y-m-d H:i') ?? '-' }}<br>
+              OTP Pagi verif:
+              {{ optional($handover->morning_otp_verified_at)->format('Y-m-d H:i') ?? '-' }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {{-- APPROVAL PAYMENT PER ITEM --}}
+    <div class="card mb-4">
+      <div class="card-header">
+        <h5 class="mb-0 fw-bold">Approval Payment Per Item</h5>
+        <small class="text-muted">
+          Approve / reject pembayaran yang sudah diinput sales.
+          Item yang sudah <strong>APPROVED</strong> tidak bisa diubah lagi.
+        </small>
+      </div>
+
+      <div class="card-body">
+        <form method="POST"
+              action="{{ route('warehouse.handovers.payments.approve', $handover) }}">
+          @csrf
+
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead>
+              <tr>
+                <th style="width:20%">Produk</th>
+                <th class="text-end" style="width:7%">Dibawa</th>
+                <th class="text-end" style="width:7%">Kembali</th>
+                <th class="text-end" style="width:7%">Terjual</th>
+                <th class="text-end" style="width:10%">Harga</th>
+                <th class="text-end" style="width:10%">Nilai Terjual</th>
+                <th class="text-end" style="width:7%">Qty Bayar</th>
+                <th class="text-center" style="width:8%">Metode</th>
+                <th class="text-end" style="width:10%">Nominal</th>
+                <th style="width:10%">Bukti TF</th>
+                <th style="width:10%">Decision</th>
+                <th style="width:11%">Alasan Reject</th>
+              </tr>
+              </thead>
+
+              <tbody>
+              @forelse($handover->items as $item)
+                @php
+                  $status      = $item->payment_status ?? 'pending';
+                  $statusBadge = match($status) {
+                      'approved' => 'bg-label-success',
+                      'rejected' => 'bg-label-danger',
+                      default    => 'bg-label-warning',
+                  };
+                  $lockItem = ! $canEdit || $status === 'approved';
+                @endphp
+
+                <tr>
+                  <td>
+                    <div class="fw-semibold">
+                      {{ $item->product->name ?? $item->product->product_name ?? '-' }}
+                    </div>
+                    <div class="small text-muted">
+                      {{ $item->product->product_code ?? '' }}
+                    </div>
+                  </td>
+
+                  <td class="text-end">{{ (int) $item->qty_start }}</td>
+                  <td class="text-end">{{ (int) $item->qty_returned }}</td>
+                  <td class="text-end">{{ (int) $item->qty_sold }}</td>
+
+                  <td class="text-end">
+                    {{ 'Rp ' . number_format((int) $item->unit_price, 0, ',', '.') }}
+                  </td>
+
+                  <td class="text-end">
+                    {{ 'Rp ' . number_format((int) $item->line_total_sold, 0, ',', '.') }}
+                  </td>
+
+                  <td class="text-end">{{ (int) $item->payment_qty }}</td>
+
+                  <td class="text-center">
+                    {{ $item->payment_method ? strtoupper($item->payment_method) : '-' }}
+                  </td>
+
+                  <td class="text-end">
+                    {{ 'Rp ' . number_format((int) $item->payment_amount, 0, ',', '.') }}
+                  </td>
+
+                  <td>
+                    @if($item->payment_transfer_proof_path)
+                      <a href="{{ asset('storage/'.$item->payment_transfer_proof_path) }}" target="_blank">
+                        Lihat Bukti
+                      </a>
+                    @else
+                      <span class="text-muted small">-</span>
+                    @endif
+                  </td>
+
+                  <td>
+                    <span class="badge {{ $statusBadge }} mb-1 d-inline-block">
+                      {{ strtoupper($status) }}
+                    </span>
+
+                    @if($canEdit)
+                      <div class="d-flex flex-column mt-1">
+                        <div class="form-check form-check-inline">
+                          <input class="form-check-input"
+                                 type="radio"
+                                 name="decisions[{{ $item->id }}][status]"
+                                 id="approve-{{ $item->id }}"
+                                 value="approved"
+                                 @checked($status === 'approved')
+                                 @if($lockItem) disabled @endif>
+                          <label class="form-check-label" for="approve-{{ $item->id }}">
+                            Approve
+                          </label>
+                        </div>
+
+                        <div class="form-check form-check-inline mt-1">
+                          <input class="form-check-input"
+                                 type="radio"
+                                 name="decisions[{{ $item->id }}][status]"
+                                 id="reject-{{ $item->id }}"
+                                 value="rejected"
+                                 @checked($status === 'rejected')
+                                 @if($lockItem) disabled @endif>
+                          <label class="form-check-label" for="reject-{{ $item->id }}">
+                            Reject
+                          </label>
+                        </div>
+                      </div>
+                    @endif
+                  </td>
+
+                  <td>
+                    @if($status === 'rejected' && $item->payment_reject_reason)
+                      <div class="small text-danger mb-1">
+                        {{ $item->payment_reject_reason }}
+                      </div>
+                    @endif
+
+                    @if($canEdit && ! $lockItem)
+                      <input type="text"
+                             class="form-control form-control-sm"
+                             name="decisions[{{ $item->id }}][reason]"
+                             value="{{ old("decisions.$item->id.reason", $item->payment_reject_reason) }}"
+                             placeholder="Alasan jika reject">
+                    @endif
+                  </td>
+                </tr>
+
+              @empty
+                <tr>
+                  <td colspan="12" class="text-center text-muted">
+                    Tidak ada item pada handover ini.
+                  </td>
+                </tr>
+              @endforelse
+              </tbody>
+            </table>
+          </div>
+
+          <div class="mt-3 text-end">
+            <a href="{{ url()->current() }}" class="btn btn-outline-secondary">
+              Kembali ke daftar
+            </a>
+
+            @if($canEdit && $handover->items->count())
+              <button type="submit" class="btn btn-primary">
+                Simpan Approval
+              </button>
+            @endif
+          </div>
+        </form>
+      </div>
+    </div>
+
+  @else
+    {{-- BELUM PILIH HANDOVER --}}
+    <div class="card mb-4">
+      <div class="card-body text-center text-muted">
+        Pilih salah satu handover di atas untuk melakukan approval payment.
+      </div>
+    </div>
+  @endif
 
 </div>
 @endsection
 
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script>
-(function(){
-  function swalErr(msg){ Swal.fire({icon:'error', title:'Gagal', html:msg}); }
-
-  const sel       = document.getElementById('selHandover');
-  const btnLoad   = document.getElementById('btnLoadItems');
-  const btnClear  = document.getElementById('btnClear');
-  const tblBody   = document.querySelector('#tblReturn tbody');
-  const txtCode   = document.getElementById('txtCode');
-  const txtSales  = document.getElementById('txtSales');
-  const txtDate   = document.getElementById('txtDate');
-  const form      = document.getElementById('formEveningSave');
-  const btnSubmit = document.getElementById('btnSubmit');
-
-  const inpCash   = form.querySelector('input[name="cash_amount"]');
-  const inpTf     = form.querySelector('input[name="transfer_amount"]');
-  const inpProof  = form.querySelector('input[name="transfer_proof"]');
-
-  function resetForm(){
-    txtCode.value  = '';
-    txtSales.value = '';
-    txtDate.value  = '';
-    tblBody.innerHTML = '';
-    btnSubmit.disabled = true;
-    btnClear.disabled  = true;
-  }
-
-  function rowHtml(idx, it){
-    const sold = Math.max((it.qty_start || 0) - (it.qty_returned || 0), 0);
-    const priceText = it.unit_price
-      ? new Intl.NumberFormat('id-ID').format(it.unit_price)
-      : '-';
-    return `
-      <tr data-pid="${it.product_id}">
-        <td>
-          <input type="hidden" name="items[${idx}][product_id]" value="${it.product_id}">
-          <div class="fw-semibold">${it.product_name || ('Produk #'+it.product_id)}</div>
-          <div class="small text-muted">${it.product_code ? 'Kode: '+it.product_code : ''}</div>
-        </td>
-        <td class="text-end">
-          <span class="lbl-start">${it.qty_start || 0}</span>
-        </td>
-        <td class="text-end">
-          <input type="number"
-                 class="form-control form-control-sm inp-returned"
-                 min="0"
-                 value="${it.qty_returned || 0}"
-                 name="items[${idx}][qty_returned]">
-        </td>
-        <td class="text-end">
-          <span class="lbl-sold">${sold}</span>
-        </td>
-        <td>
-          <span class="badge bg-label-secondary">Harga: ${priceText}</span>
-        </td>
-      </tr>
-    `;
-  }
-
-  function recomputeSold(tr){
-    const start = parseInt(tr.querySelector('.lbl-start').textContent || '0', 10);
-    const ret   = parseInt(tr.querySelector('.inp-returned').value || '0', 10);
-    const sold  = Math.max(start - ret, 0);
-    tr.querySelector('.lbl-sold').textContent = sold;
-  }
-
-  tblBody.addEventListener('input', (e)=>{
-    if (e.target.classList.contains('inp-returned')) {
-      const tr = e.target.closest('tr');
-      recomputeSold(tr);
-    }
-  });
-
-  sel.addEventListener('change', () => {
-    resetForm();
-
-    const id  = sel.value;
-    const opt = sel.options[sel.selectedIndex];
-    if (!id) {
-      btnLoad.disabled = true;
-      return;
-    }
-
-    txtCode.value  = opt.dataset.code || '';
-    txtSales.value = opt.dataset.sales || '';
-    txtDate.value  = opt.dataset.date || '';
-
-    // set action
-    const urlSave = @json(route('sales.handover.evening.save', 0)).replace('/0', '/' + id);
-    form.setAttribute('action', urlSave);
-
-    btnLoad.disabled = false;
-  });
-
-  btnClear.addEventListener('click', (e)=>{
-    e.preventDefault();
-    resetForm();
-    sel.value = '';
-    btnLoad.disabled = true;
-  });
-
-  btnLoad.addEventListener('click', async (e)=>{
-    e.preventDefault();
-    const id = sel.value;
-    if (!id) return;
-
-    tblBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Loading…</td></tr>';
-
-    try {
-      const url = @json(route('sales.handover.items', 0)).replace('/0', '/' + id);
-      const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-      if (!res.ok) throw new Error('HTTP '+res.status);
-      const json = await res.json();
-      const items = json.items || [];
-
-      if (!items.length) {
-        tblBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Tidak ada item.</td></tr>';
-        btnSubmit.disabled = true;
-        btnClear.disabled  = true;
-        return;
-      }
-
-      let html = '';
-      items.forEach((it, idx) => html += rowHtml(idx, it));
-      tblBody.innerHTML = html;
-      btnSubmit.disabled = true;   // baru enabled setelah validasi awal
-      btnClear.disabled  = false;
-      btnSubmit.disabled = false;
-    } catch (err) {
-      console.error(err);
-      tblBody.innerHTML = '';
-      btnSubmit.disabled = true;
-      swalErr('Gagal memuat item handover.');
-    }
-  });
-
-  form.addEventListener('submit', (e)=>{
-    const id = sel.value;
-    if (!id) {
-      e.preventDefault();
-      swalErr('Pilih handover terlebih dahulu.');
-      return;
-    }
-
-    const trs = [...tblBody.querySelectorAll('tr')];
-    if (!trs.length) {
-      e.preventDefault();
-      swalErr('Item masih kosong. Klik Load Items dulu.');
-      return;
-    }
-
-    let ok = true;
-    trs.forEach(tr => {
-      const start = parseInt(tr.querySelector('.lbl-start').textContent || '0', 10);
-      const ret   = parseInt(tr.querySelector('.inp-returned').value || '0', 10);
-      if (ret < 0 || ret > start) {
-        ok = false;
-      }
-    });
-
-    if (!ok) {
-      e.preventDefault();
-      swalErr('Qty kembali tidak boleh negatif atau lebih besar dari qty dibawa.');
-      return;
-    }
-
-    const cash = parseInt(inpCash.value || '0', 10);
-    const tf   = parseInt(inpTf.value || '0', 10);
-
-    if (cash < 0 || tf < 0) {
-      e.preventDefault();
-      swalErr('Nominal setor tidak boleh negatif.');
-      return;
-    }
-
-    if (tf > 0 && (!inpProof.files || !inpProof.files.length)) {
-      e.preventDefault();
-      swalErr('Jika ada nominal transfer, bukti transfer wajib diupload.');
-      return;
-    }
-  });
-
-})();
-</script>
 
 @if (session('success'))
 <script>

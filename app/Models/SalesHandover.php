@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class SalesHandover extends Model
 {
@@ -18,40 +18,46 @@ class SalesHandover extends Model
         'handover_date',
         'status',
         'issued_by',
-        'reconciled_by',
-
-        // amount
+        'closed_by',
         'total_dispatched_amount',
         'total_sold_amount',
+        'evening_filled_by_sales',
+        'evening_filled_at',
         'cash_amount',
         'transfer_amount',
         'transfer_proof_path',
-
-        // OTP
-        'issue_otp_hash',
-        'issue_otp_expires_at',
-        'otp_hash',
-        'otp_expires_at',
+        'morning_otp_hash',
+        'morning_otp_sent_at',
+        'morning_otp_verified_at',
+        'evening_otp_hash',
+        'evening_otp_sent_at',
+        'evening_otp_verified_at',
+        'morning_otp_plain',
+        'evening_otp_plain',
     ];
 
     protected $casts = [
         'handover_date'           => 'date',
-        'issue_otp_expires_at'    => 'datetime',
-        'otp_expires_at'          => 'datetime',
-        'total_dispatched_amount' => 'decimal:2',
-        'total_sold_amount'       => 'decimal:2',
-        'cash_amount'             => 'decimal:2',
-        'transfer_amount'         => 'decimal:2',
+        'evening_filled_by_sales' => 'boolean',
+        'evening_filled_at'       => 'datetime',
+
+        'morning_otp_sent_at'      => 'datetime',
+        'morning_otp_verified_at'  => 'datetime',
+        'evening_otp_sent_at'      => 'datetime',
+        'evening_otp_verified_at'  => 'datetime',
+
+        // di DB pakai unsignedBigInteger → cast ke integer
+        'total_dispatched_amount' => 'integer',
+        'total_sold_amount'       => 'integer',
+        'cash_amount'             => 'integer',
+        'transfer_amount'         => 'integer',
     ];
 
-    public function items()
-    {
-        return $this->hasMany(SalesHandoverItem::class, 'handover_id');
-    }
+    // ========= RELATIONSHIPS =========
 
     public function warehouse()
     {
-        return $this->belongsTo(Warehouse::class, 'warehouse_id');
+        return $this->belongsTo(Warehouse::class);
     }
 
     public function sales()
@@ -59,13 +65,46 @@ class SalesHandover extends Model
         return $this->belongsTo(User::class, 'sales_id');
     }
 
-    public function issuer()
+    public function issuedBy()
     {
         return $this->belongsTo(User::class, 'issued_by');
     }
 
-    public function reconciler()
+    public function closedBy()
     {
-        return $this->belongsTo(User::class, 'reconciled_by');
+        return $this->belongsTo(User::class, 'closed_by');
     }
+
+    public function items()
+    {
+        return $this->hasMany(SalesHandoverItem::class, 'handover_id');
+    }
+
+    protected function extractPlainOtp(?string $value): ?string
+    {
+        if (! $value) {
+            return null;
+        }
+
+        if (str_contains($value, '|')) {
+            [$plain] = explode('|', $value, 2);
+            $plain = trim($plain);
+            return $plain !== '' ? $plain : null;
+        }
+
+        // data lama: cuma hash, plain-nya nggak bisa diambil
+        return null;
+    }
+
+    public function getMorningOtpPlainAttribute(): ?string
+    {
+        return $this->extractPlainOtp($this->morning_otp_hash);
+    }
+
+    public function getEveningOtpPlainAttribute(): ?string
+    {
+        return $this->extractPlainOtp($this->evening_otp_hash);
+    }
+
+
 }

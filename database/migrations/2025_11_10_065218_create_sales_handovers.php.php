@@ -37,18 +37,22 @@ return new class extends Migration
             $table->foreignId('issued_by')->constrained('users');
             $table->foreignId('closed_by')->nullable()->constrained('users');
 
-            // ====== NOMINAL UANG (pakai bigInteger / unsignedBigInteger) ======
+            // ====== NOMINAL UANG (pakai unsignedBigInteger) ======
             // nilai total bawaan pagi (sum line_total_start semua item)
             $table->unsignedBigInteger('total_dispatched_amount')->default(0);
 
             // nilai total penjualan (sum line_total_sold semua item) setelah closing sore
             $table->unsignedBigInteger('total_sold_amount')->default(0);
 
-            // setoran tunai & transfer dari sales
+            // FLAG: diisi oleh SALES sekali saja
+            $table->boolean('evening_filled_by_sales')->default(false);
+            $table->timestamp('evening_filled_at')->nullable();
+
+            // setoran tunai & transfer dari sales (header-level recap)
             $table->unsignedBigInteger('cash_amount')->default(0);
             $table->unsignedBigInteger('transfer_amount')->default(0);
 
-            // path file bukti transfer (disimpan di storage)
+            // path file bukti transfer (kalau mau simpan bukti umum di header)
             $table->string('transfer_proof_path')->nullable();
 
             // ====== OTP PAGI ======
@@ -86,6 +90,16 @@ return new class extends Migration
             $table->unsignedBigInteger('unit_price')->default(0);        // harga satuan
             $table->unsignedBigInteger('line_total_start')->default(0);  // qty_start * unit_price
             $table->unsignedBigInteger('line_total_sold')->default(0);   // qty_sold * unit_price
+
+            // ====== PAYMENT PER ITEM ======
+            $table->integer('payment_qty')->default(0); // qty yang dibayar
+            $table->enum('payment_method', ['cash', 'transfer'])->nullable();
+            $table->unsignedBigInteger('payment_amount')->default(0);
+            $table->string('payment_transfer_proof_path')->nullable();
+            $table->enum('payment_status', ['pending', 'approved', 'rejected'])
+                ->nullable();
+            $table->text('payment_reject_reason')->nullable();
+            // ====== END PAYMENT ======
 
             $table->timestamps();
 
