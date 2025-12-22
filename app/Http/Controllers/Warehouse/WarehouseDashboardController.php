@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Warehouse;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Schema;   // ✅ wajib, kamu pakai Schema banyak
 use Illuminate\Support\Facades\Route;
 use App\Models\Product;
 
@@ -19,17 +19,33 @@ class WarehouseDashboardController extends Controller
         $whName   = $me->warehouse?->warehouse_name ?? 'Warehouse';
         $greeting = 'Selamat datang, Wh ' . ($me->name ?? 'User');
 
-        // ===== LINKS (pakai named route kalau ada, fallback ke URL)
-            $links = [
-            'stock_level'     => route('stocklevel.index'),
-            'stock_level_low' => route('stocklevel.index', ['filter' => 'low']),
+        // ✅ FIX UTAMA: jangan hard route() kalau route name belum kebaca di server
+        // (kalau missing -> 500 "Route [x] not defined")
+        $links = [
+            'stock_level'     => Route::has('stocklevel.index')
+                ? route('stocklevel.index')
+                : url('/stock-level'),
 
-            'issue_morning'   => route('sales.handover.morning'),
-            'reconcile_otp'   => route('sales.handover.evening'),
+            'stock_level_low' => Route::has('stocklevel.index')
+                ? route('stocklevel.index', ['filter' => 'low'])
+                : url('/stock-level?filter=low'),
 
-            'sales_reports'   => route('sales.report'),
-            'restocks'        => route('restocks.index'),
-            ];
+            'issue_morning'   => Route::has('sales.handover.morning')
+                ? route('sales.handover.morning')
+                : url('/sales/handover/morning'),
+
+            'reconcile_otp'   => Route::has('sales.handover.evening')
+                ? route('sales.handover.evening')
+                : url('/sales/handover/evening'),
+
+            'sales_reports'   => Route::has('sales.report')
+                ? route('sales.report')
+                : url('/warehouse/sales-reports'),
+
+            'restocks'        => Route::has('restocks.index')
+                ? route('restocks.index')
+                : url('/restocks'),
+        ];
 
         // ===== Label 7 hari (Y-m-d)
         $labels = [];
@@ -55,9 +71,14 @@ class WarehouseDashboardController extends Controller
         if ($hasSL && $slQtyCol) {
             $stockSub = DB::table('stock_levels as sl')
                 ->selectRaw("sl.product_id, SUM(sl.$slQtyCol) AS current_stock")
-                ->when(Schema::hasColumn('stock_levels', 'warehouse_id') && $whId, fn($q) => $q->where('sl.warehouse_id', $whId))
                 ->when(
-                    Schema::hasColumn('stock_levels', 'owner_type') && Schema::hasColumn('stock_levels', 'owner_id') && $whId,
+                    Schema::hasColumn('stock_levels', 'warehouse_id') && $whId,
+                    fn($q) => $q->where('sl.warehouse_id', $whId)
+                )
+                ->when(
+                    Schema::hasColumn('stock_levels', 'owner_type')
+                        && Schema::hasColumn('stock_levels', 'owner_id')
+                        && $whId,
                     fn($q) => $q->where('sl.owner_type', 'warehouse')->where('sl.owner_id', $whId)
                 )
                 ->groupBy('sl.product_id');
@@ -134,9 +155,14 @@ class WarehouseDashboardController extends Controller
                         SUM(CASE ".($typeCol ? "WHEN LOWER($typeCol) IN ('out','outbound','keluar')" : "WHEN $qtyCol < 0")." THEN ABS($qtyCol) ELSE 0 END) as outbound
                     ")
                     ->whereBetween('created_at', [now()->subDays(6)->startOfDay(), now()->endOfDay()])
-                    ->when(Schema::hasColumn($movTable, 'warehouse_id') && $whId, fn($qq) => $qq->where('warehouse_id', $whId))
                     ->when(
-                        Schema::hasColumn($movTable, 'owner_type') && Schema::hasColumn($movTable, 'owner_id') && $whId,
+                        Schema::hasColumn($movTable, 'warehouse_id') && $whId,
+                        fn($qq) => $qq->where('warehouse_id', $whId)
+                    )
+                    ->when(
+                        Schema::hasColumn($movTable, 'owner_type')
+                            && Schema::hasColumn($movTable, 'owner_id')
+                            && $whId,
                         fn($qq) => $qq->where('owner_type', 'warehouse')->where('owner_id', $whId)
                     )
                     ->groupBy('d')->orderBy('d');
