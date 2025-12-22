@@ -56,121 +56,208 @@ class StockWhController extends Controller
     /* ================== DATATABLE ================== */
 
 
-        public function datatable(Request $r)
-        {
-            $draw   = (int) $r->input('draw', 1);
-            $start  = (int) $r->input('start', 0);
-            $length = (int) $r->input('length', 10);
+public function datatable(Request $r)
+{
+    $me = auth()->user();
 
-            $orderColIdx = (int) $r->input('order.0.column', 0);
-            $orderDir    = $r->input('order.0.dir', 'desc') === 'asc' ? 'asc' : 'desc';
+    $canSwitchWarehouse = $me->hasRole(['admin', 'superadmin']);
+    $isWarehouseUser    = $me->hasRole('warehouse');
 
-            // SEARCH dari DataTables (nanti kita isi lewat #globalSearch)
-            $search = trim((string) $r->input('search.value', ''));
+    $draw   = (int) $r->input('draw', 1);
+    $start  = (int) $r->input('start', 0);
+    $length = (int) $r->input('length', 10);
 
-            // FILTER tambahan (input di card)
-            $dateFrom    = $r->input('date_from');   // yyyy-mm-dd
-            $dateTo      = $r->input('date_to');     // yyyy-mm-dd
-            $warehouseId = $r->input('warehouse_id'); // '' atau id
+    $orderColIdx = (int) $r->input('order.0.column', 1);
+    $orderDir    = $r->input('order.0.dir', 'desc') === 'asc' ? 'asc' : 'desc';
 
-            // mapping order kolom DataTables
-            $orderMap = [
-                0 => 'sa.id',
-                1 => 'sa.adj_code',
-                2 => 'sa.adj_date',
-                3 => 'w.warehouse_name',
-                4 => 'items_count',
-                5 => 'u.name',
-                6 => 'sa.created_at',
-            ];
-            $orderBy = $orderMap[$orderColIdx] ?? 'sa.id';
+    $search = trim((string) $r->input('search.value', ''));
 
-            $base = DB::table('stock_adjustments as sa')
-                ->leftJoin('warehouses as w', 'w.id', '=', 'sa.warehouse_id')
-                ->leftJoin('users as u', 'u.id', '=', 'sa.created_by')
-                ->select([
-                    'sa.id',
-                    'sa.adj_code',
-                    'sa.adj_date',
-                    'sa.warehouse_id',
-                    'w.warehouse_name',
-                    'u.name as created_by_name',
-                    'sa.created_at',
-                ])
-                ->selectSub(function ($q) {
-                    $q->from('stock_adjustment_items as sai')
-                    ->selectRaw('COUNT(*)')
-                    ->whereColumn('sai.stock_adjustment_id', 'sa.id');
-                }, 'items_count');
+    // filter dari JS kamu: from/to/status/warehouse_id
+    $from       = $r->input('from'); // yyyy-mm-dd
+    $to         = $r->input('to');   // yyyy-mm-dd
+    $status     = trim((string) $r->input('status', ''));
+    $warehouseQ = $r->input('warehouse_id');
 
-            // total sebelum filter/search
-            $recordsTotal = (clone $base)->count();
+    // scope warehouse by role
+    if ($isWarehouseUser && ! $canSwitchWarehouse) {
+        $warehouseId = (int) ($me->warehouse_id ?? 0);
+    } else {
+        $warehouseId = !empty($warehouseQ) ? (int) $warehouseQ : null;
+    }
 
-            // FILTER tanggal dokumen (adj_date)
-            if (!empty($dateFrom)) {
-                $base->whereDate('sa.adj_date', '>=', $dateFrom);
-            }
-            if (!empty($dateTo)) {
-                $base->whereDate('sa.adj_date', '<=', $dateTo);
-            }
+    // schema flex (biar aman)
+    static $hasCode, $hasWh, $hasReqBy, $hasQtyReq, $hasQtyRcv, $hasNote, $hasDesc;
+    $hasCode   ??= Schema::hasColumn('request_restocks', 'code');
+    $hasWh     ??= Schema::hasColumn('request_restocks', 'warehouse_id');
+    $hasReqBy  ??= Schema::hasColumn('request_restocks', 'requested_by');
+    $hasQtyReq ??= Schema::hasColumn('request_restocks', 'quantity_requested');
+    $hasQtyRcv ??= Schema::hasColumn('request_restocks', 'quantity_received');
+    $hasNote   ??= Schema::hasColumn('request_restocks', 'note');
+    $hasDesc   ??= Schema::hasColumn('request_restocks', 'description');
 
-            // FILTER warehouse ('' = semua)
-            if (!empty($warehouseId)) {
-                $base->where('sa.warehouse_id', (int) $warehouseId);
-            }
+    $codeExpr = $hasCode ? 'rr.code' : "CONCAT('RR-', rr.id)";
+    $qtyReqExpr = $hasQtyReq ? 'COALESCE(rr.quantity_requested,0)' : '0';
+    $qtyRcvExpr = $hasQtyRcv ? 'COALESCE(rr.quantity_received,0)' : '0';
+    $noteExpr   = $hasNote ? 'rr.note' : ($hasDesc ? 'rr.description' : "''");
 
-            // SEARCH global (kode/warehouse/dibuat oleh)
-            if ($search !== '') {
-                $like = '%' . $search . '%';
-                $base->where(function ($q) use ($like) {
-                    $q->where('sa.adj_code', 'like', $like)
-                    ->orWhere('w.warehouse_name', 'like', $like)
-                    ->orWhere('u.name', 'like', $like);
-                });
-            }
+    // mapping order kolom (sesuai urutan columns DataTables kamu)
+    // 0 rownum (ignore)
+    $orderMap = [
+        1 => 'code',
+        2 => 'product_name',
+        3 => 'supplier_name',
+        4 => 'qty_req',
+        5 => 'qty_rcv',
+        6 => 'status',
+        7 => 'created_at',
+        8 => 'note',
+    ];
+    $orderBy = $orderMap[$orderColIdx] ?? 'created_at';
 
-            $recordsFiltered = (clone $base)->count();
+    $base = DB::table('request_restocks as rr')
+        ->leftJoin('products as p', 'p.id', '=', 'rr.product_id')
+        ->leftJoin('suppliers as s', 's.id', '=', 'rr.supplier_id');
 
-            // items_count itu alias subquery -> sortingnya pakai orderByRaw
-            if ($orderBy === 'items_count') {
-                $base->orderByRaw('items_count ' . $orderDir);
-            } else {
-                $base->orderBy($orderBy, $orderDir);
-            }
+    if ($hasWh) {
+        $base->leftJoin('warehouses as w', 'w.id', '=', 'rr.warehouse_id');
+    }
+    if ($hasReqBy) {
+        $base->leftJoin('users as u', 'u.id', '=', 'rr.requested_by');
+    }
 
-            $rows = $base->skip($start)->take($length)->get();
+    // SELECT (alias harus sama kayak columns DataTables)
+    $base->select([
+        'rr.id',
+        DB::raw($codeExpr . ' as code'),
+        DB::raw("COALESCE(p.name,'-') as product_name"),
+        DB::raw("COALESCE(p.product_code,'') as product_code"),
+        DB::raw("COALESCE(s.name,'-') as supplier_name"),
+        DB::raw($qtyReqExpr . ' as qty_req'),
+        DB::raw($qtyRcvExpr . ' as qty_rcv'),
+        DB::raw("COALESCE(rr.status,'pending') as status"),
+        'rr.created_at',
+        DB::raw(($noteExpr === "''" ? "''" : $noteExpr) . ' as note'),
+    ]);
 
-            $data = $rows->map(function ($row) {
-                $tglAdj = $row->adj_date ? Carbon::parse($row->adj_date)->format('d/m/Y') : '-';
-                $jam    = $row->created_at ? Carbon::parse($row->created_at)->format('H:i') : '-';
+    // total (sebelum filter/search)
+    $recordsTotal = (clone $base)->count();
 
-                $wh = $row->warehouse_id
-                    ? ($row->warehouse_name ?? '-')
-                    : 'Stock Central';
-
-                $btn = '<button class="btn btn-sm btn-outline-primary btnAdjDetail" data-id="'.(int)$row->id.'">
-                            <i class="bx bx-search-alt"></i> Detail
-                        </button>';
-
-                return [
-                    'id'          => (int) $row->id,
-                    'adj_code'    => e($row->adj_code ?? '-'),
-                    'adj_date'    => $tglAdj,
-                    'warehouse'   => e($wh),
-                    'items_count' => (int) ($row->items_count ?? 0),
-                    'created_by'  => e($row->created_by_name ?? '-'),
-                    'jam_input'   => $jam,
-                    'aksi'        => $btn,
-                ];
-            });
-
-            return response()->json([
-                'draw'            => $draw,
-                'recordsTotal'    => $recordsTotal,
-                'recordsFiltered' => $recordsFiltered,
-                'data'            => $data,
-            ]);
+    // FILTER WAREHOUSE
+    if ($warehouseId) {
+        if ($hasWh) {
+            $base->where('rr.warehouse_id', $warehouseId);
+        } elseif ($hasReqBy && $isWarehouseUser) {
+            $base->where('rr.requested_by', $me->id);
         }
+    } elseif ($isWarehouseUser && $hasReqBy && ! $hasWh) {
+        $base->where('rr.requested_by', $me->id);
+    }
+
+    // FILTER STATUS
+    if ($status !== '') {
+        $base->where('rr.status', $status);
+    }
+
+    // FILTER TANGGAL
+    if (!empty($from)) {
+        $base->whereDate('rr.created_at', '>=', $from);
+    }
+    if (!empty($to)) {
+        $base->whereDate('rr.created_at', '<=', $to);
+    }
+
+    // SEARCH GLOBAL
+    if ($search !== '') {
+        $like = '%' . $search . '%';
+        $base->where(function ($q) use ($like, $hasCode, $noteExpr) {
+            if ($hasCode) {
+                $q->where('rr.code', 'like', $like);
+            } else {
+                $q->where('rr.id', 'like', $like);
+            }
+
+            $q->orWhere('p.name', 'like', $like)
+              ->orWhere('p.product_code', 'like', $like)
+              ->orWhere('s.name', 'like', $like);
+
+            if ($noteExpr !== "''") {
+                $q->orWhereRaw($noteExpr . ' LIKE ?', [$like]);
+            }
+        });
+    }
+
+    $recordsFiltered = (clone $base)->count();
+
+    // ORDER
+    if ($orderBy === 'code') {
+        $base->orderByRaw($codeExpr . ' ' . $orderDir);
+    } else {
+        $base->orderBy($orderBy, $orderDir);
+    }
+
+    $rows = $base->skip($start)->take($length)->get();
+
+    $data = [];
+    foreach ($rows as $i => $row) {
+        $rownum = $start + $i + 1;
+
+        $createdAt = $row->created_at
+            ? Carbon::parse($row->created_at)->format('d/m/Y')
+            : '-';
+
+        $statusRaw = $row->status ?? 'pending';
+        $badgeMap = [
+            'pending'   => 'secondary',
+            'approved'  => 'warning',
+            'ordered'   => 'info',
+            'received'  => 'success',
+            'cancelled' => 'danger',
+        ];
+        $badge = $badgeMap[$statusRaw] ?? 'secondary';
+        $statusHtml = '<span class="badge bg-label-'.$badge.'">'.e(strtoupper($statusRaw)).'</span>';
+
+        $codeSafe = e($row->code ?? ('RR-'.$row->id));
+
+        $actions = '
+            <div class="d-flex gap-1 justify-content-center">
+              <button type="button"
+                class="btn btn-sm btn-outline-primary js-detail"
+                data-id="'.(int)$row->id.'"
+                data-code="'.$codeSafe.'">
+                <i class="bx bx-search-alt"></i>
+              </button>
+              <button type="button"
+                class="btn btn-sm btn-outline-success js-receive"
+                data-id="'.(int)$row->id.'"
+                data-code="'.$codeSafe.'"
+                data-action="'.e(route('restocks.receive', $row->id)).'">
+                <i class="bx bx-package"></i>
+              </button>
+            </div>
+        ';
+
+        $data[] = [
+            'rownum'    => $rownum,
+            'code'      => $codeSafe,
+            'product'   => e(($row->product_name ?? '-') ),
+            'supplier'  => e(($row->supplier_name ?? '-') ),
+            'qty_req'   => (int) ($row->qty_req ?? 0),
+            'qty_rcv'   => (int) ($row->qty_rcv ?? 0),
+            'status'    => $statusHtml,
+            'created_at'=> $createdAt,
+            'note'      => e(($row->note ?? '') ?: '-'),
+            'actions'   => $actions,
+        ];
+    }
+
+    return response()->json([
+        'draw'            => $draw,
+        'recordsTotal'    => $recordsTotal,
+        'recordsFiltered' => $recordsFiltered,
+        'data'            => $data,
+    ]);
+}
+
 
         public function detailJson($id)
         {
