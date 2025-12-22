@@ -293,7 +293,7 @@
     </div>
 
     <div class="col-md-4">
-      <a href="{{ route('sales.return') }}" class="card h-100 text-decoration-none text-reset">
+      <a href="#" class="card h-100 text-decoration-none text-reset">
         <div class="card-body">
           <div class="fw-semibold mb-1">Retur Barang</div>
           <div class="small text-muted">

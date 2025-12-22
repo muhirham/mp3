@@ -80,4 +80,14 @@ class Kernel extends HttpKernel
         'menu' => \App\Http\Middleware\MenuKey::class,
         'active' => \App\Http\Middleware\EnsureUserIsActive::class,
     ];
+
+    protected $middlewarePriority = [
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        \App\Http\Middleware\Authenticate::class,
+        \App\Http\Middleware\EnsureUserIsActive::class,
+        \App\Http\Middleware\MenuKey::class,
+        \Illuminate\Routing\Middleware\SubstituteBindings::class,
+    ];
+    
 }
