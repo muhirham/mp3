@@ -429,15 +429,16 @@ Route::get('/stock-adjustments/export/excel', [StockAdjustmentController::class,
         ->name('warehouse.handovers.payments.reject')
         ->middleware('menu:wh_sales_reports');
 
-    // key: sales_return
     Route::get('/sales/return', [WhSalesController::class,'return'])
         ->name('sales.return')
         ->middleware('menu:sales_return');
+        
 
     /* === Reports (umum) – key: reports === */
+    
     Route::resource('/reports', ReportController::class)
         ->only(['index'])
         ->middleware('menu:reports');
-
+    
         
 });
