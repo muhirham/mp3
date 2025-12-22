@@ -361,5 +361,6 @@
 
   targets.forEach(t => obs.observe(t));
 })();
+//-- End IIFE
 </script>
 @endpush
