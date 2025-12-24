@@ -241,194 +241,171 @@ class GoodReceivedController extends Controller
 
 
     /** Simpan Goods Received dari PO manual (1 form → banyak item) */
-        public function storeFromPo(Request $request, PurchaseOrder $po)
-        {
-            // ===== GUARD: batasi siapa yang boleh GR =====
-            $user  = $request->user();
-            $roles = $user?->roles ?? collect();
+    public function storeFromPo(Request $request, PurchaseOrder $po)
+    {
+        // ===== GUARD: batasi siapa yang boleh GR =====
+        $user  = $request->user();
+        $roles = $user?->roles ?? collect();
 
-            $isSuperadmin = $roles->contains('slug', 'superadmin');
-            $isWarehouse  = $roles->contains('slug', 'warehouse');
+        $isSuperadmin = $roles->contains('slug', 'superadmin');
+        $isWarehouse  = $roles->contains('slug', 'warehouse');
 
-            $po->loadMissing('items');
-            $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
+        $po->loadMissing('items');
+        $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
 
-            if ($fromRequest) {
-                // PO dari Request Restock → hanya Admin Warehouse
-                if (! $isWarehouse) {
-                    return back()->with('error', 'GR PO dari Request Restock hanya bisa dilakukan Admin Warehouse.');
-                }
+        if ($fromRequest) {
+            // PO dari Request Restock → hanya Admin Warehouse
+            if (! $isWarehouse) {
+                return back()->with('error', 'GR PO dari Request Restock hanya bisa dilakukan Admin Warehouse.');
+            }
 
-                // pastiin PO ini buat warehouse dia
-                $myWhId = $user->warehouse_id ?? null;
-                if ($myWhId) {
-                    $poWhIds = $po->items->pluck('warehouse_id')->filter()->unique();
-                    if (! $poWhIds->contains($myWhId)) {
-                        abort(403, 'PO ini bukan untuk warehouse kamu.');
-                    }
-                }
-            } else {
-                // PO Central → hanya Superadmin
-                if (! $isSuperadmin) {
-                    abort(403, 'GR PO Central hanya bisa dilakukan Superadmin.');
+            // pastiin PO ini buat warehouse dia
+            $myWhId = $user->warehouse_id ?? null;
+            if ($myWhId) {
+                $poWhIds = $po->items->pluck('warehouse_id')->filter()->unique();
+                if (! $poWhIds->contains($myWhId)) {
+                    abort(403, 'PO ini bukan untuk warehouse kamu.');
                 }
             }
-                // PO yang berasal dari Restock Request tetap TIDAK boleh lewat sini
-                $fromRequest = $po->items()->whereNotNull('request_id')->exists();
-                if ($fromRequest) {
-                    return back()->with('error', 'PO ini berasal dari Restock Request. Penerimaan dilakukan dari menu Warehouse (Restock).');
-                }
+        } else {
+            // PO Central → hanya Superadmin
+            if (! $isSuperadmin) {
+                abort(403, 'GR PO Central hanya bisa dilakukan Superadmin.');
+            }
+        }
 
-                $data = $r->validate([
-                    'receives'               => ['required', 'array', 'min:1'],
-                    'receives.*.qty_good'    => ['nullable', 'integer', 'min:0'],
-                    'receives.*.qty_damaged' => ['nullable', 'integer', 'min:0'],
-                    'receives.*.notes'       => ['nullable', 'string', 'max:500'],
+        // ✅ validasi backend (ini wajib biar data aman)
+        $data = $request->validate([
+            'receives'               => ['required', 'array', 'min:1'],
+            'receives.*.qty_good'    => ['nullable', 'integer', 'min:0'],
+            'receives.*.qty_damaged' => ['nullable', 'integer', 'min:0'],
+            'receives.*.notes'       => ['nullable', 'string', 'max:500'],
 
-                    'photos_good'            => ['nullable'],
-                    'photos_good.*'          => ['nullable', 'image', 'max:4096'],
-                    'photos_damaged'         => ['nullable'],
-                    'photos_damaged.*'       => ['nullable', 'image', 'max:4096'],
-                ]);
+            'photos_good'            => ['nullable'],
+            'photos_good.*'          => ['nullable', 'image', 'max:4096'],
+            'photos_damaged'         => ['nullable'],
+            'photos_damaged.*'       => ['nullable', 'image', 'max:4096'],
+        ]);
 
-                $user           = auth()->user();
-                $rows           = $data['receives'];
-                $now            = now();
-                $anyRow         = false;
-                $firstReceiptId = null;
+        $rows           = $data['receives'];
+        $now            = now();
+        $anyRow         = false;
+        $firstReceiptId = null;
 
-                $hasCodeColumn = Schema::hasColumn('restock_receipts', 'code');
+        $hasCodeColumn = Schema::hasColumn('restock_receipts', 'code');
 
-                DB::beginTransaction();
+        DB::beginTransaction();
 
-                try {
-                    foreach ($rows as $itemId => $row) {
-                        $item = PurchaseOrderItem::where('purchase_order_id', $po->id)
-                            ->where('id', $itemId)
-                            ->first();
+        try {
+            foreach ($rows as $itemId => $row) {
+                $item = PurchaseOrderItem::where('purchase_order_id', $po->id)
+                    ->where('id', $itemId)
+                    ->first();
 
-                        if (! $item) {
-                            continue;
-                        }
+                if (! $item) continue;
 
-                        $good = (int) ($row['qty_good'] ?? 0);
-                        $bad  = (int) ($row['qty_damaged'] ?? 0);
+                $good = (int) ($row['qty_good'] ?? 0);
+                $bad  = (int) ($row['qty_damaged'] ?? 0);
 
-                        if ($good === 0 && $bad === 0) {
-                            continue;
-                        }
+                if ($good === 0 && $bad === 0) continue;
 
-                        $ordered   = (int) ($item->qty_ordered ?? 0);
-                        $received  = (int) ($item->qty_received ?? 0);
-                        $remaining = max(0, $ordered - $received);
+                $ordered   = (int) ($item->qty_ordered ?? 0);
+                $received  = (int) ($item->qty_received ?? 0);
+                $remaining = max(0, $ordered - $received);
 
-                        if ($remaining > 0 && ($good + $bad) > $remaining) {
-                            DB::rollBack();
-                            return back()->with('error', 'Qty Good + Damaged melebihi Qty Remaining untuk salah satu item.');
-                        }
-
-                        // PO manual superadmin → dianggap CENTRAL STOCK
-                        $warehouseId = null; // NULL = Central Stock (pusat)
-
-                        $payload = [
-                            'purchase_order_id' => $po->id,
-                            'request_id'        => null,
-                            'product_id'        => $item->product_id,
-                            'warehouse_id'      => $warehouseId,
-                            'supplier_id'       => $po->supplier_id,
-                            'qty_requested'     => $ordered,
-                            'qty_good'          => $good,
-                            'qty_damaged'       => $bad,
-                            'notes'             => $row['notes'] ?? null,
-                            'received_by'       => $user?->id,
-                            'received_at'       => $now,
-                            'created_at'        => $now,
-                            'updated_at'        => $now,
-                        ];
-
-                        if ($hasCodeColumn) {
-                            $payload['code'] = $this->nextReceiptCode();
-                        }
-
-                        $receiptId = DB::table('restock_receipts')->insertGetId($payload);
-                        $anyRow    = true;
-                        if (! $firstReceiptId) {
-                            $firstReceiptId = $receiptId;
-                        }
-
-                        $newReceived = $received + $good + $bad;
-                        DB::table('purchase_order_items')
-                            ->where('id', $item->id)
-                            ->update([
-                                'qty_received' => $newReceived,
-                                'updated_at'   => $now,
-                            ]);
-
-                        // ================== STOK CENTRAL (pusat) ==================
-                        if (
-                            Schema::hasTable('stock_levels') &&
-                            Schema::hasColumn('stock_levels', 'product_id') &&
-                            Schema::hasColumn('stock_levels', 'owner_type') &&
-                            Schema::hasColumn('stock_levels', 'owner_id') &&
-                            Schema::hasColumn('stock_levels', 'quantity')
-                        ) {
-                            $this->adjustCentralStock($item->product_id, $good);
-                        }
-                    }
-
-                    if (! $anyRow) {
-                        DB::rollBack();
-                        return back()->with('error', 'Tidak ada qty yang diinput untuk Goods Received.');
-                    }
-
-                    if ($firstReceiptId) {
-                        $this->storeReceiptPhotos($r->file('photos_good') ?? [],    $firstReceiptId, 'good');
-                        $this->storeReceiptPhotos($r->file('photos_damaged') ?? [], $firstReceiptId, 'damaged');
-                    }
-
-                    // hitung status PO
-                    $items = $po->items()->get(['qty_ordered', 'qty_received']);
-
-                    $allFull     = true;
-                    $anyReceived = false;
-
-                    foreach ($items as $it) {
-                        $ordered  = (int) $it->qty_ordered;
-                        $received = (int) $it->qty_received;
-
-                        if ($received > 0) {
-                            $anyReceived = true;
-                        }
-                        if ($received < $ordered) {
-                            $allFull = false;
-                        }
-                    }
-
-                    $updatePo = [];
-                    if ($allFull && $anyReceived) {
-                        $updatePo['status'] = 'completed';
-                        if (Schema::hasColumn('purchase_orders', 'received_at')) {
-                            $updatePo['received_at'] = $now;
-                        }
-                    } elseif ($anyReceived) {
-                        $updatePo['status'] = 'partially_received';
-                    }
-
-                    if (! empty($updatePo)) {
-                        $updatePo['updated_at'] = $now;
-                        DB::table('purchase_orders')
-                            ->where('id', $po->id)
-                            ->update($updatePo);
-                    }
-
-                    DB::commit();
-                    return back()->with('success', 'Goods Received berhasil disimpan dan stok CENTRAL telah diperbarui.');
-                } catch (\Throwable $e) {
+                // ✅ safety backend (biar ga lewat remaining)
+                if ($remaining > 0 && ($good + $bad) > $remaining) {
                     DB::rollBack();
-                    report($e);
-                    return back()->with('error', 'Gagal menyimpan Goods Received: ' . $e->getMessage());
+                    return back()->with('error', 'Qty Good + Damaged melebihi Qty Remaining untuk salah satu item.');
+                }
+
+                // PO manual superadmin → CENTRAL (warehouse_id null)
+                // PO dari request → boleh simpan warehouse_id dari item (kalau kolomnya ada)
+                $warehouseId = $fromRequest ? ($item->warehouse_id ?? null) : null;
+
+                $payload = [
+                    'purchase_order_id' => $po->id,
+                    'request_id'        => null,
+                    'product_id'        => $item->product_id,
+                    'warehouse_id'      => $warehouseId,
+                    'supplier_id'       => $po->supplier_id,
+                    'qty_requested'     => $ordered,
+                    'qty_good'          => $good,
+                    'qty_damaged'       => $bad,
+                    'notes'             => $row['notes'] ?? null,
+                    'received_by'       => $user?->id,
+                    'received_at'       => $now,
+                    'created_at'        => $now,
+                    'updated_at'        => $now,
+                ];
+
+                if ($hasCodeColumn) {
+                    $payload['code'] = $this->nextReceiptCode();
+                }
+
+                $receiptId = DB::table('restock_receipts')->insertGetId($payload);
+                $anyRow    = true;
+                if (! $firstReceiptId) $firstReceiptId = $receiptId;
+
+                // update qty_received item
+                $newReceived = $received + $good + $bad;
+                DB::table('purchase_order_items')
+                    ->where('id', $item->id)
+                    ->update([
+                        'qty_received' => $newReceived,
+                        'updated_at'   => $now,
+                    ]);
+
+                // update stok (central)
+                if (Schema::hasTable('stock_levels')) {
+                    // lu udah punya function ini
+                    $this->adjustCentralStock($item->product_id, $good);
                 }
             }
+
+            if (! $anyRow) {
+                DB::rollBack();
+                return back()->with('error', 'Tidak ada qty yang diinput untuk Goods Received.');
+            }
+
+            // upload foto
+            if ($firstReceiptId) {
+                $this->storeReceiptPhotos($request->file('photos_good') ?? [],    $firstReceiptId, 'good');
+                $this->storeReceiptPhotos($request->file('photos_damaged') ?? [], $firstReceiptId, 'damaged');
+            }
+
+            // ✅ UPDATE STATUS PO BERDASARKAN QTY_RECEIVED TERBARU
+            $items = DB::table('purchase_order_items')
+                ->where('purchase_order_id', $po->id)
+                ->get(['qty_ordered', 'qty_received']);
+
+            $allDone = $items->every(function ($it) {
+                return (int)($it->qty_received ?? 0) >= (int)($it->qty_ordered ?? 0);
+            });
+
+            $anyDone = $items->sum(function ($it) {
+                return (int)($it->qty_received ?? 0);
+            }) > 0;
+
+            $newStatus = $allDone ? 'completed' : ($anyDone ? 'partially_received' : 'ordered');
+
+            DB::table('purchase_orders')->where('id', $po->id)->update([
+                'status'     => $newStatus,
+                'updated_at' => $now,
+            ]);
+
+            DB::commit();
+
+            // ✅ kunci: ini yang nanti dibaca blade buat Swal sukses
+            return back()->with('gr_success', 'Goods Received berhasil disimpan.');
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            report($e);
+            return back()->with('error', 'Gagal menyimpan Goods Received: ' . $e->getMessage());
+        }
+    }
+
+
 
     /**
      * Simpan foto GR ke tabel restock_receipt_photos

@@ -4,34 +4,37 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-@php
-    $me    = auth()->user();
-    $roles = $me?->roles ?? collect();
+  @php
+      $me    = auth()->user();
+      $roles = $me?->roles ?? collect();
 
-    $isSuperadmin  = $roles->contains('slug', 'superadmin');
-    $isProcurement = $roles->contains('slug', 'procurement');
-    $isCeo         = $roles->contains('slug', 'ceo');
+      $isSuperadmin  = $roles->contains('slug', 'superadmin') || (($me->role ?? '') === 'superadmin');
+      $isProcurement = $roles->contains('slug', 'procurement') || (($me->role ?? '') === 'procurement'); // ❌ NO SUPERADMIN
+      $isCeo         = $roles->contains('slug', 'ceo') || (($me->role ?? '') === 'ceo');                 // ❌ NO SUPERADMIN
 
-    $approvalStatus = $po->approval_status ?? 'draft';
+      $approvalStatus = $po->approval_status ?? 'draft';
 
-    $baseLocked     = $isLocked ?? false;
-    $approvalLocked = in_array($approvalStatus, ['waiting_procurement','waiting_ceo','approved'], true);
+      $baseLocked     = $isLocked ?? false;
+      $approvalLocked = in_array($approvalStatus, ['waiting_procurement','waiting_ceo','approved'], true);
 
-    $poLocked = $baseLocked || $approvalLocked;
+      // ✅ EDIT PO HANYA SUPERADMIN
+      $poLocked = $baseLocked || $approvalLocked || ! $isSuperadmin;
 
-    if ($approvalStatus === 'rejected' && ! $isSuperadmin) {
-        $poLocked = true;
-    }
+      // ✅ notes lock: kalau sudah ada log reject (1) 2) dst) → kunci permanen
+      $hasRejectLog = preg_match('/^\d+\)\s/m', trim((string)($po->notes ?? '')));
+      $notesLocked  = $poLocked || $hasRejectLog;
 
-    $canSubmitApproval = $isSuperadmin
-        && ! $poLocked
-        && in_array($approvalStatus, ['draft','rejected'], true)
-        && $po->items->count() > 0
-        && $po->grand_total > 0;
+      $canSubmitApproval = $isSuperadmin
+          && ! $poLocked
+          && in_array($approvalStatus, ['draft','rejected'], true)
+          && $po->items->count() > 0
+          && $po->grand_total > 0;
 
-    $canApproveProc = $isProcurement && $approvalStatus === 'waiting_procurement';
-    $canApproveCeo  = $isCeo        && $approvalStatus === 'waiting_ceo';
-@endphp
+      $canApproveProc = $isProcurement && $approvalStatus === 'waiting_procurement';
+      $canApproveCeo  = $isCeo        && $approvalStatus === 'waiting_ceo';
+  @endphp
+
+
 
 <style>
   .po-compact {
@@ -103,7 +106,11 @@
         <strong class="text-uppercase">{{ $po->approval_status ?? 'draft' }}</strong>
         @if(($po->approval_status ?? '') === 'rejected' && $po->notes)
           <br>
-          <span class="text-danger">Alasan ditolak: {{ $po->notes }}</span>
+          <div class="text-danger small">
+          <div class="fw-semibold">Alasan ditolak:</div>
+          <div>{!! nl2br(e($po->notes)) !!}</div>
+        </div>
+
         @endif
       </small>
     </div>
@@ -141,9 +148,9 @@
         <div class="col-md-8">
           <label class="form-label">Notes</label>
           <textarea name="notes"
-                    rows="2"
+                    rows="4"
                     class="form-control"
-                    @disabled($poLocked)>{{ old('notes',$po->notes) }}</textarea>
+                    @disabled($notesLocked)>{{ old('notes',$po->notes) }}</textarea>
         </div>
       </div>
     </div>
@@ -153,7 +160,7 @@
         <h6 class="mb-0">Items</h6>
         @unless($poLocked)
           <button type="button" class="btn btn-sm btn-outline-primary" id="btnAddRow">
-            <i class="bx bx-plus"></i> Tambah Baris
+            <i class="bx bx-plus"></i> Add Items
           </button>
         @endunless
       </div>
@@ -341,7 +348,7 @@
       </form>
     @endif
 
-    @if(!$poLocked && !in_array($po->approval_status, ['waiting_procurement','waiting_ceo','approved'], true))
+    @if(!$poLocked && !in_array($po->approval_status, ['waiting_procurement','waiting_ceo','approved'], true) && ($po->status ?? '') !== 'cancelled')
       <form method="POST" action="{{ route('po.cancel',$po->id) }}" class="d-inline frm-cancel">
         @csrf
         <button type="submit" class="btn btn-outline-danger">Cancel PO</button>

@@ -33,7 +33,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 class PreOController extends Controller
 {
     /** LIST PO */
-    private const CEO_MIN_TOTAL = 2_000_000;
+    private const CEO_MIN_TOTAL = 1_000_001;
     public function index(Request $request)
     {
         $q              = trim((string) $request->get('q', ''));
@@ -49,9 +49,9 @@ class PreOController extends Controller
         $me    = auth()->user();
         $roles = $me?->roles ?? collect();
 
-        $isSuperadmin  = $roles->contains('slug', 'superadmin');
-        $isProcurement = $roles->contains('slug', 'procurement') || $isSuperadmin;
-        $isCeo         = $roles->contains('slug', 'ceo') || $isSuperadmin;
+        $isSuperadmin  = $roles->contains('slug', 'superadmin') || (($me->role ?? '') === 'superadmin');
+        $isProcurement = $roles->contains('slug', 'procurement') || (($me->role ?? '') === 'procurement');
+        $isCeo         = $roles->contains('slug', 'ceo') || (($me->role ?? '') === 'ceo');
 
         // kolom tanggal (kalau ada po_date pakai itu, kalau nggak pakai created_at)
         $dateCol = Schema::hasColumn('purchase_orders', 'po_date') ? 'po_date' : 'created_at';
@@ -74,6 +74,35 @@ class PreOController extends Controller
                     });
                 }
             ]);
+
+                        // ✅ role-based visibility:
+            // - procurement: cuma PO yang nunggu procurement
+            // - ceo       : cuma PO yang nunggu CEO
+        if (! $isSuperadmin) {
+            if ($isProcurement) {
+                $query->where(function ($qq) {
+                    $qq->whereIn('approval_status', ['waiting_procurement','waiting_ceo','approved','rejected'])
+                    ->orWhereNull('approval_status')
+                    ->orWhere('approval_status');
+                });
+            } elseif ($isCeo) {
+                $query->where('grand_total', '>', self::CEO_MIN_TOTAL);
+
+                $query->where(function ($qq) {
+                    $qq->where('approval_status', 'waiting_ceo') // yang harus CEO approve
+                    ->orWhere(function ($q2) {
+                        $q2->where('approval_status', 'approved')
+                            ->whereNotNull('approved_by_ceo'); // track record yang CEO approve
+                    })
+                    ->orWhere(function ($q2) {
+                        $q2->where('approval_status', 'rejected')
+                            ->whereNotNull('approved_by_ceo'); // kalau reject CEO juga mau kelihatan
+                    });
+                });
+            } else {
+                $query->whereRaw('1=0');
+            }
+        }
 
         // search
         if ($q !== '') {
@@ -148,9 +177,21 @@ class PreOController extends Controller
         ));
     }
 
+    protected function isProcurementUser($user): bool
+        {
+            $roles = $user?->roles ?? collect();
+            return $roles->contains('slug', 'procurement') || (($user->role ?? '') === 'procurement');
+        }
+
+    protected function isCeoUser($user): bool
+        {
+            $roles = $user?->roles ?? collect();
+            return $roles->contains('slug', 'ceo') || (($user->role ?? '') === 'ceo');
+        }
+
 
         /** EDIT PO (manual / dari Restock Request) */
-    public function edit(PurchaseOrder $po)
+        public function edit(PurchaseOrder $po)
         {
             $po->load([
                 'items.product.supplier',
@@ -172,7 +213,14 @@ class PreOController extends Controller
                 ->get($cols);
 
             $isFromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
-            $isLocked      = $this->poIsLocked($po);
+
+            $user = auth()->user();
+
+            // ✅ HANYA SUPERADMIN YANG BOLEH EDIT PO (DRAFT/REJECTED)
+            $canEdit = $this->isSuperadminUser($user);
+
+            // ✅ kalau user bukan superadmin → LOCK walaupun PO masih draft
+            $isLocked = $this->poIsLocked($po, $user) || ! $canEdit;
 
             return view('admin.po.edit', compact(
                 'po',
@@ -184,13 +232,18 @@ class PreOController extends Controller
             ));
         }
 
+
                 /** SIMPAN PERUBAHAN PO */
-    public function update(Request $request, PurchaseOrder $po)
+        public function update(Request $request, PurchaseOrder $po)
         {
-            if ($this->poIsLocked($po)) {
+            $me = $request->user();
+
+            abort_unless($this->isSuperadminUser($me), 403, 'Hanya superadmin yang boleh mengubah PO.');
+
+            if ($this->poIsLocked($po, $me)) {
                 return back()->with(
                     'error',
-                    'PO sudah ORDERED dan memiliki Goods Received, tidak dapat diubah.'
+                    'PO sudah ORDERED/COMPLETED (atau sedang proses approval / sudah ada GR), tidak dapat diubah.'
                 );
             }
 
@@ -217,7 +270,7 @@ class PreOController extends Controller
                 'supplier_id'           => ['nullable', 'exists:suppliers,id'],
                 'notes'                 => ['nullable', 'string'],
 
-                'items'                 => ['array'],
+                'items'                 => ['array'], // boleh kosong di validation, tapi nanti kita tahan manual
                 'items.*.id'            => ['nullable', 'integer', 'exists:purchase_order_items,id'],
                 'items.*.product_id'    => ['required', 'exists:products,id'],
                 'items.*.warehouse_id'  => ['nullable', 'exists:warehouses,id'],
@@ -229,10 +282,27 @@ class PreOController extends Controller
             ]);
 
             DB::transaction(function () use ($validated, $po, $wasFromRequest) {
+
                 $po->supplier_id = $validated['supplier_id'] ?? null;
-                $po->notes       = $validated['notes'] ?? null;
+
+                // ✅ RULE: kalau status REJECTED -> notes (alasan) gak boleh berubah dari form update
+                if (($po->approval_status ?? 'draft') !== 'rejected') {
+                    if (array_key_exists('notes', $validated)) {
+                        $po->notes = $validated['notes'] ?? null;
+                    }
+                }
 
                 $itemsInput = $validated['items'] ?? [];
+
+                // ✅ VALIDASI: PO ga boleh kosong (minimal 1 item valid)
+                $hasAtLeastOne = collect($itemsInput)->contains(function ($row) {
+                    return !empty($row['product_id']) && (int)($row['qty'] ?? 0) > 0;
+                });
+                if (! $hasAtLeastOne) {
+                    throw ValidationException::withMessages([
+                        'items' => 'PO tidak boleh kosong. Minimal 1 item wajib diisi.',
+                    ]);
+                }
 
                 $productIds = collect($itemsInput)->pluck('product_id')->filter()->unique()->all();
                 $productPrices = collect();
@@ -320,6 +390,13 @@ class PreOController extends Controller
                     $discountTotal += $disc;
                 }
 
+                // ✅ kalau ujungnya kosong -> tahan
+                if (count($keepIds) === 0) {
+                    throw ValidationException::withMessages([
+                        'items' => 'PO tidak boleh kosong. Minimal 1 item wajib diisi.',
+                    ]);
+                }
+
                 if (count($keepIds)) {
                     $po->items()->whereNotIn('id', $keepIds)->delete();
                 } else {
@@ -338,6 +415,7 @@ class PreOController extends Controller
 
             return back()->with('success', 'PO berhasil disimpan.');
         }
+
             /** SET PO → ORDERED  */
         /** SET PO → ORDERED  */
 /**
@@ -347,9 +425,29 @@ class PreOController extends Controller
  */
         public function order(PurchaseOrder $po)
         {
-            if (in_array($po->status, ['ordered', 'completed', 'cancelled'], true)) {
+            $user = auth()->user();
+            $isSuperadmin = $this->isSuperadminUser($user);
+            abort_unless($this->isSuperadminUser(auth()->user()), 403, 'Hanya superadmin yang boleh mengajukan approval PO.');
+
+
+            // ORDERED/COMPLETED gak bisa diajukan lagi
+            if (in_array($po->status, ['ordered', 'completed'], true)) {
                 return redirect()->route('po.index')
                     ->with('info', 'PO sudah tidak bisa diajukan approval lagi.');
+            }
+
+            // CANCELLED -> hanya superadmin yang boleh "buka lagi"
+            if ($po->status === 'cancelled' && ! $isSuperadmin) {
+                return redirect()->route('po.index')
+                    ->with('info', 'PO CANCELLED tidak dapat diajukan approval lagi.');
+            }
+
+            // kalau superadmin dan PO CANCELLED -> buka balik ke draft (biar bisa jalan lagi)
+            if ($po->status === 'cancelled' && $isSuperadmin) {
+                $po->status = 'draft';
+                if (Schema::hasColumn('purchase_orders', 'cancelled_at')) {
+                    $po->cancelled_at = null;
+                }
             }
 
             if (in_array($po->approval_status, ['waiting_procurement','waiting_ceo','approved'], true)) {
@@ -359,17 +457,19 @@ class PreOController extends Controller
 
             if ($po->items()->count() === 0 || $po->grand_total <= 0) {
                 return redirect()->route('po.edit', $po->id)
-                    ->with('error', 'Isi item dan harga dulu sebelum mengajukan approval.');
+                    ->with('error', 'PO tidak boleh kosong. Isi item dan harga dulu sebelum mengajukan approval.');
             }
 
-            // TEKANKAN: logistik tetap draft
+            // logistik tetap draft
             $po->status           = 'draft';
             $po->approval_status  = 'waiting_procurement';
+
             $po->approved_by_procurement = null;
             $po->approved_by_ceo         = null;
             $po->approved_at_procurement = null;
             $po->approved_at_ceo         = null;
 
+            // ✅ notes (alasan reject) JANGAN dihapus di sini
             $po->save();
 
             return redirect()->route('po.edit', $po->id)
@@ -378,10 +478,23 @@ class PreOController extends Controller
 
 
 
+
         public function cancel(PurchaseOrder $po)
         {
-            if ($this->poIsLocked($po)) {
-                return back()->with('error', 'PO sudah ORDERED/COMPLETED, tidak dapat dibatalkan.');
+            abort_unless($this->isSuperadminUser(auth()->user()), 403, 'Hanya superadmin yang boleh mengajukan approval PO.');
+
+            // kalau sudah ordered/completed/cancelled -> stop
+            if (in_array($po->status, ['ordered','completed','cancelled'], true)) {
+                return back()->with('error', 'PO sudah tidak bisa di-cancel.');
+            }
+
+            // kalau lagi proses approval -> stop
+            if (in_array($po->approval_status, ['waiting_procurement','waiting_ceo','approved'], true)) {
+                return back()->with('error', 'PO sedang dalam proses approval, tidak dapat di-cancel.');
+            }
+
+            if ($this->poHasGR($po)) {
+                return back()->with('error', 'PO sudah memiliki Goods Received, tidak dapat dibatalkan.');
             }
 
             DB::transaction(function () use ($po) {
@@ -415,8 +528,29 @@ class PreOController extends Controller
             });
 
             return back()->with('success', 'PO dibatalkan dan request ikut CANCELLED.');
-            
         }
+
+        protected function appendRejectNote(PurchaseOrder $po, string $stage, string $reason): string
+        {
+            [$userNote, $rejectLog] = $this->splitNotes($po->notes);
+
+            // hitung urutan reject di log (berdasarkan pola "1) ", "2) ", dst)
+            $count = 0;
+            if ($rejectLog !== '') {
+                preg_match_all('/^\d+\)\s/m', $rejectLog, $m);
+                $count = count($m[0]);
+            }
+
+            $seq   = $count + 1;
+            $stamp = now()->format('Y-m-d H:i');
+            $entry = "{$seq}) {$stage} ({$stamp}) : " . trim($reason);
+
+            $newLog = $rejectLog === '' ? $entry : ($rejectLog . "\n" . $entry);
+
+            // gabung lagi: userNote tetap, log bertambah
+            return (string)$this->mergeNotes($userNote, $newLog);
+        }
+
 
 
         public function approveProcurement(Request $request, PurchaseOrder $po)
@@ -427,22 +561,22 @@ class PreOController extends Controller
 
             $user = $request->user();
 
+            // ✅ superadmin dilarang approve
+            abort_if($this->isSuperadminUser($user), 403, 'Superadmin tidak boleh melakukan approval.');
+            abort_unless($this->isProcurementUser($user), 403, 'Hanya Procurement yang boleh approve tahap ini.');
+
             $po->approved_by_procurement = $user->id;
             $po->approved_at_procurement = now();
-            // kalau sebelumnya pernah reject, notes (alasan) di- clear
-            $po->notes = null;
 
             $grand = (int) $po->grand_total;
 
             if ($grand > self::CEO_MIN_TOTAL) {
-                // > 2jt → lanjut ke CEO
                 $po->approval_status = 'waiting_ceo';
-                // status tetap draft, belum bisa GR
             } else {
-                // <= 2jt → cukup Procurement → langsung ORDERED
                 $po->approval_status = 'approved';
                 $po->status          = 'ordered';
                 $po->ordered_at      = now();
+                $po->notes = $this->clearRejectLogKeepUserNote($po->notes);
             }
 
             $po->save();
@@ -450,85 +584,139 @@ class PreOController extends Controller
             return back()->with('success', 'Approval Procurement berhasil disimpan.');
         }
 
-    public function rejectProcurement(Request $request, PurchaseOrder $po)
-    {
-        if ($po->approval_status !== 'waiting_procurement') {
-            return back()->with('error', 'PO tidak dalam status menunggu approval Procurement.');
+
+
+        public function rejectProcurement(Request $request, PurchaseOrder $po)
+        {
+            if ($po->approval_status !== 'waiting_procurement') {
+                return back()->with('error', 'PO tidak dalam status menunggu approval Procurement.');
+            }
+
+            $user = $request->user();
+
+            abort_if($this->isSuperadminUser($user), 403, 'Superadmin tidak boleh melakukan approval.');
+            abort_unless($this->isProcurementUser($user), 403, 'Hanya Procurement yang boleh reject tahap ini.');
+
+            $data = $request->validate([
+                'reason' => ['required', 'string', 'max:1000'],
+            ]);
+
+            $po->approval_status = 'rejected';
+            $po->notes = $this->appendRejectNote($po, 'PROCUREMENT', $data['reason']);
+
+            $po->approved_by_procurement = $user->id;
+            $po->approved_at_procurement = now();
+
+            $po->approved_by_ceo = null;
+            $po->approved_at_ceo = null;
+
+            $po->status = 'draft';
+            $po->save();
+
+            return redirect()->route('po.edit', $po->id)
+                ->with('error', 'PO ditolak Procurement.');
         }
 
-        $data = $request->validate([
-            'reason' => ['required', 'string', 'max:1000'],
-        ]);
 
-        $user = $request->user();
 
-        $po->approval_status         = 'rejected';
-        $po->notes                   = $data['reason'];        // simpan alasan di notes
-        $po->approved_by_procurement = $user->id;
-        $po->approved_at_procurement = now();
-        $po->approved_by_ceo         = null;
-        $po->approved_at_ceo         = null;
+        public function approveCeo(Request $request, PurchaseOrder $po)
+        {
+            if ($po->approval_status !== 'waiting_ceo') {
+                return back()->with('error', 'PO tidak dalam status menunggu approval CEO.');
+            }
 
-        // balik ke draft biar bisa diedit & diajukan ulang
-        $po->status = 'draft';
+            $user = $request->user();
 
-        $po->save();
+            abort_if($this->isSuperadminUser($user), 403, 'Superadmin tidak boleh melakukan approval.');
+            abort_unless($this->isCeoUser($user), 403, 'Hanya CEO yang boleh approve tahap ini.');
 
-        return redirect()
-            ->route('po.edit', $po->id)
-            ->with('error', 'PO ditolak Procurement: ' . $data['reason']);
-    }
+            $po->approved_by_ceo = $user->id;
+            $po->approved_at_ceo = now();
 
-    public function approveCeo(Request $request, PurchaseOrder $po)
-{
-    if ($po->approval_status !== 'waiting_ceo') {
-        return back()->with('error', 'PO tidak dalam status menunggu approval CEO.');
-    }
+            $po->approval_status = 'approved';
+            $po->notes = $this->clearRejectLogKeepUserNote($po->notes);
+            $po->status          = 'ordered';
+            $po->ordered_at      = now();
 
-    $user = $request->user();
+            $po->save();
 
-    $po->approved_by_ceo  = $user->id;
-    $po->approved_at_ceo  = now();
-    $po->approval_status  = 'approved';
-    $po->notes            = null;  // bersihkan alasan reject lama
-    $po->status           = 'ordered';
-    $po->ordered_at       = now();
-
-    $po->save();
-
-    return back()->with('success', 'PO disetujui CEO dan status di-set ORDERED.');
-}
-
-    public function rejectCeo(Request $request, PurchaseOrder $po)
-    {
-        if ($po->approval_status !== 'waiting_ceo') {
-            return back()->with('error', 'PO tidak dalam status menunggu approval CEO.');
+            return back()->with('success', 'PO disetujui CEO dan status di-set ORDERED.');
         }
 
-        $data = $request->validate([
-            'reason' => ['required', 'string', 'max:1000'],
-        ]);
 
-        $user = $request->user();
+        public function rejectCeo(Request $request, PurchaseOrder $po)
+        {
+            if ($po->approval_status !== 'waiting_ceo') {
+                return back()->with('error', 'PO tidak dalam status menunggu approval CEO.');
+            }
 
-        $po->approval_status = 'rejected';
-        $po->notes           = $data['reason'];   // simpan alasan di notes
-        $po->approved_by_ceo = $user->id;
-        $po->approved_at_ceo = now();
+            $user = $request->user();
 
-        // balik ke draft biar bisa diedit & diajukan ulang
-        $po->status = 'draft';
+            abort_if($this->isSuperadminUser($user), 403, 'Superadmin tidak boleh melakukan approval.');
+            abort_unless($this->isCeoUser($user), 403, 'Hanya CEO yang boleh reject tahap ini.');
 
-        $po->save();
+            $data = $request->validate([
+                'reason' => ['required', 'string', 'max:1000'],
+            ]);
 
-        return redirect()
-            ->route('po.edit', $po->id)
-            ->with('error', 'PO ditolak CEO: ' . $data['reason']);
+            $po->approval_status = 'rejected';
+            $po->notes = $this->appendRejectNote($po, 'CEO', $data['reason']);
+
+            $po->approved_by_ceo = $user->id;
+            $po->approved_at_ceo = now();
+
+            $po->status = 'draft';
+            $po->save();
+
+            return redirect()->route('po.edit', $po->id)
+                ->with('error', 'PO ditolak CEO.');
+        }
+
+        // ===== NOTES HELPER (user note + reject log dalam 1 kolom) =====
+    private const REJECT_MARKER = "\n\n--- REJECT LOG ---\n";
+
+    protected function splitNotes(?string $notes): array
+    {
+        $notes = (string)($notes ?? '');
+        $pos = strpos($notes, self::REJECT_MARKER);
+
+        if ($pos === false) {
+            return [trim($notes), '']; // [userNote, rejectLog]
+        }
+
+        $user = trim(substr($notes, 0, $pos));
+        $log  = trim(substr($notes, $pos + strlen(self::REJECT_MARKER)));
+
+        return [$user, $log];
     }
+
+    protected function mergeNotes(string $userNote, string $rejectLog): ?string
+    {
+        $userNote  = trim($userNote);
+        $rejectLog = trim($rejectLog);
+
+        if ($rejectLog !== '') {
+            $merged = $userNote . self::REJECT_MARKER . $rejectLog;
+            return trim($merged) !== '' ? trim($merged) : null;
+        }
+
+        return $userNote !== '' ? $userNote : null;
+    }
+
+    protected function clearRejectLogKeepUserNote(?string $notes): ?string
+    {
+        [$userNote, $rejectLog] = $this->splitNotes($notes);
+        // buang reject log, simpan user note saja
+        return $this->mergeNotes($userNote, '');
+    }
+
+
 
 
         public function store(Request $r)
         {
+            abort_unless($this->isSuperadminUser(auth()->user()), 403, 'Hanya superadmin yang boleh membuat PO.');
+
             $code = $this->generateManualPoCode();
 
             $po = PurchaseOrder::create([
@@ -588,32 +776,55 @@ class PreOController extends Controller
         return $id ?: null;
     }
 
-    protected function poIsLocked(PurchaseOrder $po): bool
+    protected function isSuperadminUser($user): bool
     {
-        // 1) Status logistik tertentu → locked
-        if (in_array($po->status, ['ordered', 'completed', 'cancelled'], true)) {
-            return true;
-        }
+        $roles = $user?->roles ?? collect();
+        return $roles->contains('slug', 'superadmin') || (($user->role ?? '') === 'superadmin');
+    }
 
-        // 2) Sudah ada GR
+    protected function poHasGR(PurchaseOrder $po): bool
+    {
         if (
-            Schema::hasTable('restock_receipts') &&
-            Schema::hasColumn('restock_receipts', 'purchase_order_id') &&
-            DB::table('restock_receipts')
-                ->where('purchase_order_id', $po->id)
-                ->exists()
+            !Schema::hasTable('restock_receipts') ||
+            !Schema::hasColumn('restock_receipts', 'purchase_order_id')
         ) {
+            return false;
+        }
+
+        return DB::table('restock_receipts')
+            ->where('purchase_order_id', $po->id)
+            ->exists();
+    }
+
+
+    protected function poIsLocked(PurchaseOrder $po, $user = null): bool
+    {
+        $isSuperadmin = $this->isSuperadminUser($user);
+
+        // 1) ORDERED / COMPLETED selalu lock
+        if (in_array($po->status, ['ordered', 'completed'], true)) {
             return true;
         }
 
-        // 3) Sedang proses approval / sudah approved → form edit dikunci
+        // 2) Kalau sudah ada GR -> lock (siapa pun)
+        if ($this->poHasGR($po)) {
+            return true;
+        }
+
+        // 3) Sedang proses approval / sudah approved -> lock
         if (in_array($po->approval_status, ['waiting_procurement', 'waiting_ceo', 'approved'], true)) {
             return true;
         }
 
-        // Draft / Rejected → boleh diedit
+        // 4) CANCELLED: default lock, tapi superadmin boleh buka lagi (selama belum ada GR & bukan approval locked)
+        if ($po->status === 'cancelled') {
+            return !$isSuperadmin;
+        }
+
+        // Draft / Rejected -> boleh edit
         return false;
     }
+
 
 
 
