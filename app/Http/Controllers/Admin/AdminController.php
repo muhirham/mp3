@@ -9,256 +9,295 @@ use App\Models\User;
 use App\Models\Warehouse;
 use App\Models\PurchaseOrder;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 class AdminController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $me = auth()->user();
         abort_unless($me, 403);
 
         // =========================
-        // RANGE: BULAN INI
+        // PERIOD FILTER (FINAL)
         // =========================
-        $startMonth = now()->startOfMonth()->startOfDay();
-        $endMonth   = now()->endOfMonth()->endOfDay();
+            $period = request('period','month');
+
+            if ($period === 'day') {
+                $start = now()->startOfDay();
+                $end   = now()->endOfDay();
+                $label = now()->format('d F Y');
+
+            } elseif ($period === 'week') {
+                $end   = now()->endOfDay();
+                $start = now()->copy()->subDays(6)->startOfDay();
+
+                $label = $start->format('d F').' - '.$end->format('d F Y');
+            } else {
+                $month = (int) request('month', now()->month);
+                $year  = (int) request('year', now()->year);
+
+                $start = Carbon::create($year,$month,1)->startOfMonth();
+                $end   = Carbon::create($year,$month,1)->endOfMonth();
+
+                $label = Carbon::create()->month($month)->format('F').' '.$year;
+            }
+
 
         // =========================
-        // SALES HANDOVER DATE COL (aman)
+        // SALES HANDOVER DATE COL
         // =========================
         $handoverTable = (new SalesHandover)->getTable();
-        $handoverDateCol = Schema::hasColumn($handoverTable, 'handover_date') ? 'handover_date' : 'created_at';
+        $handoverDate  = Schema::hasColumn($handoverTable, 'handover_date')
+            ? 'handover_date'
+            : 'created_at';
 
         // =========================
-        // KPI TOP CARDS
+        // KPI TOP
         // =========================
         $usersTotal      = (int) User::count();
         $productsTotal   = (int) Product::count();
         $warehousesTotal = Schema::hasTable('warehouses') ? (int) Warehouse::count() : 0;
 
-        $closedCountMonth = (int) SalesHandover::query()
-            ->whereRaw('LOWER(status) = ?', ['closed'])
-            ->whereBetween($handoverDateCol, [$startMonth, $endMonth])
+        $closedCount = SalesHandover::whereRaw('LOWER(status)="closed"')
+            ->whereBetween($handoverDate, [$start, $end])
             ->count();
 
-        $closedAmountMonth = 0;
-        if (Schema::hasColumn($handoverTable, 'total_sold_amount')) {
-            $closedAmountMonth = (int) SalesHandover::query()
-                ->whereRaw('LOWER(status) = ?', ['closed'])
-                ->whereBetween($handoverDateCol, [$startMonth, $endMonth])
-                ->sum('total_sold_amount');
-        }
+        $closedAmount = Schema::hasColumn($handoverTable,'total_sold_amount')
+            ? (int) SalesHandover::whereRaw('LOWER(status)="closed"')
+                ->whereBetween($handoverDate, [$start, $end])
+                ->sum('total_sold_amount')
+            : 0;
 
         // =========================
-        // CHART 1: YEARLY (SUM CLOSED PER BULAN)
+        // CHART 1: YEARLY (MONTHLY)
         // =========================
         $year = now()->year;
 
-        $monthlyMap = [];
-        if (Schema::hasColumn($handoverTable, 'total_sold_amount')) {
-            $monthlyMap = SalesHandover::query()
-                ->whereRaw('LOWER(status) = ?', ['closed'])
-                ->whereYear($handoverDateCol, $year)
-                ->selectRaw("MONTH($handoverDateCol) as m, SUM(total_sold_amount) as total")
+        $monthlyMap = Schema::hasColumn($handoverTable,'total_sold_amount')
+            ? SalesHandover::whereRaw('LOWER(status)="closed"')
+                ->whereYear($handoverDate, $year)
+                ->selectRaw("MONTH($handoverDate) m, SUM(total_sold_amount) total")
                 ->groupBy('m')
-                ->pluck('total', 'm')
-                ->toArray();
-        }
+                ->pluck('total','m')
+                ->toArray()
+            : [];
 
         $monthLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
         $monthSeries = [];
         for ($m = 1; $m <= 12; $m++) {
-            $monthSeries[] = (int) ($monthlyMap[$m] ?? 0);
+            $monthSeries[] = (int)($monthlyMap[$m] ?? 0);
         }
 
         // =========================
-        // CHART 2: STATUS DONUT (BULAN INI)
+        // CHART 2: STATUS DONUT
         // =========================
-        $statusRows = SalesHandover::query()
-            ->whereBetween($handoverDateCol, [$startMonth, $endMonth])
-            ->selectRaw('LOWER(status) as st, COUNT(*) as c')
+        $statusRows = SalesHandover::whereBetween($handoverDate, [$start, $end])
+            ->selectRaw('LOWER(status) st, COUNT(*) c')
             ->groupBy('st')
-            ->pluck('c', 'st')
+            ->pluck('c','st')
             ->toArray();
 
         $statusOrder = [
-            'draft',
-            'waiting_morning_otp',
-            'on_sales',
-            'waiting_evening_otp',
-            'closed',
-            'cancelled',
+            'draft','waiting_morning_otp','on_sales',
+            'waiting_evening_otp','closed','cancelled'
         ];
 
         $statusLabelMap = [
-            'draft'               => 'Draft',
-            'waiting_morning_otp' => 'Menunggu OTP Pagi',
-            'on_sales'            => 'On Sales',
-            'waiting_evening_otp' => 'Menunggu OTP Sore',
-            'closed'              => 'Closed',
-            'cancelled'           => 'Cancelled',
+            'draft'=>'Draft',
+            'waiting_morning_otp'=>'Menunggu OTP Pagi',
+            'on_sales'=>'On Sales',
+            'waiting_evening_otp'=>'Menunggu OTP Sore',
+            'closed'=>'Closed',
+            'cancelled'=>'Cancelled',
         ];
 
         $statusLabels = [];
         $statusSeries = [];
         foreach ($statusOrder as $st) {
-            $statusLabels[] = $statusLabelMap[$st] ?? $st;
-            $statusSeries[] = (int) ($statusRows[$st] ?? 0);
+            $statusLabels[] = $statusLabelMap[$st];
+            $statusSeries[] = (int)($statusRows[$st] ?? 0);
         }
 
         // =========================
-        // CHART 3: CLOSED PER HARI (LAST 12 DAYS)
+        // CHART 3: DAILY (AUTO RANGE)
         // =========================
-        $from = now()->subDays(11)->startOfDay();
-        $to   = now()->endOfDay();
-
-        $dailyRows = SalesHandover::query()
-            ->whereRaw('LOWER(status) = ?', ['closed'])
-            ->whereBetween($handoverDateCol, [$from, $to])
-            ->selectRaw("DATE($handoverDateCol) as d, COUNT(*) as c")
+        $dailyRows = SalesHandover::whereRaw('LOWER(status)="closed"')
+            ->whereBetween($handoverDate, [$start, $end])
+            ->selectRaw("DATE($handoverDate) d, COUNT(*) c")
             ->groupBy('d')
-            ->orderBy('d')
-            ->pluck('c', 'd')
+            ->pluck('c','d')
             ->toArray();
 
         $dailyLabels = [];
         $dailySeries = [];
-        for ($i = 11; $i >= 0; $i--) {
-            $d = now()->subDays($i)->toDateString();
-            $dailyLabels[] = Carbon::parse($d)->format('d/m');
-            $dailySeries[] = (int) ($dailyRows[$d] ?? 0);
+
+        $cursor = $start->copy();
+        while ($cursor <= $end) {
+            $key = $cursor->toDateString();
+            $dailyLabels[] = $cursor->format('d/m');
+            $dailySeries[] = (int)($dailyRows[$key] ?? 0);
+            $cursor->addDay();
         }
 
-        // ==========================================================
-        // PO KPI (FIX FINAL) - pakai schema migration lu:
-        // purchase_orders.approval_status + grand_total + created_at
-        // ==========================================================
-        $poTable = (new PurchaseOrder)->getTable();
-        $poItemsTable = Schema::hasTable('purchase_order_items') ? 'purchase_order_items' : null;
-
-        // KUNCI: jangan auto detect po_date/order_date (bisa bikin 0 kalau kolom ada tapi null/string)
+        // =========================
+        // PO KPI
+        // =========================
+        $poTable   = (new PurchaseOrder)->getTable();
         $poDateCol = 'created_at';
+        $approvalCol = Schema::hasColumn($poTable,'approval_status') ? 'approval_status' : null;
+        $totalCol    = Schema::hasColumn($poTable,'grand_total') ? 'grand_total' : null;
 
-        $approvalCol = Schema::hasColumn($poTable, 'approval_status') ? 'approval_status' : null;
-        $totalCol    = Schema::hasColumn($poTable, 'grand_total') ? 'grand_total' : null;
+        $poBase = PurchaseOrder::whereBetween($poDateCol, [$start, $end]);
 
-        $whereLowerIn = function ($q, string $col, array $vals) {
-            $vals = array_map('strtolower', $vals);
-            return $q->whereIn(DB::raw("LOWER($col)"), $vals);
-        };
+        $poPendingProc = $approvalCol
+            ? (clone $poBase)->whereRaw('LOWER(approval_status) IN ("waiting_procurement","pending_procurement")')->count()
+            : 0;
 
-        $poBaseMonth = PurchaseOrder::query()
-            ->whereBetween($poDateCol, [$startMonth, $endMonth]);
+        $poPendingCeo = $approvalCol
+            ? (clone $poBase)->whereRaw('LOWER(approval_status) IN ("waiting_ceo","pending_ceo")')->count()
+            : 0;
 
-        // Pending Procurement
-        $poPendingProcQuery = (clone $poBaseMonth);
-        if ($approvalCol) {
-            $whereLowerIn($poPendingProcQuery, $approvalCol, [
-                'waiting_procurement', 'pending_procurement'
-            ]);
-        } else {
-            // fallback (kalau suatu hari approval_status ga ada)
-            $poPendingProcQuery->whereRaw('1=0');
-        }
-        $poPendingProcCount = (int) (clone $poPendingProcQuery)->count();
+        $poApprovedQuery = $approvalCol
+            ? (clone $poBase)->whereRaw('LOWER(approval_status)="approved"')
+            : null;
 
-        // Pending CEO
-        $poPendingCeoQuery = (clone $poBaseMonth);
-        if ($approvalCol) {
-            $whereLowerIn($poPendingCeoQuery, $approvalCol, [
-                'waiting_ceo', 'pending_ceo'
-            ]);
-        } else {
-            $poPendingCeoQuery->whereRaw('1=0');
-        }
-        $poPendingCeoCount = (int) (clone $poPendingCeoQuery)->count();
+        $poApprovedCount = $poApprovedQuery ? $poApprovedQuery->count() : 0;
+        $poApprovedTotal = ($poApprovedQuery && $totalCol) ? (int)$poApprovedQuery->sum($totalCol) : 0;
 
-        // Approved (ini yang lu butuhin biar kebaca sama label APPROVED di index PO)
-        $poApprovedQuery = (clone $poBaseMonth);
-        if ($approvalCol) {
-            $whereLowerIn($poApprovedQuery, $approvalCol, ['approved']);
-        } else {
-            $poApprovedQuery->whereRaw('1=0');
-        }
+        $poItemsTable = 'purchase_order_items';
 
-        $poApprovedCount = (int) (clone $poApprovedQuery)->count();
-        $poApprovedTotal = 0;
-        if ($totalCol) {
-            $poApprovedTotal = (int) (clone $poApprovedQuery)->sum($totalCol);
-        }
+        $restockIds = Schema::hasTable($poItemsTable)
+            ? DB::table($poItemsTable)->whereNotNull('request_id')->pluck('purchase_order_id')
+            : [];
 
-        // Restock = PO yang item-nya punya request_id (dan kita hitung yang approved biar nilai masuk akal)
-        $restockPoIdsSub = null;
-        if ($poItemsTable
-            && Schema::hasColumn($poItemsTable, 'purchase_order_id')
-            && Schema::hasColumn($poItemsTable, 'request_id')
-        ) {
-            $restockPoIdsSub = DB::table($poItemsTable)
-                ->whereNotNull('request_id')
-                ->select('purchase_order_id')
-                ->distinct();
-        }
+        $poRestockQuery = PurchaseOrder::whereIn('id', $restockIds)
+            ->whereBetween($poDateCol, [$start, $end])
+            ->whereRaw('LOWER(approval_status)="approved"');
 
-        $poRestockQuery = (clone $poBaseMonth);
-        if ($restockPoIdsSub) {
-            $poRestockQuery->whereIn($poTable.'.id', $restockPoIdsSub);
-
-            if ($approvalCol) {
-                $whereLowerIn($poRestockQuery, $approvalCol, ['approved']);
-            }
-        } else {
-            $poRestockQuery->whereRaw('1=0');
-        }
-
-        $poRestockCount = (int) (clone $poRestockQuery)->count();
-        $poRestockTotal = 0;
-        if ($totalCol) {
-            $poRestockTotal = (int) (clone $poRestockQuery)->sum($totalCol);
-        }
+        $poRestockCount = (int) $poRestockQuery->count();
+        $poRestockTotal = $totalCol ? (int) $poRestockQuery->sum($totalCol) : 0;
 
         // =========================
-        // ACCESS FLAGS (buat disable card)
-        // =========================
-        $roleSlugs = $me->roles()->pluck('slug')->map(fn($x) => strtolower($x))->toArray();
-
-        $isProc = in_array('procurement', $roleSlugs, true);
-        $isCeo  = in_array('ceo', $roleSlugs, true);
-
-        $canOpenPoMenu = method_exists($me, 'canSeeMenu') ? (bool) $me->canSeeMenu('po') : true;
-
-        $access = [
-            'can_open_pending_proc' => $canOpenPoMenu && $isProc,
-            'can_open_pending_ceo'  => $canOpenPoMenu && $isCeo,
-        ];
-
-        // =========================
-        // PACK to VIEW (KEY NYA DISAMAIN KE BLADE)
+        // FINAL DATA
         // =========================
         $stats = [
-            'users_total'         => $usersTotal,
-            'products_total'      => $productsTotal,
-            'warehouses_total'    => $warehousesTotal,
-            'closed_count_month'  => $closedCountMonth,
-            'closed_amount_month' => $closedAmountMonth,
-
-            'po_pending_proc_count' => $poPendingProcCount,
-            'po_pending_ceo_count'  => $poPendingCeoCount,
-
-            'po_approved_count' => $poApprovedCount,
-            'po_approved_total' => $poApprovedTotal,
-
-            'po_restock_count'  => $poRestockCount,
-            'po_restock_total'  => $poRestockTotal,
+            'users_total'           => $usersTotal,
+            'products_total'        => $productsTotal,
+            'warehouses_total'      => $warehousesTotal,
+            'closed_count_month'    => $closedCount,
+            'closed_amount_month'   => $closedAmount,
+            'po_pending_proc_count' => $poPendingProc,
+            'po_pending_ceo_count'  => $poPendingCeo,
+            'po_approved_count'     => $poApprovedCount,
+            'po_approved_total'     => $poApprovedTotal,
+            'po_restock_count'      => $poRestockCount,
+            'po_restock_total'      => $poRestockTotal,
         ];
 
         $charts = [
             'yearly' => ['labels' => $monthLabels, 'series' => $monthSeries],
             'status' => ['labels' => $statusLabels, 'series' => $statusSeries],
-            'daily'  => ['labels' => $dailyLabels,  'series' => $dailySeries],
+            'daily'  => ['labels' => $dailyLabels, 'series' => $dailySeries],
         ];
 
-        return view('dashboard.indexAdmin', compact('me','stats','charts','year','access'));
+        return view('dashboard.indexAdmin', compact(
+            'me','stats','charts','period','label'
+        ));
     }
+
+    public function kpi(Request $request)
+    {
+        $range = $request->get('range', 'month'); // day | week | month
+
+        // =========================
+        // RANGE DATE
+        // =========================
+        if ($range === 'day') {
+            $start = now()->startOfDay();
+            $end   = now()->endOfDay();
+        }elseif ($period === 'week') {
+            $end   = now()->endOfDay();
+            $start = now()->copy()->subDays(6)->startOfDay();
+
+            $label = $start->format('d F').' - '.$end->format('d F Y');
+        } else {
+            $start = now()->startOfMonth();
+            $end   = now()->endOfMonth();
+        }
+
+        // =========================
+        // SALES HANDOVER
+        // =========================
+        $handoverTable = (new SalesHandover)->getTable();
+        $handoverDate  = Schema::hasColumn($handoverTable,'handover_date')
+            ? 'handover_date'
+            : 'created_at';
+
+        $closedCount = SalesHandover::whereRaw('LOWER(status)="closed"')
+            ->whereBetween($handoverDate, [$start, $end])
+            ->count();
+
+        $closedTotal = Schema::hasColumn($handoverTable,'total_sold_amount')
+            ? SalesHandover::whereRaw('LOWER(status)="closed"')
+                ->whereBetween($handoverDate, [$start, $end])
+                ->sum('total_sold_amount')
+            : 0;
+
+        // =========================
+        // PO
+        // =========================
+        $poTable   = (new PurchaseOrder)->getTable();
+        $poDateCol = 'created_at';
+
+        $approvedQuery = PurchaseOrder::whereBetween($poDateCol, [$start,$end])
+            ->whereRaw('LOWER(approval_status)="approved"');
+
+        $poApprovedCount = $approvedQuery->count();
+        $poApprovedTotal = Schema::hasColumn($poTable,'grand_total')
+            ? $approvedQuery->sum('grand_total')
+            : 0;
+
+        // =========================
+        // RESTOCK PO
+        // =========================
+        $poItemsTable = 'purchase_order_items';
+
+        $restockPoIds = DB::table($poItemsTable)
+            ->whereNotNull('request_id')
+            ->pluck('purchase_order_id');
+
+        $restockQuery = PurchaseOrder::whereIn('id',$restockPoIds)
+            ->whereBetween($poDateCol, [$start,$end])
+            ->whereRaw('LOWER(approval_status)="approved"');
+
+        $poRestockCount = $restockQuery->count();
+        $poRestockTotal = Schema::hasColumn($poTable,'grand_total')
+            ? $restockQuery->sum('grand_total')
+            : 0;
+
+        return response()->json([
+            'closed' => [
+                'count' => (int)$closedCount,
+                'total' => (int)$closedTotal
+            ],
+            'approved' => [
+                'count' => (int)$poApprovedCount,
+                'total' => (int)$poApprovedTotal
+            ],
+            'restock' => [
+                'count' => (int)$poRestockCount,
+                'total' => (int)$poRestockTotal
+            ],
+        ]);
+    }
+
 }
+
+
+
+
+
+
