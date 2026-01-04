@@ -219,12 +219,12 @@
 
                 <div class="mb-3">
                     <label class="form-label">Phone</label>
-                    <input name="phone" value="{{ old('phone') }}" class="form-control bg-transparent border-secondary">
+                    <input name="phone" value="{{ old('phone') }}" class="form-control bg-transparent border-secondary" required>
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label">Position (optional)</label>
-                    <input name="position" value="{{ old('position') }}" class="form-control bg-transparent border-secondary">
+                    <input name="position" value="{{ old('position') }}" class="form-control bg-transparent border-secondary" required>
                 </div>
 
                 <div class="mb-3">

@@ -62,55 +62,54 @@
     {{-- Modal Add/Edit --}}
     <div class="modal fade" id="glassSupplier" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content border-0" style="background:rgba(17,22,28,.6);backdrop-filter:blur(14px)">
+            <div class="modal-content border-0 bg-white">
                 <div class="modal-header border-0">
-                    <h5 class="modal-title text-white" id="modalTitle">Add Supplier</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <h5 class="modal-title" id="modalTitle">Add Supplier</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-
-                <form id="formSupplier" class="modal-body text-white" method="POST">
+                <form id="formSupplier" class="modal-body" method="POST">
                     @csrf
                     <input type="hidden" name="_method" id="method" value="POST">
                     <div class="row g-2">
                         <div class="col-md-12">
-                            <label class="form-label text-white">Supplier Code</label>
+                            <label class="form-label">Supplier Code</label>
                             {{-- Editable & auto-generated silently on open --}}
                             <input name="supplier_code" id="supplier_code"
-                                   class="form-control bg-transparent text-white border-secondary"
+                                   class="form-control"
                                    value="{{ $nextSupplierCode }}" required
                                    data-default="{{ $nextSupplierCode }}" placeholder="SUP-001">
-                            <small class="text-white-50">Bisa diganti manual. Duplikat akan ditolak.</small>
+                            <small class="-50">Bisa diganti manual. Duplikat akan ditolak.</small>
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label text-white">Company Name <span class="text-danger">*</span></label>
-                            <input name="name" id="name" class="form-control bg-transparent text-white border-secondary" required placeholder="Enter company name">
+                            <label class="form-label">Company Name <span class=r">*</span></label>
+                            <input name="name" id="name" class="form-control bg-transparent border-secondary" required placeholder="Enter company name">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label text-white">Address</label>
-                            <input name="address" id="address" class="form-control bg-transparent text-white border-secondary" placeholder="Enter address">
+                            <label class="form-label">Address</label>
+                            <input name="address" id="address" class="form-control bg-transparent border-secondary" required placeholder="Enter address">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label text-white">Phone Number</label>
-                            <input name="phone" id="phone" class="form-control bg-transparent text-white border-secondary" placeholder="Enter phone number">
+                            <label class="form-label">Phone Number</label>
+                            <input name="phone" id="phone" class="form-control bg-transparent border-secondary" required placeholder="Enter phone number">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label text-white">Note</label>
-                            <input name="note" id="note" class="form-control bg-transparent text-white border-secondary" placeholder="Enter notes">
+                            <label class="form-label">Note</label>
+                            <input name="note" id="note" class="form-control bg-transparent border-secondary" placeholder="Enter notes">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label text-white">Bank Name</label>
-                            <input name="bank_name" id="bank_name" class="form-control bg-transparent text-white border-secondary" placeholder="Enter bank name">
+                            <label class="form-label">Bank Name</label>
+                            <input name="bank_name" id="bank_name" class="form-control bg-transparent border-secondary" required placeholder="Enter bank name">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label text-white">Bank Account</label>
-                            <input name="bank_account" id="bank_account" class="form-control bg-transparent text-white border-secondary" placeholder="Enter bank account">
+                            <label class="form-label">Bank Account</label>
+                            <input name="bank_account" id="bank_account" class="form-control bg-transparent border-secondary" required placeholder="Enter bank account">
                         </div>
                     </div>
 
                     <div class="mt-4 d-flex gap-2 justify-content-end">
-                        <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-light text-dark" id="btnSubmit">Submit</button>
+                        <button type="button" class="btn btn-outline-dark" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary text-white" id="btnSubmit">Submit</button>
                     </div>
                 </form>
             </div>
@@ -213,6 +212,16 @@ $(function () {
 
     // Submit (Add/Edit)
     $('#formSupplier').on('submit', function (e) {
+        if (!this.checkValidity()) {
+        e.preventDefault();
+        e.stopPropagation();
+        Swal.fire({
+            icon: 'warning',
+            title: 'Form belum lengkap',
+            text: 'Mohon lengkapi semua field wajib'
+        });
+        return;
+    }
         e.preventDefault();
         const form = this;
         const method = $('#method').val();
