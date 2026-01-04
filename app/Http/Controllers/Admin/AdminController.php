@@ -203,8 +203,21 @@ class AdminController extends Controller
             'daily'  => ['labels' => $dailyLabels, 'series' => $dailySeries],
         ];
 
+        $roleSlugs = $me->roles()
+            ->pluck('slug')
+            ->map(fn($s) => strtolower($s))
+            ->toArray();
+
+        $access = [
+            'can_open_pending_proc' => collect($roleSlugs)->intersect(['procurement','superadmin'])->isNotEmpty(),
+            'can_open_pending_ceo'  => collect($roleSlugs)->intersect(['ceo','superadmin'])->isNotEmpty(),
+        ];
+
+
+
+
         return view('dashboard.indexAdmin', compact(
-            'me','stats','charts','period','label'
+            'me','stats','charts','period','label', 'access'
         ));
     }
 

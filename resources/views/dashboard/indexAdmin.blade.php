@@ -3,10 +3,12 @@
 @section('title', 'Admin Dashboard')
 
 @section('content')
+
 @php
   $stats   = $stats ?? [];
   $charts  = $charts ?? [];
   $access  = $access ?? [];
+  
 
   $txCount  = (int)($stats['closed_count_month'] ?? 0);
   $txAmount = (int)($stats['closed_amount_month'] ?? 0);
@@ -213,7 +215,6 @@
         <a href="{{ $urlPoApproved }}" class="stretched-link" aria-label="Buka PO Approved"></a>
       </div>
     </div>
-
     {{-- Restock --}}
     <div class="col-12 col-sm-6 col-xl-3">
       <div class="card h-100 card-link-wrap">
