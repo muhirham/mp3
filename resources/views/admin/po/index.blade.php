@@ -9,9 +9,8 @@
     $isSuperadmin  = $roles->contains('slug', 'superadmin');
     $isProcurement = $roles->contains('slug', 'procurement');
     $isCeo         = $roles->contains('slug', 'ceo');
-    $isWarehouse   = $roles->contains('slug', 'warehouse'); // ✅ tambah
+    $isWarehouse   = $roles->contains('slug', 'warehouse');
 
-    // ===== fallback kalau controller belum ngirim =====
     $statusOptions = $statusOptions ?? [
         '' => 'All Status',
         'draft' => 'Draft',
@@ -31,19 +30,16 @@
         'rejected' => 'Rejected',
     ];
 
-    // kalau controller belum kirim warehouses, ambil dari model (biar view lu gak error)
     $warehouses = $warehouses ?? \App\Models\Warehouse::query()
         ->select('id','warehouse_name')
         ->orderBy('warehouse_name')
         ->get();
 
     $perPage = (int) request('per_page', 10);
-
-    $myWhId = $me->warehouse_id ?? null; // ✅ buat validasi PO milik warehouse sendiri
+    $myWhId = $me->warehouse_id ?? null;
 @endphp
 
 <style>
-  /* ===== PO FILTER UI (compact + responsive) ===== */
   .po-card-title { font-size: 1rem; }
   .po-filters .form-label { font-size: .75rem; color: #6c757d; margin-bottom: .25rem; }
   .po-filters .form-control,
@@ -53,7 +49,6 @@
   .po-filters .form-control-sm,
   .po-filters .form-select-sm { padding-top: .35rem; padding-bottom: .35rem; }
 
-  /* ===== TABLE compact ===== */
   .po-table thead th { font-size: .75rem; letter-spacing: .02em; text-transform: uppercase; color: #6c757d; }
   .po-table tbody td { font-size: .8125rem; }
   .po-table .badge { font-size: .7rem; }
@@ -64,6 +59,8 @@
     .po-actions form { width: 100%; }
     .po-actions .btn { width: 100%; }
   }
+
+  .swal2-container { z-index: 99999 !important; }
 </style>
 
 <div class="container-xxl flex-grow-1 container-p-y">
@@ -76,13 +73,11 @@
       </div>
 
       <div class="d-flex flex-wrap gap-2 ms-auto po-actions justify-content-end">
-        {{-- Export Excel (1 format aja) --}}
         <form id="po-export-form"
               method="GET"
               action="{{ route('po.export.index') }}"
               class="d-flex align-items-center">
 
-          {{-- hidden filter (diupdate JS biar export konsisten walau ajax) --}}
           <input type="hidden" name="q" value="{{ request('q') }}">
           <input type="hidden" name="status" value="{{ request('status') }}">
           <input type="hidden" name="approval_status" value="{{ request('approval_status') }}">
@@ -95,7 +90,6 @@
           </button>
         </form>
 
-        {{-- Create new PO (biasanya hanya superadmin) --}}
         @if($isSuperadmin)
           <form action="{{ route('po.store') }}" method="POST" class="d-flex align-items-center">
             @csrf
@@ -108,13 +102,11 @@
     </div>
 
     <div class="card-body pt-3 pb-2">
-      {{-- FILTER + SEARCH (AJAX) --}}
       <form id="po-filter-form"
             method="get"
             action="{{ route('po.index') }}"
             class="po-filters">
 
-        {{-- q diambil dari globalSearch navbar --}}
         <input type="hidden" name="q" value="{{ request('q') }}">
 
         <div class="row g-2 align-items-end">
@@ -186,7 +178,6 @@
       </div>
     </div>
 
-    {{-- WRAPPER TABEL (dipakai juga untuk AJAX) --}}
     <div id="po-table-wrapper">
 
       <div class="table-responsive">
@@ -210,14 +201,11 @@
               @php
                 $hasGr = (int)($po->gr_count ?? 0) > 0;
 
-                // PO dari request restock (warehouse)
                 $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
 
-                // warehouse yang terlibat di PO
                 $poWhIds = $po->items->pluck('warehouse_id')->filter()->unique();
                 $isMyWarehousePo = !$myWhId || $poWhIds->contains($myWhId);
 
-                // ✅ RULE GR FINAL
                 $canReceive = !$hasGr
                               && $po->status === 'ordered'
                               && $po->approval_status === 'approved'
@@ -227,7 +215,6 @@
                                   || (!$fromRequest && $isSuperadmin)
                               );
 
-                // tombol blocked untuk superadmin (biar keluar swal)
                 $showBlockedReceive = $isSuperadmin
                                       && $fromRequest
                                       && !$hasGr
@@ -235,28 +222,20 @@
                                       && $po->approval_status === 'approved'
                                       && $po->items_count > 0;
 
-                // ==== SUMMARY SUPPLIER ====
                 $supplierNames = collect();
                 if (!empty($po->supplier?->name)) {
                     $supplierNames->push($po->supplier->name);
                 }
                 foreach ($po->items as $it) {
                     $sName = $it->product->supplier->name ?? null;
-                    if ($sName) {
-                        $supplierNames->push($sName);
-                    }
+                    if ($sName) $supplierNames->push($sName);
                 }
                 $supplierNames = $supplierNames->unique()->values();
 
-                if ($supplierNames->isEmpty()) {
-                    $supplierLabel = '-';
-                } elseif ($supplierNames->count() === 1) {
-                    $supplierLabel = $supplierNames->first();
-                } else {
-                    $supplierLabel = $supplierNames->first().' + '.($supplierNames->count() - 1).' supplier';
-                }
+                if ($supplierNames->isEmpty()) $supplierLabel = '-';
+                elseif ($supplierNames->count() === 1) $supplierLabel = $supplierNames->first();
+                else $supplierLabel = $supplierNames->first().' + '.($supplierNames->count() - 1).' supplier';
 
-                // ==== SUMMARY WAREHOUSE ====
                 if (! $fromRequest) {
                     $warehouseLabel = 'Central Stock';
                 } else {
@@ -268,31 +247,19 @@
                     }
                     $warehouseNames = $warehouseNames->filter()->unique()->values();
 
-                    if ($warehouseNames->isEmpty()) {
-                        $warehouseLabel = '-';
-                    } elseif ($warehouseNames->count() === 1) {
-                        $warehouseLabel = $warehouseNames->first();
-                    } else {
-                        $warehouseLabel = $warehouseNames->first().' + '.($warehouseNames->count() - 1).' wh';
-                    }
+                    if ($warehouseNames->isEmpty()) $warehouseLabel = '-';
+                    elseif ($warehouseNames->count() === 1) $warehouseLabel = $warehouseNames->first();
+                    else $warehouseLabel = $warehouseNames->first().' + '.($warehouseNames->count() - 1).' wh';
                 }
 
-                // ==== APPROVAL STATUS BADGE ====
                 $approvalStatus = $po->approval_status ?: 'draft';
 
-                if ($approvalStatus === 'draft') {
-                    $approvalBadge = '<span class="badge bg-label-secondary">DRAFT</span>';
-                } elseif ($approvalStatus === 'waiting_procurement') {
-                    $approvalBadge = '<span class="badge bg-label-warning">WAITING PROCUREMENT</span>';
-                } elseif ($approvalStatus === 'waiting_ceo') {
-                    $approvalBadge = '<span class="badge bg-label-info">WAITING CEO</span>';
-                } elseif ($approvalStatus === 'approved') {
-                    $approvalBadge = '<span class="badge bg-label-success">APPROVED</span>';
-                } elseif ($approvalStatus === 'rejected') {
-                    $approvalBadge = '<span class="badge bg-label-danger">REJECTED</span>';
-                } else {
-                    $approvalBadge = '<span class="badge bg-label-secondary">'.e(strtoupper($approvalStatus)).'</span>';
-                }
+                if ($approvalStatus === 'draft') $approvalBadge = '<span class="badge bg-label-secondary">DRAFT</span>';
+                elseif ($approvalStatus === 'waiting_procurement') $approvalBadge = '<span class="badge bg-label-warning">WAITING PROCUREMENT</span>';
+                elseif ($approvalStatus === 'waiting_ceo') $approvalBadge = '<span class="badge bg-label-info">WAITING CEO</span>';
+                elseif ($approvalStatus === 'approved') $approvalBadge = '<span class="badge bg-label-success">APPROVED</span>';
+                elseif ($approvalStatus === 'rejected') $approvalBadge = '<span class="badge bg-label-danger">REJECTED</span>';
+                else $approvalBadge = '<span class="badge bg-label-secondary">'.e(strtoupper($approvalStatus)).'</span>';
 
                 $procName = $po->procurementApprover->name ?? '-';
                 $ceoName  = $po->ceoApprover->name ?? '-';
@@ -326,7 +293,6 @@
                   <div class="btn-group">
                     <a class="btn btn-sm btn-primary" href="{{ route('po.edit',$po->id) }}">Open</a>
 
-                    {{-- ✅ Receive sesuai rule --}}
                     @if($canReceive)
                       <button type="button"
                               class="btn btn-sm btn-success"
@@ -364,7 +330,7 @@
         </div>
       @endif
 
-      {{-- ======= MODAL GR PER PO ======= --}}
+      {{-- MODAL GR --}}
       @foreach($pos as $po)
         @php
           $hasGr = (int)($po->gr_count ?? 0) > 0;
@@ -384,45 +350,29 @@
 
           if (! $canReceive) { continue; }
 
-          // summary supplier
           $supplierNames = collect();
-          if (!empty($po->supplier?->name)) {
-              $supplierNames->push($po->supplier->name);
-          }
+          if (!empty($po->supplier?->name)) $supplierNames->push($po->supplier->name);
           foreach ($po->items as $it) {
               $sName = $it->product->supplier->name ?? null;
-              if ($sName) {
-                  $supplierNames->push($sName);
-              }
+              if ($sName) $supplierNames->push($sName);
           }
           $supplierNames = $supplierNames->unique()->values();
 
-          if ($supplierNames->isEmpty()) {
-              $supplierLabel = '-';
-          } elseif ($supplierNames->count() === 1) {
-              $supplierLabel = $supplierNames->first();
-          } else {
-              $supplierLabel = $supplierNames->first().' + '.($supplierNames->count() - 1).' supplier';
-          }
+          if ($supplierNames->isEmpty()) $supplierLabel = '-';
+          elseif ($supplierNames->count() === 1) $supplierLabel = $supplierNames->first();
+          else $supplierLabel = $supplierNames->first().' + '.($supplierNames->count() - 1).' supplier';
 
-          // summary warehouse
           if (! $fromRequest) {
               $whLabel = 'Central Stock';
           } else {
               $whNames = collect();
               foreach ($po->items as $it) {
-                  if ($it->warehouse) {
-                      $whNames->push($it->warehouse->warehouse_name ?? $it->warehouse->name);
-                  }
+                  if ($it->warehouse) $whNames->push($it->warehouse->warehouse_name ?? $it->warehouse->name);
               }
               $whNames = $whNames->filter()->unique()->values();
-              if ($whNames->isEmpty()) {
-                  $whLabel = '-';
-              } elseif ($whNames->count() === 1) {
-                  $whLabel = $whNames->first();
-              } else {
-                  $whLabel = $whNames->first().' + '.($whNames->count() - 1).' wh';
-              }
+              if ($whNames->isEmpty()) $whLabel = '-';
+              elseif ($whNames->count() === 1) $whLabel = $whNames->first();
+              else $whLabel = $whNames->first().' + '.($whNames->count() - 1).' wh';
           }
         @endphp
 
@@ -478,23 +428,25 @@
 
                             <td style="width:120px">
                               <input type="number"
-                                     class="form-control form-control-sm js-qty-good"
-                                     name="receives[{{ $key }}][qty_good]"
-                                     min="0"
-                                     value="{{ $remaining }}">
+                                  class="form-control form-control-sm js-qty-good"
+                                  name="receives[{{ $key }}][qty_good]"
+                                  min="0"
+                                  max="{{ $remaining }}"
+                                  value="{{ $remaining }}">
                             </td>
                             <td style="width:120px">
                               <input type="number"
-                                     class="form-control form-control-sm js-qty-damaged"
-                                     name="receives[{{ $key }}][qty_damaged]"
-                                     min="0"
-                                     value="0">
+                                  class="form-control form-control-sm js-qty-damaged"
+                                  name="receives[{{ $key }}][qty_damaged]"
+                                  min="0"
+                                  max="{{ $remaining }}"
+                                  value="0">
                             </td>
                             <td style="width:180px">
                               <input type="text"
-                                     class="form-control form-control-sm"
-                                     name="receives[{{ $key }}][notes]"
-                                     placeholder="Catatan (opsional)">
+                                      class="form-control form-control-sm"
+                                      name="receives[{{ $key }}][notes]"
+                                      placeholder="Catatan (opsional)">
                               <small class="text-danger small js-row-msg"></small>
                             </td>
                           </tr>
@@ -502,10 +454,6 @@
                       </tbody>
                     </table>
                   </div>
-
-                  <small class="text-muted d-block mb-3">
-                    Qty Good + Qty Damaged tidak boleh lebih besar dari Qty Remaining.
-                  </small>
 
                   <div class="mb-3">
                     <label class="form-label">Upload foto barang bagus (opsional)</label>
@@ -531,21 +479,90 @@
           </div>
         </div>
       @endforeach
-      {{-- ======= END MODALS ======= --}}
 
-    </div> {{-- /#po-table-wrapper --}}
+    </div>
   </div>
 
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+{{-- ✅ INI KUNCI: Swal sukses setelah GR tersimpan (dari session server) --}}
+@if(session('gr_success'))
 <script>
-  // ===== AJAX FILTER + PAGINATION (NO RELOAD, NO APPLY BUTTON) =====
+  document.addEventListener('DOMContentLoaded', function () {
+    Swal.fire({
+      icon: 'success',
+      title: 'Sukses',
+      text: @json(session('gr_success')),
+      timer: 1500,
+      showConfirmButton: false
+    });
+  });
+</script>
+@endif
+
+<script>
+  // ===== AUTO SYNC GOOD / DAMAGED BIAR GA NGACO (tanpa Swal validasi submit) =====
+  (function () {
+    const clampInt = (v, min, max) => {
+      v = parseInt(v ?? 0, 10);
+      if (isNaN(v)) v = 0;
+      return Math.min(max, Math.max(min, v));
+    };
+
+    function syncRow(tr, changed) {
+      const remEl  = tr.querySelector('.js-remaining');
+      const goodEl = tr.querySelector('.js-qty-good');
+      const badEl  = tr.querySelector('.js-qty-damaged');
+
+      if (!remEl || !goodEl || !badEl) return;
+
+      const remaining = parseInt(remEl.dataset.remaining ?? '0', 10) || 0;
+
+      goodEl.max = remaining;
+      badEl.max  = remaining;
+
+      let good = clampInt(goodEl.value, 0, remaining);
+      let bad  = clampInt(badEl.value,  0, remaining);
+
+      if (changed === 'good') {
+        bad = remaining - good;
+      } else if (changed === 'bad') {
+        good = remaining - bad;
+      } else {
+        if (good + bad !== remaining) {
+          if (good > 0) bad = remaining - good;
+          else if (bad > 0) good = remaining - bad;
+          else { good = remaining; bad = 0; }
+        }
+      }
+
+      goodEl.value = good;
+      badEl.value  = bad;
+    }
+
+    document.addEventListener('shown.bs.modal', function (e) {
+      const modal = e.target;
+      if (!modal || !modal.classList.contains('mdl-gr-po')) return;
+      modal.querySelectorAll('tbody tr').forEach(tr => syncRow(tr, 'init'));
+    });
+
+    document.addEventListener('input', function (e) {
+      const good = e.target.closest('.mdl-gr-po .js-qty-good');
+      const bad  = e.target.closest('.mdl-gr-po .js-qty-damaged');
+
+      if (good) { syncRow(good.closest('tr'), 'good'); return; }
+      if (bad)  { syncRow(bad.closest('tr'), 'bad');  return; }
+    });
+  })();
+
+  // ===== AJAX FILTER + PAGINATION (NO RELOAD) =====
   (function () {
     const filterForm   = document.getElementById('po-filter-form');
     const exportForm   = document.getElementById('po-export-form');
     const wrapper      = document.getElementById('po-table-wrapper');
-    const globalSearch = document.getElementById('globalSearch'); // <= navbar input
+    const globalSearch = document.getElementById('globalSearch');
 
     if (!filterForm || !wrapper) return;
 
@@ -609,11 +626,7 @@
       }
 
       if (!sameMonth(fromVal, toVal)) {
-        Swal.fire({
-          icon: 'error',
-          title: 'Range salah',
-          text: 'Range maksimal 1 bulan. From & To harus di bulan yang sama.'
-        });
+        Swal.fire({ icon:'error', title:'Range salah', text:'Range maksimal 1 bulan. From & To harus di bulan yang sama.' });
         return false;
       }
       return true;
@@ -685,43 +698,11 @@
       syncExportHidden();
     });
 
-    if (exportForm) {
-      exportForm.addEventListener('submit', function (e) {
-        syncQFromGlobal();
-        syncExportHidden();
-
-        const q  = (exportForm.querySelector('input[name="q"]')?.value || '').trim();
-        const st = (exportForm.querySelector('input[name="status"]')?.value || '').trim();
-        const ap = (exportForm.querySelector('input[name="approval_status"]')?.value || '').trim();
-        const wh = (exportForm.querySelector('input[name="warehouse_id"]')?.value || '').trim();
-        const fr = (exportForm.querySelector('input[name="from"]')?.value || '').trim();
-        const to = (exportForm.querySelector('input[name="to"]')?.value || '').trim();
-
-        const hasFilter = !!(q || st || ap || wh || fr || to);
-        if (hasFilter) return;
-
-        e.preventDefault();
-
-        Swal.fire({
-          icon: 'warning',
-          title: 'Export semua data?',
-          text: 'Kamu belum pakai filter. Ini akan export SEMUA PO dan bisa lama / file besar.',
-          showCancelButton: true,
-          confirmButtonText: 'Ya, export semua',
-          cancelButtonText: 'Batal',
-        }).then((res) => {
-          if (res.isConfirmed) {
-            HTMLFormElement.prototype.submit.call(exportForm);
-          }
-        });
-      });
-    }
-
     syncGlobalFromHidden();
     syncExportHidden();
   })();
 
-  // ✅ Sweetalert: superadmin klik "Receive" untuk PO dari request
+  // Swal info untuk tombol blocked (biarin)
   document.addEventListener('click', function (e) {
     const btn = e.target.closest('.js-gr-blocked');
     if (!btn) return;

@@ -3,10 +3,12 @@
 @section('title', 'Admin Dashboard')
 
 @section('content')
+
 @php
   $stats   = $stats ?? [];
   $charts  = $charts ?? [];
   $access  = $access ?? [];
+  
 
   $txCount  = (int)($stats['closed_count_month'] ?? 0);
   $txAmount = (int)($stats['closed_amount_month'] ?? 0);
@@ -41,8 +43,39 @@
   <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
       <h4 class="mb-0 fw-bold">Admin Dashboard</h4>
-      <div class="text-muted">Overview & analytics</div>
+      <div class="text-muted">
+        Periode: <span class="fw-semibold">{{ $label }}</span>
+      </div>
     </div>
+    <form method="GET" class="d-flex gap-2 align-items-center">
+
+      {{-- PERIOD --}}
+      <select name="period" class="form-select form-select-sm" onchange="this.form.submit()">
+        <option value="day"   {{ request('period')=='day' ? 'selected':'' }}>Hari ini</option>
+        <option value="week"  {{ request('period')=='week' ? 'selected':'' }}>Mingguan</option>
+        <option value="month" {{ request('period','month')=='month' ? 'selected':'' }}>Bulanan</option>
+      </select>
+
+      {{-- MONTH (ONLY IF MONTH) --}}
+      @if(request('period','month') === 'month')
+        <select name="month" class="form-select form-select-sm" onchange="this.form.submit()">
+          @foreach(range(1,12) as $m)
+            <option value="{{ $m }}" {{ request('month', now()->month)==$m?'selected':'' }}>
+              {{ \Carbon\Carbon::create()->month($m)->format('F') }}
+            </option>
+          @endforeach
+        </select>
+
+        <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
+          @foreach(range(now()->year-3, now()->year+1) as $y)
+            <option value="{{ $y }}" {{ request('year', now()->year)==$y?'selected':'' }}>
+              {{ $y }}
+            </option>
+          @endforeach
+        </select>
+      @endif
+
+    </form>
   </div>
 
   {{-- TOP KPI --}}
@@ -55,7 +88,14 @@
           </div>
           <div class="flex-grow-1">
             <h5 class="mb-0">{{ number_format($txCount, 0, ',', '.') }}</h5>
-            <small class="text-muted">Closed Handover (Bulan ini)</small>
+            <small class="text-muted">
+            Closed Handover (
+            @if($period === 'day') Hari ini
+            @elseif($period === 'week') Minggu ini
+            @else Bulan ini
+            @endif
+            )
+          </small>
             <div class="small mt-1 text-muted">
               Total nilai: <span class="fw-semibold">Rp {{ number_format($txAmount, 0, ',', '.') }}</span>
             </div>
@@ -161,7 +201,12 @@
           </div>
           <div class="flex-grow-1">
             <h5 class="mb-0">{{ number_format($poApprovedCnt, 0, ',', '.') }}</h5>
-            <small class="text-muted">PO Approved (Bulan ini)</small>
+            PO Approved (
+            @if($period === 'day') Hari ini
+            @elseif($period === 'week') Minggu ini
+            @else Bulan ini
+            @endif
+            )
             <div class="small mt-1 text-muted">
               Total: <span class="fw-semibold">Rp {{ number_format($poApprovedTot, 0, ',', '.') }}</span>
             </div>
@@ -170,7 +215,6 @@
         <a href="{{ $urlPoApproved }}" class="stretched-link" aria-label="Buka PO Approved"></a>
       </div>
     </div>
-
     {{-- Restock --}}
     <div class="col-12 col-sm-6 col-xl-3">
       <div class="card h-100 card-link-wrap">
@@ -180,7 +224,12 @@
           </div>
           <div class="flex-grow-1">
             <h5 class="mb-0">{{ number_format($poRestockCnt, 0, ',', '.') }}</h5>
-            <small class="text-muted">PO dari Restock (Bulan ini)</small>
+            PO dari Restock (
+            @if($period === 'day') Hari ini
+            @elseif($period === 'week') Minggu ini
+            @else Bulan ini
+            @endif
+            )
             <div class="small mt-1 text-muted">
               Total: <span class="fw-semibold">Rp {{ number_format($poRestockTot, 0, ',', '.') }}</span>
             </div>
@@ -199,7 +248,15 @@
         <div class="card-header d-flex justify-content-between align-items-center">
           <div>
             <div class="text-muted small">Total Income</div>
-            <div class="fw-bold">Yearly report overview ({{ $year ?? now()->year }})</div>
+            <div class="fw-bold">
+              Report overview (
+              @if($period === 'day') Hari ini
+              @elseif($period === 'week') Minggu ini
+              @else Bulan ini
+              @endif
+              )
+            </div>
+
           </div>
           <div class="text-end">
             <div class="text-muted small">This month</div>
@@ -357,5 +414,7 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
 });
+
+
 </script>
 @endpush

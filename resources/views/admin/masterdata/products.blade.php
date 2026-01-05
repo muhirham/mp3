@@ -175,7 +175,7 @@
 
           <div class="col-md-4">
             <label class="form-label">Package / Satuan</label>
-            <select name="package_id" id="package_id" class="form-select">
+            <select name="package_id" id="package_id" class="form-select" required>
               <option value="">— None —</option>
               @foreach($packages as $p)
                 <option value="{{ $p->id }}">{{ $p->package_name }}</option>
@@ -185,7 +185,7 @@
 
           <div class="col-md-4">
             <label class="form-label">Supplier</label>
-            <select name="supplier_id" id="supplier_id" class="form-select">
+            <select name="supplier_id" id="supplier_id" class="form-select" required>
               <option value="">— None —</option>
               @foreach($suppliers as $s)
                 <option value="{{ $s->id }}">{{ $s->name }}</option>
@@ -195,14 +195,14 @@
 
           <div class="col-md-12">
             <label class="form-label">Description</label>
-            <textarea name="description" id="description" rows="3" class="form-control"
+            <textarea name="description" id="description" rows="3" class="form-control" required
                       placeholder="Optional"></textarea>
           </div>
 
           <div class="col-md-4">
             <label class="form-label">Purchasing Price</label>
             <input type="number" name="purchasing_price" id="purchasing_price"
-                   class="form-control" value="0" min="0">
+                   class="form-control"  value="0" min="0">
           </div>
 
           <div class="col-md-4">
@@ -218,7 +218,7 @@
           <div class="col-md-4">
             <label class="form-label">Min Stock</label>
             <input type="number" name="stock_minimum" id="stock_minimum"
-                   class="form-control" min="0">
+                   class="form-control" required min="0">
           </div>
         </div>
 
