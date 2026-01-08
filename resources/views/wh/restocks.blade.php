@@ -371,7 +371,7 @@ $(function () {
       { data: 'qty_rcv',    className: 'text-end' },
       { data: 'status',     orderable: false, searchable: false, className: 'text-center' },
       { data: 'created_at', className: 'text-center' },
-      { data: 'note' },
+      { data: 'warehouse' },
       { data: 'actions',    orderable: false, searchable: false, className: 'text-center' }
     ]
   });
