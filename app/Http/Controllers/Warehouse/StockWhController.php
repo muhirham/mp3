@@ -110,13 +110,14 @@ public function datatable(Request $r)
         5 => 'qty_rcv',
         6 => 'status',
         7 => 'created_at',
-        8 => 'note',
+        8 => 'warehouse',
     ];
     $orderBy = $orderMap[$orderColIdx] ?? 'created_at';
 
     $base = DB::table('request_restocks as rr')
         ->leftJoin('products as p', 'p.id', '=', 'rr.product_id')
         ->leftJoin('suppliers as s', 's.id', '=', 'rr.supplier_id');
+
 
     if ($hasWh) {
         $base->leftJoin('warehouses as w', 'w.id', '=', 'rr.warehouse_id');
@@ -126,21 +127,29 @@ public function datatable(Request $r)
     }
 
     // SELECT (alias harus sama kayak columns DataTables)
-    $base->select([
-        'rr.id',
+        $base->select([
+        DB::raw('MIN(rr.id) as id'), // anchor aman
         DB::raw($codeExpr . ' as code'),
-        DB::raw("COALESCE(p.name,'-') as product_name"),
-        DB::raw("COALESCE(p.product_code,'') as product_code"),
-        DB::raw("COALESCE(s.name,'-') as supplier_name"),
-        DB::raw($qtyReqExpr . ' as qty_req'),
-        DB::raw($qtyRcvExpr . ' as qty_rcv'),
-        DB::raw("COALESCE(rr.status,'pending') as status"),
-        'rr.created_at',
-        DB::raw(($noteExpr === "''" ? "''" : $noteExpr) . ' as note'),
+
+        DB::raw("GROUP_CONCAT(DISTINCT COALESCE(p.name,'-') SEPARATOR ', ') as product_name"),
+        DB::raw("GROUP_CONCAT(DISTINCT COALESCE(s.name,'-') SEPARATOR ', ') as supplier_name"),
+
+        DB::raw('SUM('.$qtyReqExpr.') as qty_req'),
+        DB::raw('SUM('.$qtyRcvExpr.') as qty_rcv'),
+
+        DB::raw("MAX(COALESCE(rr.status,'pending')) as status"),
+        DB::raw('MIN(rr.created_at) as created_at'),
+
+        DB::raw("MAX(COALESCE(w.warehouse_name,'-')) as warehouse"),
+
     ]);
+        $base->groupBy($codeExpr);
 
     // total (sebelum filter/search)
-    $recordsTotal = (clone $base)->count();
+        $recordsTotal = DB::query()
+            ->fromSub((clone $base)->select(DB::raw('1')), 't')
+            ->count();
+
 
     // FILTER WAREHOUSE
     if ($warehouseId) {
@@ -245,7 +254,7 @@ public function datatable(Request $r)
             'qty_rcv'   => (int) ($row->qty_rcv ?? 0),
             'status'    => $statusHtml,
             'created_at'=> $createdAt,
-            'note'      => e(($row->note ?? '') ?: '-'),
+            'warehouse' => e($row->warehouse ?? '-'),
             'actions'   => $actions,
         ];
     }

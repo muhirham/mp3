@@ -73,9 +73,13 @@ Route::middleware(['auth','active'])->group(function () {
     // ===== Dashboard (cukup auth, TIDAK pakai menu:xxx) =====
     Route::get('/admin',     [AdminController::class,'index'])->name('admin.dashboard');
     Route::get('/warehouse', [WarehouseDashboardController::class,'index'])->name('warehouse.dashboard');
+    Route::get('/warehouse/dashboard/kpi', [WarehouseDashboardController::class, 'kpiAjax'])->name('wh.dashboard.kpi');
+    Route::get('/warehouse/dashboard/inout', [WarehouseDashboardController::class,'inoutAjax'])
+  ->name('warehouse.dashboard.inoutAjax');
     Route::get('/sales',     [WhSalesController::class,'dashboard'])->name('sales.dashboard');
 
     /* === Master Data (ADMIN KEYS) === */
+
 
     // key: roles
     Route::resource('roles', RoleController::class)
@@ -177,6 +181,10 @@ Route::get('/stock-adjustments/export/excel', [StockAdjustmentController::class,
     Route::get('/po',                 [PreOController::class,'index'])
         ->name('po.index')
         ->middleware('menu:po');
+
+    Route::post('/po/create', [PreOController::class,'create'])
+    ->name('po.create')
+    ->middleware('menu:po');
 
     Route::post('/po',                [PreOController::class,'store'])
         ->name('po.store')
