@@ -89,6 +89,7 @@ class SalesHandoverController extends Controller
                 'items'              => ['required', 'array', 'min:1'],
                 'items.*.product_id' => ['required', 'exists:products,id'],
                 'items.*.qty'        => ['required', 'integer', 'min:1'],
+                'items.*.discount_per_unit' => ['nullable', 'integer', 'min:0'],
             ]);
 
             $date      = Carbon::parse($data['handover_date'])->toDateString();
@@ -172,16 +173,36 @@ class SalesHandoverController extends Controller
                         'unit_price' => $unitPrice,
                     ];
 
+                    $discount = (int) ($row['discount_per_unit'] ?? 0);
+                    
+
+                    if ($discount > $unitPrice) {
+                        throw new \RuntimeException("Diskon melebihi harga jual untuk {$product->name}");
+                    }
+
+                    $priceAfterDiscount = $unitPrice - $discount;
+
                     SalesHandoverItem::create([
-                        'handover_id'      => $handover->id,
-                        'product_id'       => $product->id,
-                        'qty_start'        => $qty,
-                        'qty_returned'     => 0,
-                        'qty_sold'         => 0,
-                        'unit_price'       => $unitPrice,
-                        'line_total_start' => 0,
-                        'line_total_sold'  => 0,
-                    ]);
+                    'handover_id'  => $handover->id,
+                    'product_id'   => $product->id,
+
+                    'qty_start'    => $qty,
+                    'qty_returned' => 0,
+                    'qty_sold'     => 0,
+
+                    // harga
+                    'unit_price'   => $unitPrice,
+                    'discount_per_unit' => $discount,
+                    'unit_price_after_discount' => $priceAfterDiscount,
+
+                    // total
+                    'line_total_start' => $unitPrice * $qty,
+                    'discount_total'   => $discount * $qty,
+                    'line_total_after_discount' => $priceAfterDiscount * $qty,
+
+                    'line_total_sold' => 0,
+                ]);
+
                 }
 
                 if (empty($itemsData)) {
@@ -259,7 +280,7 @@ class SalesHandoverController extends Controller
                 'success',
                 "Handover {$handover->code} berhasil dibuat dan OTP pagi sudah dikirim ke email sales."
             );
-        }
+    }
 
 
     /**
@@ -288,6 +309,13 @@ class SalesHandoverController extends Controller
         if (! $storedHash || ! Hash::check($data['otp_code'], $storedHash)) {
             return back()->with('error', 'OTP pagi tidak valid.');
         }
+        if ($handover->discount_set_at) {
+         // diskon sudah di-set, lanjut
+        } else {
+            $handover->discount_set_at = now();
+            $handover->discount_set_by = auth()->id();
+        }
+
 
 
         try {
@@ -307,15 +335,17 @@ class SalesHandoverController extends Controller
                 }
 
                 // Harga satuan, fallback ke selling_price
-                $unitPrice = $item->unit_price ?: (int) ($product->selling_price ?? 0);
-                $lineTotal = $qty * $unitPrice;
+                $lineTotal = (int) $item->line_total_after_discount;
+                $totalDispatched += $lineTotal;
+
+
 
                 // Update item nilai awal
-                $item->unit_price       = $unitPrice;
                 $item->line_total_start = $lineTotal;
                 $item->save();
 
-                $totalDispatched += $lineTotal;
+
+
 
                 // --- Update stok: warehouse -> sales ---
                 // stok warehouse
@@ -383,10 +413,21 @@ class SalesHandoverController extends Controller
                 DB::table('stock_movements')->insert($movement);
             }
 
-            $handover->total_dispatched_amount = $totalDispatched;
-            $handover->status                  = 'on_sales';
+            $handover->total_dispatched_amount = $handover->items->sum(
+            fn($i) => (int) $i->line_total_after_discount
+            );
+
+            $handover->discount_total = $handover->items->sum(
+                fn($i) => (int) $i->discount_total
+            );
+
+            $handover->grand_total = $handover->total_dispatched_amount;
+
+            $handover->status = 'on_sales';
             $handover->morning_otp_verified_at = now();
             $handover->save();
+
+
 
             DB::commit();
         } catch (\Throwable $e) {
@@ -559,9 +600,7 @@ class SalesHandoverController extends Controller
 
             foreach ($handover->items as $item) {
                 $product = $item->product;
-                if (! $product) {
-                    continue;
-                }
+                if (! $product) continue;
 
                 $qtyStart = (int) $item->qty_start;
                 $qtyRet   = $inputReturned[$item->product_id] ?? 0;
@@ -572,17 +611,22 @@ class SalesHandoverController extends Controller
 
                 $qtySold = max(0, $qtyStart - $qtyRet);
 
-                $unitPrice = $item->unit_price ?: (int) ($product->selling_price ?? 0);
-                $lineSold  = $qtySold * $unitPrice;
+                $priceOriginal = (int) $item->unit_price;
+                $priceAfter    = (int) ($item->unit_price_after_discount ?? $priceOriginal);
 
-                $item->qty_returned    = $qtyRet;
-                $item->qty_sold        = $qtySold;
-                $item->unit_price      = $unitPrice;
-                $item->line_total_sold = $lineSold;
+                $lineOriginal = $qtySold * $priceOriginal;
+                $lineSold     = $qtySold * $priceAfter;
+
+                $item->qty_returned        = $qtyRet;
+                $item->qty_sold            = $qtySold;
+                $item->line_total_original = $lineOriginal;
+                $item->line_total_sold     = $lineSold;
                 $item->save();
 
+                // ✅ ini yang bikin cash & transfer normal
                 $totalSold += $lineSold;
             }
+
 
             $handover->total_sold_amount       = $totalSold;
             $handover->cash_amount             = $cashAmount;
@@ -637,6 +681,40 @@ class SalesHandoverController extends Controller
         return $this->reportIndex($request);
     }
 
+    private function calcRealSold(SalesHandover $h): int
+    {
+        if (! $h->relationLoaded('items')) {
+            $h->load('items');
+        }
+
+        return $h->items->sum(function ($it) {
+            $discount = (int) ($it->discount_per_unit ?? 0);
+
+            if ($discount > 0) {
+                return (int) ($it->line_total_after_discount ?? 0);
+            }
+
+            return (int) ($it->line_total_sold ?? 0);
+        });
+    }
+
+    private function calcOriginalSold(SalesHandover $h): int
+    {
+        if (! $h->relationLoaded('items')) {
+            $h->load('items');
+        }
+
+        return $h->items->sum(function ($it) {
+            return (int) ($it->line_total_sold ?? 0);
+        });
+    }
+
+    private function calcDiscountLoss(SalesHandover $h): int
+    {
+        return max(0, $this->calcOriginalSold($h) - $this->calcRealSold($h));
+    }
+
+
     private function reportIndex(Request $request)
     {
         $me    = auth()->user();
@@ -645,6 +723,13 @@ class SalesHandoverController extends Controller
         $isWarehouse = $roles->contains('slug', 'warehouse');
         $isSales     = $roles->contains('slug', 'sales');
         $isAdminLike = $roles->contains('slug', 'admin') || $roles->contains('slug', 'superadmin');
+        $canSeeMargin =
+                        $roles->contains('slug','superadmin')
+                    || $roles->contains('slug','admin')
+                    || $roles->contains('slug','warehouse')
+                    || $roles->contains('slug','procurement')
+                    || $roles->contains('slug','ceo');
+
 
         $dateFrom = $request->query('date_from', now()->toDateString());
         $dateTo   = $request->query('date_to',   now()->toDateString());
@@ -777,6 +862,7 @@ class SalesHandoverController extends Controller
             'warehouses'    => $warehouses,
             'salesList'     => $salesList,
             'search'        => $search,
+            'canSeeMargin' => $canSeeMargin,
         ]);
     }
 
@@ -786,18 +872,23 @@ class SalesHandoverController extends Controller
         $totalHdo = (int) $handovers->count();
 
         $totalSoldClosed = (int) $handovers
-            ->where('status', 'closed')
-            ->sum(fn($h) => (int) ($h->total_sold_amount ?? 0));
+        ->where('status', 'closed')
+        ->sum(fn($h) => $this->calcRealSold($h));
 
+        $totalDiscount = (int) $handovers
+        ->where('status', 'closed')
+        ->sum(fn($h) => $this->calcDiscountLoss($h));
+        
         $totalDiff = (int) $handovers->sum(function ($h) {
             $dispatched = (int) ($h->total_dispatched_amount ?? 0);
-            $sold       = (int) ($h->total_sold_amount ?? 0);
+            $sold = $this->calcRealSold($h);
             return max(0, $dispatched - $sold);
         });
 
         $summary = [
             'total_hdo_text'        => $totalHdo . ' HDO',
             'total_sold_formatted'  => $this->formatRp($totalSoldClosed),
+            'total_discount'       => $this->formatRp($totalDiscount),
             'total_diff_formatted'  => $this->formatRp($totalDiff),
             'period_text'           => $dateFrom . ' s/d ' . $dateTo,
             'view'                  => $view,
@@ -814,8 +905,11 @@ class SalesHandoverController extends Controller
                 $salesLabel = optional($h->sales)->name ?? ('Sales #'.$h->sales_id);
 
                 $dispatched = (int) ($h->total_dispatched_amount ?? 0);
-                $sold       = (int) ($h->total_sold_amount ?? 0);
-                $diff       = max(0, $dispatched - $sold);
+                $original = $this->calcOriginalSold($h);
+                $real     = $this->calcRealSold($h);
+                $discount = max(0, $original - $real);
+                $diff     = max(0, $dispatched - $real);
+
 
                 $stLabel = $statusOptions[$h->status] ?? $h->status;
 
@@ -838,8 +932,12 @@ class SalesHandoverController extends Controller
                     'status_label'       => $stLabel,
                     'status_badge_class' => $badgeClass,
                     'amount_dispatched'  => $this->formatRp($dispatched),
-                    'amount_sold'        => $this->formatRp($sold),
                     'amount_diff'        => $this->formatRp($diff),
+                    'amount_original' => $this->formatRp($original),
+                    'amount_sold'     => $this->formatRp($real),
+                    'amount_discount' => $this->formatRp($discount),
+                    'amount_diff'      => $this->formatRp(max(0, $dispatched - $real)),
+                    
                 ];
             }
 
@@ -860,7 +958,7 @@ class SalesHandoverController extends Controller
 
                 $handoverCount = (int) $list->count();
                 $sumDispatched = (int) $list->sum(fn($h) => (int) ($h->total_dispatched_amount ?? 0));
-                $sumSoldClosed = (int) $list->where('status','closed')->sum(fn($h) => (int) ($h->total_sold_amount ?? 0));
+                $sumSoldClosed = (int) $list->where('status','closed')->sum(fn($h) => $this->calcRealSold($h));
                 $sumSetor      = (int) $list->sum(function ($h) {
                     $cash = (int) ($h->cash_amount ?? 0);
                     $tf   = (int) ($h->transfer_amount ?? 0);
@@ -895,7 +993,7 @@ class SalesHandoverController extends Controller
 
             $handoverCount = (int) $list->count();
             $sumDispatched = (int) $list->sum(fn($h) => (int) ($h->total_dispatched_amount ?? 0));
-            $sumSoldClosed = (int) $list->where('status','closed')->sum(fn($h) => (int) ($h->total_sold_amount ?? 0));
+            $sumSoldClosed = (int) $list->where('status','closed')->sum(fn($h) => $this->calcRealSold($h));
             $sumSetor      = (int) $list->sum(function ($h) {
                 $cash = (int) ($h->cash_amount ?? 0);
                 $tf   = (int) ($h->transfer_amount ?? 0);
@@ -947,94 +1045,119 @@ class SalesHandoverController extends Controller
         return $this->detailJson($handover);
     }
 
-    private function detailJson(SalesHandover $handover)
-    {
-        // load relations kalau ada
-        $handover->loadMissing(['warehouse','sales','items.product']);
+ private function detailJson(SalesHandover $handover)
+{
+    $handover->loadMissing(['warehouse','sales','items.product']);
 
-        $wh = $handover->warehouse;
-        $sales = $handover->sales;
+    $wh    = $handover->warehouse;
+    $sales = $handover->sales;
 
-        // bukti transfer (support beberapa nama kolom biar ga ilang lagi)
-        $proofPath = $handover->transfer_proof_path
-            ?? $handover->transfer_proof
-            ?? $handover->transfer_proof_file
-            ?? null;
+    // ==== Bukti transfer
+    $proofPath = $handover->transfer_proof_path
+        ?? $handover->transfer_proof
+        ?? $handover->transfer_proof_file
+        ?? null;
 
+    if (!empty($handover->transfer_proof_url)) {
+        $proofUrl = $handover->transfer_proof_url;
+    } elseif ($proofPath) {
+        $proofUrl = Storage::url($proofPath);
+    } else {
         $proofUrl = null;
-        if (!empty($handover->transfer_proof_url)) {
-            $proofUrl = $handover->transfer_proof_url;
-        } elseif ($proofPath) {
-            $proofUrl = Storage::url($proofPath);
-        }
-
-        $items = [];
-        if ($handover->relationLoaded('items') && $handover->items) {
-            foreach ($handover->items as $it) {
-                $p = $it->product ?? null;
-
-                $qtyStart    = (int) ($it->qty_start ?? 0);
-                $qtyReturned = (int) ($it->qty_returned ?? 0);
-                $qtySold     = (int) ($it->qty_sold ?? 0);
-                $unitPrice   = (int) ($it->unit_price ?? 0);
-
-                $items[] = [
-                    'product_name' => $p->name ?? $it->product_name ?? '-',
-                    'product_code' => $p->code ?? $it->product_code ?? null,
-                    'qty_start'    => $qtyStart,
-                    'qty_returned' => $qtyReturned,
-                    'qty_sold'     => $qtySold,
-                    'unit_price'   => $unitPrice,
-                    'line_start'   => $qtyStart * $unitPrice,
-                    'line_sold'    => $qtySold * $unitPrice,
-                ];
-            }
-        }
-
-        $totalDispatched = (int) ($handover->total_dispatched_amount ?? 0);
-        $totalSold       = (int) ($handover->total_sold_amount ?? 0);
-        $selisihStock    = max(0, $totalDispatched - $totalSold);
-
-        $cashAmount     = (int) ($handover->cash_amount ?? 0);
-        $transferAmount = (int) ($handover->transfer_amount ?? 0);
-        $setorTotal     = $cashAmount + $transferAmount;
-        $selisihJualSetor = max(0, $totalSold - $setorTotal);
-
-        return response()->json([
-            'success' => true,
-            'handover' => [
-                'id' => $handover->id,
-                'code' => $handover->code,
-                'status' => $handover->status,
-                'handover_date' => $handover->handover_date instanceof \Carbon\CarbonInterface
-                    ? $handover->handover_date->toDateString()
-                    : (string) $handover->handover_date,
-
-                'warehouse_name' => $wh?->warehouse_name ?? $wh?->name ?? $wh?->warehouse_code ?? '-',
-                'sales_name'     => $sales?->name ?? '-',
-
-                'morning_otp_sent_at'     => $handover->morning_otp_sent_at,
-                'morning_otp_verified_at' => $handover->morning_otp_verified_at,
-                'evening_otp_sent_at'     => $handover->evening_otp_sent_at,
-                'evening_otp_verified_at' => $handover->evening_otp_verified_at,
-
-                'total_dispatched' => $totalDispatched,
-                'total_sold'       => $totalSold,
-                'selisih_stock_value' => $selisihStock,
-
-                'cash_amount'     => $cashAmount,
-                'transfer_amount' => $transferAmount,
-                'transfer_proof_url' => $proofUrl,
-
-                'setor_total' => $setorTotal,
-                'selisih_jual_vs_setor' => $selisihJualSetor,
-            ],
-            'items' => $items,
-        ]);
     }
 
+    // ==== ITEMS + HITUNG TOTAL SOLD DARI ITEM
+    $items = [];
+    $totalSold = 0; // ← ini yg jadi sumber nilai jual yg benar
 
+    foreach ($handover->items as $it) {
+        $p = $it->product;
 
+        $qtyStart    = (int) ($it->qty_start ?? 0);
+        $qtyReturned = (int) ($it->qty_returned ?? 0);
+        $qtySold     = (int) ($it->qty_sold ?? 0);
+
+        $unitPrice = (int) ($it->unit_price ?? 0);
+        $discount  = (int) ($it->discount_per_unit ?? 0);
+
+        // Harga setelah diskon
+        $unitAfter = (int) ($it->unit_price_after_discount ?? ($unitPrice - $discount));
+        if ($unitAfter < 0) $unitAfter = 0;
+
+        // Total awal kirim
+        $lineStart = (int) ($it->line_total_start ?? ($qtyStart * $unitPrice));
+
+        // 🔥 Tentukan total jual per item
+        if ($discount > 0) {
+            // item diskon
+            $lineSold = (int) ($it->line_total_after_discount ?? ($qtySold * $unitAfter));
+        } else {
+            // item normal
+            $lineSold = (int) ($it->line_total_sold ?? ($qtySold * $unitPrice));
+        }
+
+        // 🔥 Akumulasi total jual
+        $totalSold += $lineSold;
+
+        $items[] = [
+            'product_name' => $p?->name ?? '-',
+            'product_code' => $p?->product_code ?? null,
+
+            'qty_start'    => $qtyStart,
+            'qty_returned' => $qtyReturned,
+            'qty_sold'     => $qtySold,
+
+            'unit_price'   => $unitPrice,
+            'discount_per_unit' => $discount,
+            'unit_price_after_discount' => $unitAfter,
+
+            'line_total_start' => $lineStart,
+            'line_total_sold'  => $lineSold, // sudah mix diskon / non-diskon
+        ];
+    }
+
+    // ==== TOTALS
+    $totalDispatched = (int) ($handover->total_dispatched_amount ?? 0);
+
+    // 🔥 PAKAI HASIL HITUNG DARI ITEMS
+    $selisihStock = max(0, $totalDispatched - $totalSold);
+
+    $cashAmount     = (int) ($handover->cash_amount ?? 0);
+    $transferAmount = (int) ($handover->transfer_amount ?? 0);
+    $setorTotal     = $cashAmount + $transferAmount;
+
+    $selisihJualSetor = max(0, $totalSold - $setorTotal);
+
+    return response()->json([
+        'success' => true,
+        'handover' => [
+            'id' => $handover->id,
+            'code' => $handover->code,
+            'status' => $handover->status,
+            'handover_date' => $handover->handover_date instanceof \Carbon\CarbonInterface
+                ? $handover->handover_date->toDateString()
+                : (string) $handover->handover_date,
+
+            'warehouse_name' => $wh?->warehouse_name ?? $wh?->name ?? '-',
+            'sales_name'     => $sales?->name ?? '-',
+
+            'total_dispatched' => $totalDispatched,
+
+            // 🔥 NILAI JUAL YANG SUDAH BENAR
+            'total_sold' => $totalSold,
+
+            'selisih_stock_value' => $selisihStock,
+
+            'cash_amount'     => $cashAmount,
+            'transfer_amount' => $transferAmount,
+            'transfer_proof_url' => $proofUrl,
+
+            'setor_total' => $setorTotal,
+            'selisih_jual_vs_setor' => $selisihJualSetor,
+        ],
+        'items' => $items,
+    ]);
+}
 
 // =========================
 // VIEW: DETAIL HANDOVER ROWS
@@ -1552,7 +1675,4 @@ protected function buildRowsByDay(Collection $handovers): array
         return back()->with('success', 'Approval payment berhasil disimpan. Jika semua item terjual sudah APPROVED, handover otomatis CLOSED.');
     }
     
-
-
-
 }

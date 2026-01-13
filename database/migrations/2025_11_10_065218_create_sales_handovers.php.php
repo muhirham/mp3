@@ -65,6 +65,20 @@ return new class extends Migration
             $table->timestamp('evening_otp_sent_at')->nullable();
             $table->timestamp('evening_otp_verified_at')->nullable();
 
+            // ===== DISCOUNT (SET PAGI OLEH ADM WH) =====
+            $table->unsignedBigInteger('discount_total')->default(0);
+            // total diskon dari semua item
+
+            $table->unsignedBigInteger('grand_total')->default(0);
+            // total_sold_amount - discount_total
+
+            $table->foreignId('discount_set_by')
+                ->nullable()
+                ->constrained('users');
+
+            $table->timestamp('discount_set_at')->nullable();
+
+
             $table->timestamps();
         });
 
@@ -105,6 +119,20 @@ return new class extends Migration
 
             // 1 produk cuma boleh muncul sekali per handover
             $table->unique(['handover_id', 'product_id']);
+
+            // ===== DISCOUNT PER ITEM (SET PAGI) =====
+            $table->unsignedBigInteger('discount_per_unit')->default(0);
+            // diskon per pcs
+
+            $table->unsignedBigInteger('discount_total')->default(0);
+            // discount_per_unit * qty_sold
+
+            $table->unsignedBigInteger('unit_price_after_discount')->default(0);
+            // unit_price - discount_per_unit
+
+            $table->unsignedBigInteger('line_total_after_discount')->default(0);
+            // qty_sold * unit_price_after_discount
+
         });
     }
 

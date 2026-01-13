@@ -224,13 +224,18 @@
                     @php
                         $unitPrice = (int) $row->unit_price;
 
-                        // ✅ FIX: jangan ngunci pakai qty_sold doang (sering 0).
-                        // Prioritas: qty_sold (kalau sudah ada) -> payment_qty (kalau ada history) -> qty_start (fallback).
+                        // ✅ HARGA FINAL (SETELAH DISKON)
+                        $effectiveUnitPrice = $row->discount_per_unit > 0
+                            ? ($unitPrice - (int) $row->discount_per_unit)
+                            : $unitPrice;
+
+                        // qty logic lu tetep
                         $maxQty = (int) $row->qty_sold;
                         if ($maxQty <= 0) $maxQty = (int) ($row->payment_qty ?? 0);
                         if ($maxQty <= 0) $maxQty = (int) $row->qty_start;
 
-                        $maxNominal = $unitPrice * $maxQty;
+                        // ⚠️ PAKE HARGA FINAL
+                        $maxNominal = $effectiveUnitPrice * $maxQty;
 
                         $productName = $row->product?->name ?? ('Produk #' . $row->product_id);
                         $productCode = $row->product?->product_code ?? '';
@@ -246,9 +251,10 @@
                     @endphp
 
                     <tr class="js-payment-row"
-                        data-unit-price="{{ $unitPrice }}"
+                        data-unit-price="{{ $effectiveUnitPrice }}"
                         data-max-qty="{{ $maxQty }}"
-                        data-max-amount="{{ $maxNominal }}">
+                        data-max-amount="{{ $effectiveUnitPrice * $maxQty }}">
+
 
                         {{-- PRODUK --}}
                         <td data-label="Produk">
@@ -273,8 +279,30 @@
                         {{-- NILAI DIBAWA --}}
                         <td class="text-end" data-label="Nilai Dibawa">{{ number_format($lineStart, 0, ',', '.') }}</td>
 
-                        {{-- NILAI TERJUAL --}}
-                        <td class="text-end" data-label="Nilai Terjual">{{ number_format($lineSold, 0, ',', '.') }}</td>
+                        <td class="text-end" data-label="Nilai Terjual">
+
+                          {{-- nilai normal --}}
+                          <div>
+                            Rp {{ number_format($row->line_total_sold, 0, ',', '.') }}
+                          </div>
+
+                          @if($row->discount_per_unit > 0)
+                            {{-- diskon --}}
+                            <div class="small text-muted">
+                              Diskon:
+                              Rp {{ number_format($row->discount_per_unit, 0, ',', '.') }}
+                            </div>
+
+                            {{-- nilai setelah diskon --}}
+                            <div class="small text-success">
+                              Harga Diskon: Rp {{ number_format($row->unit_price_after_discount, 0, ',', '.') }}
+
+                            </div>
+                          @endif
+
+                        </td>
+
+
 
                         {{-- QTY BAYAR --}}
                         <td data-label="Qty Bayar">

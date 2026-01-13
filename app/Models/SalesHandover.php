@@ -12,46 +12,59 @@ class SalesHandover extends Model
     protected $table = 'sales_handovers';
 
     protected $fillable = [
-        'code',
-        'warehouse_id',
-        'sales_id',
-        'handover_date',
-        'status',
-        'issued_by',
-        'closed_by',
-        'total_dispatched_amount',
-        'total_sold_amount',
-        'evening_filled_by_sales',
-        'evening_filled_at',
-        'cash_amount',
-        'transfer_amount',
-        'transfer_proof_path',
-        'morning_otp_hash',
-        'morning_otp_sent_at',
-        'morning_otp_verified_at',
-        'evening_otp_hash',
-        'evening_otp_sent_at',
-        'evening_otp_verified_at',
-        'morning_otp_plain',
-        'evening_otp_plain',
-    ];
+    'code',
+    'warehouse_id',
+    'sales_id',
+    'handover_date',
+    'status',
+    'issued_by',
+    'closed_by',
+
+    // ===== TOTAL =====
+    'total_dispatched_amount',
+    'total_sold_amount',
+
+    // ===== DISKON =====
+    'total_discount',
+    'total_sold_after_discount',
+
+    'evening_filled_by_sales',
+    'evening_filled_at',
+    'cash_amount',
+    'transfer_amount',
+    'transfer_proof_path',
+
+    'morning_otp_hash',
+    'morning_otp_sent_at',
+    'morning_otp_verified_at',
+    'evening_otp_hash',
+    'evening_otp_sent_at',
+    'evening_otp_verified_at',
+];
+
 
     protected $casts = [
-        'handover_date'           => 'date',
-        'evening_filled_by_sales' => 'boolean',
-        'evening_filled_at'       => 'datetime',
+    'handover_date' => 'date',
 
-        'morning_otp_sent_at'      => 'datetime',
-        'morning_otp_verified_at'  => 'datetime',
-        'evening_otp_sent_at'      => 'datetime',
-        'evening_otp_verified_at'  => 'datetime',
+    'evening_filled_by_sales' => 'boolean',
+    'evening_filled_at'       => 'datetime',
 
-        // di DB pakai unsignedBigInteger → cast ke integer
-        'total_dispatched_amount' => 'integer',
-        'total_sold_amount'       => 'integer',
-        'cash_amount'             => 'integer',
-        'transfer_amount'         => 'integer',
-    ];
+    'morning_otp_sent_at'     => 'datetime',
+    'morning_otp_verified_at' => 'datetime',
+    'evening_otp_sent_at'     => 'datetime',
+    'evening_otp_verified_at' => 'datetime',
+
+    // ===== TOTAL =====
+    'total_dispatched_amount'    => 'integer',
+    'total_sold_amount'          => 'integer',
+
+    // ===== DISKON =====
+    'discount_total'             => 'integer',
+    'grand_total'  => 'integer',
+
+    'cash_amount'     => 'integer',
+    'transfer_amount' => 'integer',
+];
 
     // ========= RELATIONSHIPS =========
 
