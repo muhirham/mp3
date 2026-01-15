@@ -14,6 +14,7 @@
         <div class="card mb-4">
             <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0 fw-bold">Handover Pagi – Buat & Kirim OTP</h5>
+            <small id="handoverInfo" class="text-muted"></small>
             </div>
 
             <form id="formIssue" method="POST" action="{{ route('sales.handover.morning.store') }}">
@@ -58,9 +59,7 @@
                     </select>
                 </div>
                 </div>
-
                 <hr>
-
                 <div class="d-flex justify-content-between align-items-center mb-2">
                 <h6 class="mb-0">Item yang Dibawa Pagi</h6>
                 <button type="button" class="btn btn-sm btn-outline-primary" id="btnAddRow">
@@ -177,6 +176,40 @@
 
         @push('scripts')
     <script>
+        const salesSelect = document.querySelector('select[name="sales_id"]');
+        const infoLabel   = document.getElementById('handoverInfo');
+
+        salesSelect?.addEventListener('change', async function(){
+            const salesId = this.value;
+            infoLabel.textContent = '';
+
+            if(!salesId) return;
+
+            try{
+                const res = await fetch(`/sales/${salesId}/active-handover-count`, {
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                    }
+                });
+
+                const data = await res.json();
+
+                if(data.active >= data.limit){
+                    infoLabel.innerHTML = `<span class="text-danger">
+                        Sales ini memiliki ${data.active} handover aktif (max ${data.limit}) Segera untuk menyelesaikan handover sebelumnya !!!
+                    </span>`;
+                }else{
+                    infoLabel.innerHTML = `
+                        Handover aktif: <strong>${data.active}</strong> •
+                        Ini akan menjadi <strong>handover ke-${data.next}</strong>
+                    `;
+                }
+
+            }catch(e){
+                infoLabel.textContent = 'Gagal memuat info handover sales';
+            }
+        });
+
     (function(){
     const tbody      = document.querySelector('#tblItems tbody');
     const btnAddRow  = document.getElementById('btnAddRow');
@@ -258,7 +291,6 @@
         recomputeRow(tr);
         recomputeGrand();
         }
-
     });
 
     // === FIX DI SINI: row baru langsung dikasih name items[index] ===

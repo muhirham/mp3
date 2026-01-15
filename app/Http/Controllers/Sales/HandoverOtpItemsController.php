@@ -47,7 +47,7 @@ class HandoverOtpItemsController extends Controller
     {
         $me = $request->user();
 
-        $handover = SalesHandover::with([
+        $handovers = SalesHandover::with([
                 'warehouse',
                 'items.product',
                 'sales',
@@ -60,26 +60,57 @@ class HandoverOtpItemsController extends Controller
             ])
             ->orderByDesc('handover_date')
             ->orderByDesc('id')
-            ->first();
+            ->get();
 
-        $isOtpVerified  = false;
-        $items          = collect();
-        $canEditPayment = false;
+            $activeHandoverId = $request->session()->get('sales_active_handover_id');
+        // default: handover TERBARU
+            $handover = $handovers->first();
+            
+            if ($activeHandoverId) {
+                    $handover = $handovers->firstWhere('id', $activeHandoverId) ?? $handover;
+                }
 
-        if ($handover) {
-            $sessionKey    = 'sales_handover_otp_verified_'.$handover->id;
-            $isOtpVerified = (bool) $request->session()->get($sessionKey, false);
+            $isOtpVerified  = false;
+            $items          = collect();
+            $canEditPayment = false;
 
-            if ($isOtpVerified) {
-                $items = $handover->items()
-                    ->with('product')
-                    ->orderBy('id')
-                    ->get();
+            if ($handover) {
+                $sessionKey = 'sales_handover_otp_verified_'.$handover->id;
 
-                // payment cuma boleh saat on_sales / waiting_evening_otp
-                $canEditPayment = in_array($handover->status, ['on_sales', 'waiting_evening_otp']);
+                // 🔥 OTP UNLOCK LOGIC FINAL
+                $isOtpVerified =
+                    $request->session()->get($sessionKey, false)
+                    || (
+                        $handover->status === 'on_sales'
+                        && !is_null($handover->morning_otp_verified_at)
+                    );
+
+                if ($isOtpVerified) {
+                    $items = $handover->items()
+                        ->with('product')
+                        ->orderBy('id')
+                        ->get();
+
+                    $canEditPayment = in_array(
+                        $handover->status,
+                        ['on_sales', 'waiting_evening_otp'],
+                        true
+                    );
+                }
             }
-        }
+
+            $statusButuhOtp = false;
+            $harusPopupOtp  = false;
+
+            if ($handover) {
+                $statusButuhOtp = in_array(
+                    $handover->status,
+                    ['waiting_morning_otp','on_sales'],
+                    true
+                );
+
+                $harusPopupOtp = $statusButuhOtp && !$isOtpVerified;
+            }
 
         return view('sales.handover_otp', [
             'me'             => $me,
@@ -87,6 +118,7 @@ class HandoverOtpItemsController extends Controller
             'items'          => $items,
             'isOtpVerified'  => $isOtpVerified,
             'canEditPayment' => $canEditPayment,
+            'harusPopupOtp'  => $harusPopupOtp,
         ]);
     }
 
@@ -94,72 +126,73 @@ class HandoverOtpItemsController extends Controller
     /**
      * Verifikasi OTP pagi via AJAX.
      */
-    public function verify(Request $request)
-    {
-        $request->validate([
-            'otp_code'    => ['required', 'string'],
-            'handover_id' => ['nullable', 'integer'],
-        ]);
-
-        $me = $request->user();
-
-        $query = SalesHandover::with(['warehouse', 'items.product', 'sales'])
-            ->where('sales_id', $me->id)
-            ->whereIn('status', [
-                'waiting_morning_otp',
-                'on_sales',
-                'waiting_evening_otp',
+        public function verify(Request $request)
+        {
+            $request->validate([
+                'otp_code' => ['required', 'string'],
             ]);
 
-        if ($request->handover_id) {
-            $query->where('id', $request->handover_id);
-        }
+            $me = $request->user();
+            $inputOtp = trim($request->otp_code);
 
-        $handover = $query
-            ->orderByDesc('handover_date')
-            ->orderByDesc('id')
-            ->first();
+            /**
+             * 🔎 CARI HANDOVER YANG OTP-NYA COCOK
+             */
+            $handovers = SalesHandover::where('sales_id', $me->id)
+                ->whereIn('status', [
+                    'waiting_morning_otp',
+                    'on_sales',
+                    'waiting_evening_otp',
+                ])
+                ->get();
 
-        if (! $handover) {
+            $matchedHandover = null;
+
+            foreach ($handovers as $handover) {
+                [$plain, $hash] = $this->parseOtpValue($handover->morning_otp_hash);
+
+                if (!$plain && !$hash) {
+                    continue;
+                }
+
+                if (
+                    ($hash && Hash::check($inputOtp, $hash)) ||
+                    ($plain && hash_equals($plain, $inputOtp))
+                ) {
+                    $matchedHandover = $handover;
+                    break;
+                }
+            }
+
+            if (!$matchedHandover) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Kode OTP tidak cocok dengan handover manapun.',
+                ], 422);
+            }
+
+            /**
+             * ✅ SET HANDOVER AKTIF
+             */
+            $request->session()->put(
+                'sales_active_handover_id',
+                $matchedHandover->id
+            );
+
+            /**
+             * ✅ OTP VERIFIED PER HANDOVER
+             */
+            $request->session()->put(
+                'sales_handover_otp_verified_'.$matchedHandover->id,
+                true
+            );
+
             return response()->json([
-                'success' => false,
-                'message' => 'Tidak ada handover aktif untuk hari ini.',
-            ], 404);
+                'success' => true,
+                'message' => 'OTP valid, handover berhasil dibuka.',
+            ]);
         }
 
-        $inputOtp = trim((string) $request->otp_code);
-        [$plainStored, $hashStored] = $this->parseOtpValue($handover->morning_otp_hash);
-
-        if (! $plainStored && ! $hashStored) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Kode OTP pagi belum dibuat oleh admin warehouse.',
-            ], 422);
-        }
-
-        $isValid = false;
-
-        if ($hashStored) {
-            $isValid = Hash::check($inputOtp, $hashStored);
-        } elseif ($plainStored) {
-            $isValid = hash_equals($plainStored, $inputOtp);
-        }
-
-        if (! $isValid) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Kode OTP tidak sesuai.',
-            ], 422);
-        }
-
-        $sessionKey = 'sales_handover_otp_verified_'.$handover->id;
-        $request->session()->put($sessionKey, true);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'OTP valid.',
-        ]);
-    }
 
 
     /**
@@ -178,7 +211,11 @@ class HandoverOtpItemsController extends Controller
             'items.*.payment_proof'  => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:2048'],
         ]);
 
-        $handover = SalesHandover::with(['items.product'])->findOrFail($request->handover_id);
+        $handover = SalesHandover::with(['items.product'])
+            ->where('id', $request->handover_id)
+            ->whereIn('status', ['on_sales','waiting_evening_otp'])
+            ->firstOrFail();
+
 
         // keamanan: cuma boleh handover milik sales yang login
         if ((int) $handover->sales_id !== (int) $me->id) {

@@ -167,6 +167,16 @@
               @endif
             </div>
           </div>
+          <div class="col-md-4 mb-2">
+            @if($handover->status === 'on_sales')
+                <button type="button"
+                        class="btn btn-sm btn-warning"
+                        id="btnInputOtp">
+                    Masukkan OTP
+                </button>
+            @endif
+          </div>
+
         </div>
       @endif
     </div>
@@ -399,10 +409,15 @@ document.addEventListener('DOMContentLoaded', function () {
     const verifyUrl     = @json(route('sales.otp.items.verify'));
     const tokenMeta     = document.querySelector('meta[name="csrf-token"]');
     const token         = tokenMeta ? tokenMeta.getAttribute('content') : '';
+    const btnOtp = document.getElementById('btnInputOtp');
+    const handoverStatus = @json($handover->status ?? null);
 
-    if (hasHandover && !isOtpVerified) {
+if (hasHandover && !isOtpVerified) {
+    setTimeout(() => {
         showOtpModal();
-    }
+    }, 300);
+}
+
 
     async function submitOtp(code) {
         const res = await fetch(verifyUrl, {
@@ -414,7 +429,7 @@ document.addEventListener('DOMContentLoaded', function () {
             },
             body: JSON.stringify({
                 otp_code: code,
-                handover_id: handoverId
+                
             })
         });
 
@@ -452,6 +467,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         if (isConfirmed && otpCode) {
+              sessionStorage.removeItem('otp-popup-shown-' + handoverId);
             await Swal.fire({
                 icon: 'success',
                 title: 'Berhasil',
@@ -461,6 +477,13 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             window.location.reload();
         }
+      }
+
+      
+    if(btnOtp){
+        btnOtp.addEventListener('click', function(){
+            showOtpModal();
+        });
     }
 
     @if (session('success'))
@@ -479,7 +502,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         Swal.fire({ icon: 'error', title: 'Validasi gagal', html: errorHtml });
     @endif
-});
+  });
 
 (function () {
     const form = document.getElementById('paymentForm');
@@ -537,6 +560,6 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     });
-})();
+  })();
 </script>
 @endpush
