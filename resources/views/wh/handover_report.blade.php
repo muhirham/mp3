@@ -5,6 +5,31 @@
 
 <style>
   .swal2-container { z-index: 2005 !important; }
+  .table {
+  font-size: 12px;
+}
+
+.table thead th {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.table tbody td {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.badge {
+  font-size: 10px;
+  padding: 3px 6px;
+}
+.table td,
+.table th {
+  white-space: nowrap;
+}
+
+
+
 </style>
 
 @php
@@ -14,6 +39,14 @@
     $isWarehouse = $roles->contains('slug', 'warehouse');
     $isSales     = $roles->contains('slug', 'sales');
     $isAdminLike = $roles->contains('slug', 'admin') || $roles->contains('slug', 'superadmin');
+
+    $canSeeMargin =
+    $roles->contains('slug','superadmin')
+ || $roles->contains('slug','admin')
+ || $roles->contains('slug','warehouse')
+ || $roles->contains('slug','procurement')
+ || $roles->contains('slug','ceo');
+
 
     $statusLabels = $statusOptions ?? [];
 
@@ -143,26 +176,46 @@
       <hr>
 
       {{-- SUMMARY TOP --}}
-      <div class="row text-center">
-        <div class="col-md-4 mb-2">
-          <div class="fw-semibold text-muted small">Total HDO</div>
-          <div class="fs-5 fw-bold" id="sumHdo">{{ $summary['total_hdo_text'] }}</div>
+      <div class="row text-center mb-3">
+
+  {{-- KIRI --}}
+          <div class="col-md-6">
+            <div class="mb-3">
+              <div class="fw-semibold text-muted small">Total Handover</div>
+              <div class="fs-5 fw-bold" id="sumHdo">{{ $summary['total_hdo_text'] }}</div>
+            </div>
+
+            @if($canSeeMargin)
+              <div>
+                <div class="fw-semibold text-muted small">Total Diskon</div>
+                <div class="fs-5 fw-bold text-danger" id="sumDiscount">
+                  -{{ $summary['total_discount'] ?? 'Rp 0' }}
+                </div>
+              </div>
+            @endif
+          </div>
+
+          {{-- KANAN --}}
+          <div class="col-md-6">
+            <div class="mb-3">
+              <div class="fw-semibold text-muted small">Total Nilai Penjualan (Closed)</div>
+              <div class="fs-5 fw-bold" id="sumSold">{{ $summary['total_sold_formatted'] }}</div>
+            </div>
+
+            {{-- Nilai sisa stok tepat di bawah penjualan --}}
+            <div class="pt-1">
+              <div class="fw-semibold text-muted small">Perkiraan Nilai Sisa Stok</div>
+              <div class="fs-5 fw-bold" id="sumDiff">{{ $summary['total_diff_formatted'] }}</div>
+            </div>
+          </div>
+
         </div>
 
-        <div class="col-md-4 mb-2">
-          <div class="fw-semibold text-muted small">Total Nilai Penjualan (Closed)</div>
-          <div class="fs-5 fw-bold" id="sumSold">{{ $summary['total_sold_formatted'] }}</div>
+        <div class="mt-2 text-muted small text-center">
+          Periode:
+          <span class="fw-semibold" id="periodText">{{ $summary['period_text'] }}</span>
         </div>
 
-        <div class="col-md-4 mb-2">
-          <div class="fw-semibold text-muted small">Perkiraan Nilai Sisa Stok</div>
-          <div class="fs-5 fw-bold" id="sumDiff">{{ $summary['total_diff_formatted'] }}</div>
-        </div>
-      </div>
-
-      <div class="mt-2 text-muted small">
-        Periode: <span class="fw-semibold" id="periodText">{{ $summary['period_text'] }}</span>
-      </div>
     </div>
   </div>
 
@@ -199,16 +252,22 @@
               </tr>
             @else
               <tr>
-                <th style="width:4%">#</th>
-                <th style="width:10%">Tanggal</th>
-                <th style="width:13%">Kode</th>
-                <th style="width:18%">Warehouse</th>
-                <th style="width:16%">Sales</th>
-                <th style="width:11%">Status</th>
-                <th class="text-end" style="width:12%">Nilai Dibawa</th>
-                <th class="text-end" style="width:12%">Nilai Terjual</th>
-                <th class="text-end" style="width:12%">Selisih (stok)</th>
-                <th style="width:8%"></th>
+                  <th style="width:4%">#</th>
+                  <th style="width:10%">Tanggal</th>
+                  <th style="width:13%">Kode</th>
+                  <th style="width:18%">Warehouse</th>
+                  <th style="width:16%">Sales</th>
+                  <th style="width:11%">Status</th>
+                  <th class="text-end" style="width:12%">Nilai Dibawa</th>
+                  <th class="text-end" style="width:12%">Terjual (After Disc)</th>
+
+                  @if($canSeeMargin)
+                    <th class="text-end" style="width:12%">Harga Asli</th>
+                    <th class="text-end" style="width:12%">Diskon</th>
+                  @endif
+
+                  <th class="text-end" style="width:12%">Selisih (stok)</th>
+                  <th style="width:8%"></th>
               </tr>
             @endif
           </thead>
@@ -253,8 +312,15 @@
                   <td>{{ $r['sales'] }}</td>
                   <td><span class="badge {{ $r['status_badge_class'] }}">{{ $r['status_label'] }}</span></td>
                   <td class="text-end">{{ $r['amount_dispatched'] }}</td>
-                  <td class="text-end">{{ $r['amount_sold'] }}</td>
+                  <td class="text-end fw-bold">{{ $r['amount_sold'] }}</td>
+
+                  @if($canSeeMargin)
+                    <td class="text-end text-muted">{{ $r['amount_original'] }}</td>
+                    <td class="text-end text-danger">-{{ $r['amount_discount'] }}</td>
+                  @endif
+
                   <td class="text-end">{{ $r['amount_diff'] }}</td>
+
                   <td class="text-end">
                     <button type="button" class="btn btn-sm btn-outline-primary btn-detail" data-id="{{ $r['id'] }}">
                       Detail
@@ -303,9 +369,10 @@
                 <th class="text-end" style="width:10%">Dibawa</th>
                 <th class="text-end" style="width:10%">Kembali</th>
                 <th class="text-end" style="width:10%">Terjual</th>
-                <th class="text-end" style="width:15%">Harga</th>
-                <th class="text-end" style="width:12%">Nilai Dibawa</th>
-                <th class="text-end" style="width:13%">Nilai Terjual</th>
+                <th class="text-end" style="width:13%">Harga</th>
+                <th class="text-end" style="width:12%">Diskon</th>
+                <th class="text-end" style="width:14%">Harga Setelah Diskon</th>
+                <th class="text-end" style="width:14%">Nilai Terjual</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -350,7 +417,8 @@
   function formatRp(num) {
     return 'Rp ' + new Intl.NumberFormat('id-ID').format(num || 0);
   }
-
+  
+  const canSeeMargin = @json($canSeeMargin);
   function renderHead(view) {
     if (view === 'sales') {
       headEl.innerHTML = `
@@ -383,20 +451,29 @@
       return;
     }
 
-    headEl.innerHTML = `
-      <tr>
-        <th style="width:4%">#</th>
-        <th style="width:10%">Tanggal</th>
-        <th style="width:13%">Kode</th>
-        <th style="width:18%">Warehouse</th>
-        <th style="width:16%">Sales</th>
-        <th style="width:11%">Status</th>
-        <th class="text-end" style="width:12%">Nilai Dibawa</th>
-        <th class="text-end" style="width:12%">Nilai Terjual</th>
-        <th class="text-end" style="width:12%">Selisih (stok)</th>
-        <th style="width:8%"></th>
-      </tr>
-    `;
+      let extra = '';
+      if (canSeeMargin) {
+        extra = `
+          <th class="text-end" style="width:12%">Harga Asli</th>
+          <th class="text-end" style="width:12%">Diskon</th>
+        `;
+      }
+
+      headEl.innerHTML = `
+        <tr>
+          <th style="width:4%">#</th>
+          <th style="width:10%">Tanggal</th>
+          <th style="width:13%">Kode</th>
+          <th style="width:18%">Warehouse</th>
+          <th style="width:16%">Sales</th>
+          <th style="width:11%">Status</th>
+          <th class="text-end" style="width:12%">Nilai Dibawa</th>
+          <th class="text-end" style="width:12%">Terjual (After Disc)</th>
+          ${extra}
+          <th class="text-end" style="width:12%">Selisih (stok)</th>
+          <th style="width:8%"></th>
+        </tr>
+      `;
   }
 
   function renderRows(view, rows) {
@@ -440,20 +517,37 @@
       return;
     }
 
-    rowsTbody.innerHTML = rows.map(r => `
-      <tr>
-        <td>${r.no}</td>
-        <td>${r.date || '-'}</td>
-        <td class="fw-semibold">${r.code}</td>
-        <td>${r.warehouse}</td>
-        <td>${r.sales}</td>
-        <td><span class="badge ${r.status_badge_class}">${r.status_label}</span></td>
-        <td class="text-end">${r.amount_dispatched}</td>
-        <td class="text-end">${r.amount_sold}</td>
-        <td class="text-end">${r.amount_diff}</td>
-        <td class="text-end"><button type="button" class="btn btn-sm btn-outline-primary btn-detail" data-id="${r.id}">Detail</button></td>
-      </tr>
-    `).join('');
+rowsTbody.innerHTML = rows.map(r => {
+  let marginCols = '';
+
+  if (canSeeMargin) {
+    marginCols = `
+      <td class="text-end text-muted">${r.amount_original}</td>
+      <td class="text-end text-danger">-${r.amount_discount}</td>
+    `;
+  }
+
+  return `
+    <tr>
+      <td>${r.no}</td>
+      <td>${r.date || '-'}</td>
+      <td class="fw-semibold">${r.code}</td>
+      <td>${r.warehouse}</td>
+      <td>${r.sales}</td>
+      <td><span class="badge ${r.status_badge_class}">${r.status_label}</span></td>
+      <td class="text-end">${r.amount_dispatched}</td>
+      <td class="text-end fw-bold">${r.amount_sold}</td>
+      ${marginCols}
+      <td class="text-end">${r.amount_diff}</td>
+      <td class="text-end">
+        <button type="button" class="btn btn-sm btn-outline-primary btn-detail" data-id="${r.id}">
+          Detail
+        </button>
+      </td>
+    </tr>
+  `;
+}).join('');
+
   }
 
   async function reloadList() {
@@ -476,6 +570,12 @@
         if (sumSoldEl)    sumSoldEl.textContent    = json.summary.total_sold_formatted || 'Rp 0';
         if (sumDiffEl)    sumDiffEl.textContent    = json.summary.total_diff_formatted || 'Rp 0';
         if (periodTextEl) periodTextEl.textContent = json.summary.period_text || '-';
+        const sumDiscountEl = document.querySelector('#sumDiscount');
+
+        if (sumDiscountEl) {
+          sumDiscountEl.textContent = json.summary.total_discount || 'Rp 0';
+}
+
       }
     } catch (err) {
       console.error(err);
@@ -582,22 +682,41 @@
         }
 
         let htmlItems = '';
-        it.forEach(row => {
-          htmlItems += `
+          it.forEach(row => {
+            const hasDiscount = (row.discount_per_unit ?? 0) > 0;
+
+            htmlItems += `
             <tr>
               <td>
                 <div class="fw-semibold">${row.product_name}</div>
-                <div class="small text-muted">${row.product_code ? 'Kode: ' + row.product_code : ''}</div>
+                ${row.product_code ? `<div class="small text-muted">${row.product_code}</div>` : ''}
               </td>
+
               <td class="text-end">${row.qty_start ?? 0}</td>
               <td class="text-end">${row.qty_returned ?? 0}</td>
               <td class="text-end">${row.qty_sold ?? 0}</td>
+
+              <!-- HARGA ASLI -->
               <td class="text-end">${formatRp(row.unit_price || 0)}</td>
-              <td class="text-end">${formatRp(row.line_start || 0)}</td>
-              <td class="text-end">${formatRp(row.line_sold || 0)}</td>
+
+              <!-- DISKON -->
+                  <td class="text-end">
+                    ${hasDiscount ? formatRp(row.discount_per_unit) : '-'}
+                  </td>
+              <!-- HARGA SETELAH DISKON -->
+              <td class="text-end">
+                ${hasDiscount
+                  ? formatRp(row.unit_price_after_discount)
+                  : formatRp(row.line_total_sold)}
+              </td>
+
+              <!-- NILAI TERJUAL -->
+              <td class="text-end fw-semibold">
+                ${formatRp(row.line_total_sold || 0)}
+              </td>
             </tr>
-          `;
-        });
+            `;
+          });
         if (!htmlItems) htmlItems = '<tr><td colspan="7" class="text-center text-muted">Tidak ada item.</td></tr>';
         detailTbody.innerHTML = htmlItems;
 
@@ -620,7 +739,7 @@
             </div>
             <div class="col-md-4">
               <div class="fw-semibold text-muted small">Nilai Terjual</div>
-              <div>${formatRp(h.total_sold || 0)}</div>
+              <div>${formatRp(h.total_sold)}</div>
             </div>
             <div class="col-md-4">
               <div class="fw-semibold text-muted small">Nilai Sisa Stok (estimasi)</div>

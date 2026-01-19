@@ -182,7 +182,9 @@
                 <th class="text-end" style="width:7%">Dibawa</th>
                 <th class="text-end" style="width:7%">Kembali</th>
                 <th class="text-end" style="width:7%">Terjual</th>
-                <th class="text-end" style="width:10%">Harga</th>
+                <th class="text-end" style="width:9%">Harga</th>
+                <th class="text-end" style="width:9%">Diskon / Unit</th>
+                <th class="text-end" style="width:10%">Harga Setelah Diskon</th>
                 <th class="text-end" style="width:10%">Nilai Terjual</th>
                 <th class="text-end" style="width:7%">Qty Bayar</th>
                 <th class="text-center" style="width:8%">Metode</th>
@@ -219,14 +221,42 @@
                   <td class="text-end">{{ (int) $item->qty_returned }}</td>
                   <td class="text-end">{{ (int) $item->qty_sold }}</td>
 
+                  {{-- Harga Asli --}}
                   <td class="text-end">
                     {{ 'Rp ' . number_format((int) $item->unit_price, 0, ',', '.') }}
                   </td>
 
-                  <td class="text-end">
-                    {{ 'Rp ' . number_format((int) $item->line_total_sold, 0, ',', '.') }}
+                  {{-- Diskon per Unit --}}
+                  <td class="text-end text-danger">
+                    {{ $item->discount_per_unit > 0
+                        ? '- Rp ' . number_format((int) $item->discount_per_unit, 0, ',', '.')
+                        : '-' }}
                   </td>
 
+                  {{-- Harga Setelah Diskon --}}
+                  <td class="text-end fw-semibold text-success">
+                    {{ 'Rp ' . number_format(
+                          (int) ($item->unit_price_after_discount ?: $item->unit_price),
+                          0, ',', '.'
+                      ) }}
+                  </td>
+
+                  {{-- Nilai Terjual (SETELAH DISKON) --}}
+                  <td class="text-end">
+                    {{ 'Rp ' . number_format(
+                          (int) ($item->line_total_after_discount ?: $item->line_total_sold),
+                          0, ',', '.'
+                      ) }}
+                  </td>
+                  @if($item->discount_per_unit > 0)
+                      <div class="small text-muted">
+                        Selisih:
+                        Rp {{ number_format(
+                          $item->line_total_sold - $item->line_total_after_discount,
+                          0, ',', '.'
+                        ) }}
+                      </div>
+                    @endif
                   <td class="text-end">{{ (int) $item->payment_qty }}</td>
 
                   <td class="text-center">
@@ -239,7 +269,11 @@
 
                   <td>
                     @if($item->payment_transfer_proof_path)
-                      <a href="{{ asset('storage/'.$item->payment_transfer_proof_path) }}" target="_blank">
+                      <a href="#"
+                        class="text-primary"
+                        data-bs-toggle="modal"
+                        data-bs-target="#tfModal"
+                        data-img="{{ asset('storage/'.$item->payment_transfer_proof_path) }}">
                         Lihat Bukti
                       </a>
                     @else
@@ -309,6 +343,21 @@
               @endforelse
               </tbody>
             </table>
+            <div class="modal fade" id="tfModal" tabindex="-1">
+              <div class="modal-dialog modal-dialog-centered modal-xl">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title">Bukti Transfer</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                  </div>
+                  <div class="modal-body text-center">
+                    <img id="tfImage" src=""
+                        class="img-fluid"
+                        style="max-height:80vh; zoom:1; touch-action: pinch-zoom;">
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="mt-3 text-end">
@@ -341,8 +390,21 @@
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-bs-target="#tfModal"]').forEach(el => {
+        el.addEventListener('click', function () {
+            document.getElementById('tfImage').src = this.dataset.img;
+        });
+    });
+});
+</script>
+
+
+
 @if (session('success'))
 <script>
+  
 Swal.fire({
   icon: 'success',
   title: 'Berhasil',

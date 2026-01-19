@@ -21,6 +21,12 @@ class SalesHandoverItem extends Model
         'line_total_start',
         'line_total_sold',
 
+        // ===== DISKON =====
+        'discount_per_unit',
+        'discount_total',
+        'unit_price_after_discount',
+        'line_total_after_discount',
+
         // payment per item
         'payment_qty',
         'payment_method',
@@ -37,8 +43,13 @@ class SalesHandoverItem extends Model
         'unit_price'         => 'integer',
         'line_total_start'   => 'integer',
         'line_total_sold'    => 'integer',
+        'discount_per_unit'          => 'integer',
+        'discount_total'             => 'integer',
+        'unit_price_after_discount'  => 'integer',
+        'line_total_after_discount'  => 'integer',
         'payment_qty'        => 'integer',
         'payment_amount'     => 'integer',
+        
     ];
 
     public function handover()

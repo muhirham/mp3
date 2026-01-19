@@ -118,6 +118,13 @@ public function datatable(Request $r)
         ->leftJoin('products as p', 'p.id', '=', 'rr.product_id')
         ->leftJoin('suppliers as s', 's.id', '=', 'rr.supplier_id');
 
+        $rcvSub = DB::table('restock_receipts')
+        ->selectRaw('request_id, SUM(qty_good) as qty_good')
+        ->groupBy('request_id');
+
+    $base->leftJoinSub($rcvSub, 'gr', 'gr.request_id', '=', 'rr.id');
+
+
 
     if ($hasWh) {
         $base->leftJoin('warehouses as w', 'w.id', '=', 'rr.warehouse_id');
@@ -135,7 +142,8 @@ public function datatable(Request $r)
         DB::raw("GROUP_CONCAT(DISTINCT COALESCE(s.name,'-') SEPARATOR ', ') as supplier_name"),
 
         DB::raw('SUM('.$qtyReqExpr.') as qty_req'),
-        DB::raw('SUM('.$qtyRcvExpr.') as qty_rcv'),
+        DB::raw('SUM(COALESCE(gr.qty_good,0)) as qty_rcv'),
+
 
         DB::raw("MAX(COALESCE(rr.status,'pending')) as status"),
         DB::raw('MIN(rr.created_at) as created_at'),
@@ -892,7 +900,7 @@ try {
                     // hitung total qty rcv semua produk utk PO ini
                     $rcvQuery = DB::table('restock_receipts')
                         ->where('purchase_order_id', $poId)
-                        ->selectRaw('product_id' . ($hasWhCol ? ', warehouse_id' : '') . ', SUM(qty_good + qty_damaged) as qty_rcv')
+                        ->selectRaw('product_id' . ($hasWhCol ? ', warehouse_id' : '') . ',SUM(qty_good) as qty_rcv')
                         ->groupBy('product_id');
 
                     if ($hasWhCol) {

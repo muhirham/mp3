@@ -167,6 +167,16 @@
               @endif
             </div>
           </div>
+          <div class="col-md-4 mb-2">
+            @if($handover->status === 'on_sales')
+                <button type="button"
+                        class="btn btn-sm btn-warning"
+                        id="btnInputOtp">
+                    Masukkan OTP
+                </button>
+            @endif
+          </div>
+
         </div>
       @endif
     </div>
@@ -224,13 +234,18 @@
                     @php
                         $unitPrice = (int) $row->unit_price;
 
-                        // ✅ FIX: jangan ngunci pakai qty_sold doang (sering 0).
-                        // Prioritas: qty_sold (kalau sudah ada) -> payment_qty (kalau ada history) -> qty_start (fallback).
+                        // ✅ HARGA FINAL (SETELAH DISKON)
+                        $effectiveUnitPrice = $row->discount_per_unit > 0
+                            ? ($unitPrice - (int) $row->discount_per_unit)
+                            : $unitPrice;
+
+                        // qty logic lu tetep
                         $maxQty = (int) $row->qty_sold;
                         if ($maxQty <= 0) $maxQty = (int) ($row->payment_qty ?? 0);
                         if ($maxQty <= 0) $maxQty = (int) $row->qty_start;
 
-                        $maxNominal = $unitPrice * $maxQty;
+                        // ⚠️ PAKE HARGA FINAL
+                        $maxNominal = $effectiveUnitPrice * $maxQty;
 
                         $productName = $row->product?->name ?? ('Produk #' . $row->product_id);
                         $productCode = $row->product?->product_code ?? '';
@@ -246,9 +261,10 @@
                     @endphp
 
                     <tr class="js-payment-row"
-                        data-unit-price="{{ $unitPrice }}"
+                        data-unit-price="{{ $effectiveUnitPrice }}"
                         data-max-qty="{{ $maxQty }}"
-                        data-max-amount="{{ $maxNominal }}">
+                        data-max-amount="{{ $effectiveUnitPrice * $maxQty }}">
+
 
                         {{-- PRODUK --}}
                         <td data-label="Produk">
@@ -273,8 +289,30 @@
                         {{-- NILAI DIBAWA --}}
                         <td class="text-end" data-label="Nilai Dibawa">{{ number_format($lineStart, 0, ',', '.') }}</td>
 
-                        {{-- NILAI TERJUAL --}}
-                        <td class="text-end" data-label="Nilai Terjual">{{ number_format($lineSold, 0, ',', '.') }}</td>
+                        <td class="text-end" data-label="Nilai Terjual">
+
+                          {{-- nilai normal --}}
+                          <div>
+                            Rp {{ number_format($row->line_total_sold, 0, ',', '.') }}
+                          </div>
+
+                          @if($row->discount_per_unit > 0)
+                            {{-- diskon --}}
+                            <div class="small text-muted">
+                              Diskon:
+                              Rp {{ number_format($row->discount_per_unit, 0, ',', '.') }}
+                            </div>
+
+                            {{-- nilai setelah diskon --}}
+                            <div class="small text-success">
+                              Harga Diskon: Rp {{ number_format($row->unit_price_after_discount, 0, ',', '.') }}
+
+                            </div>
+                          @endif
+
+                        </td>
+
+
 
                         {{-- QTY BAYAR --}}
                         <td data-label="Qty Bayar">
@@ -371,10 +409,15 @@ document.addEventListener('DOMContentLoaded', function () {
     const verifyUrl     = @json(route('sales.otp.items.verify'));
     const tokenMeta     = document.querySelector('meta[name="csrf-token"]');
     const token         = tokenMeta ? tokenMeta.getAttribute('content') : '';
+    const btnOtp = document.getElementById('btnInputOtp');
+    const handoverStatus = @json($handover->status ?? null);
 
-    if (hasHandover && !isOtpVerified) {
+if (hasHandover && !isOtpVerified) {
+    setTimeout(() => {
         showOtpModal();
-    }
+    }, 300);
+}
+
 
     async function submitOtp(code) {
         const res = await fetch(verifyUrl, {
@@ -386,7 +429,7 @@ document.addEventListener('DOMContentLoaded', function () {
             },
             body: JSON.stringify({
                 otp_code: code,
-                handover_id: handoverId
+                
             })
         });
 
@@ -424,6 +467,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         if (isConfirmed && otpCode) {
+              sessionStorage.removeItem('otp-popup-shown-' + handoverId);
             await Swal.fire({
                 icon: 'success',
                 title: 'Berhasil',
@@ -433,6 +477,13 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             window.location.reload();
         }
+      }
+
+      
+    if(btnOtp){
+        btnOtp.addEventListener('click', function(){
+            showOtpModal();
+        });
     }
 
     @if (session('success'))
@@ -451,7 +502,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         Swal.fire({ icon: 'error', title: 'Validasi gagal', html: errorHtml });
     @endif
-});
+  });
 
 (function () {
     const form = document.getElementById('paymentForm');
@@ -509,6 +560,6 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     });
-})();
+  })();
 </script>
 @endpush

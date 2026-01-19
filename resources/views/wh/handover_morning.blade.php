@@ -14,6 +14,7 @@
         <div class="card mb-4">
             <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0 fw-bold">Handover Pagi – Buat & Kirim OTP</h5>
+            <small id="handoverInfo" class="text-muted"></small>
             </div>
 
             <form id="formIssue" method="POST" action="{{ route('sales.handover.morning.store') }}">
@@ -58,9 +59,7 @@
                     </select>
                 </div>
                 </div>
-
                 <hr>
-
                 <div class="d-flex justify-content-between align-items-center mb-2">
                 <h6 class="mb-0">Item yang Dibawa Pagi</h6>
                 <button type="button" class="btn btn-sm btn-outline-primary" id="btnAddRow">
@@ -74,8 +73,10 @@
                     <tr>
                     <th style="width:45%">Produk</th>
                     <th style="width:10%">Qty</th>
-                    <th style="width:20%">Harga Satuan</th>
-                    <th style="width:20%">Total (Per Item)</th>
+                    <th style="width:15%">Harga</th>
+                    <th style="width:15%">Diskon</th>
+                    <th style="width:20%">Total</th>
+
                     <th style="width:5%"></th>
                     </tr>
                     </thead>
@@ -100,6 +101,13 @@
                     </td>
                     <td>
                         <input type="text" class="form-control inp-price" readonly>
+                    </td>
+                    <td>
+                        <input type="number"
+                        class="form-control inp-discount"
+                            name="items[0][discount_per_unit]"
+                            min="0"
+                            value="{{ old('items.0.discount_per_unit', 0) }}">
                     </td>
                     <td>
                         <input type="text" class="form-control inp-total" readonly>
@@ -168,6 +176,40 @@
 
         @push('scripts')
     <script>
+        const salesSelect = document.querySelector('select[name="sales_id"]');
+        const infoLabel   = document.getElementById('handoverInfo');
+
+        salesSelect?.addEventListener('change', async function(){
+            const salesId = this.value;
+            infoLabel.textContent = '';
+
+            if(!salesId) return;
+
+            try{
+                const res = await fetch(`/sales/${salesId}/active-handover-count`, {
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                    }
+                });
+
+                const data = await res.json();
+
+                if(data.active >= data.limit){
+                    infoLabel.innerHTML = `<span class="text-danger">
+                        Sales ini memiliki ${data.active} handover aktif (max ${data.limit}) Segera untuk menyelesaikan handover sebelumnya !!!
+                    </span>`;
+                }else{
+                    infoLabel.innerHTML = `
+                        Handover aktif: <strong>${data.active}</strong> •
+                        Ini akan menjadi <strong>handover ke-${data.next}</strong>
+                    `;
+                }
+
+            }catch(e){
+                infoLabel.textContent = 'Gagal memuat info handover sales';
+            }
+        });
+
     (function(){
     const tbody      = document.querySelector('#tblItems tbody');
     const btnAddRow  = document.getElementById('btnAddRow');
@@ -184,6 +226,8 @@
         const qty = tr.querySelector('.inp-qty');
         if (sel) sel.name = `items[${idx}][product_id]`;
         if (qty) qty.name = `items[${idx}][qty]`;
+        const disc = tr.querySelector('.inp-discount');
+        if (disc) disc.name = `items[${idx}][discount_per_unit]`;
         });
     }
 
@@ -191,26 +235,35 @@
         const qtyInput   = tr.querySelector('.inp-qty');
         const priceInput = tr.querySelector('.inp-price');
         const totalInput = tr.querySelector('.inp-total');
+        const discountEl = tr.querySelector('.inp-discount');
         const select     = tr.querySelector('.sel-product');
 
-        const qty   = parseInt(qtyInput.value || '0', 10);
-        const price = parseInt(select.selectedOptions[0]?.dataset.price || '0', 10);
-        const total = qty * price;
+        const qty      = parseInt(qtyInput.value || '0', 10);
+        const price    = parseInt(select.selectedOptions[0]?.dataset.price || '0', 10);
+        const discount = parseInt(discountEl?.value || '0', 10);
+
+        const netPrice = Math.max(price - discount, 0);
+        const total    = qty * netPrice;
 
         priceInput.value = price ? formatIdr(price) : '0';
-        totalInput.value = total ? formatIdr(total) : '0';
+        totalInput.value = formatIdr(total);
     }
 
-    function recomputeGrand(){
-        let grand = 0;
-        [...tbody.querySelectorAll('tr')].forEach(tr => {
-        const select = tr.querySelector('.sel-product');
-        const qty    = parseInt(tr.querySelector('.inp-qty').value || '0', 10);
-        const price  = parseInt(select.selectedOptions[0]?.dataset.price || '0', 10);
-        grand += qty * price;
-        });
-        grandLabel.textContent = formatIdr(grand);
-    }
+
+        function recomputeGrand(){
+            let grand = 0;
+            [...tbody.querySelectorAll('tr')].forEach(tr => {
+                const select   = tr.querySelector('.sel-product');
+                const qty      = parseInt(tr.querySelector('.inp-qty').value || '0', 10);
+                const price    = parseInt(select.selectedOptions[0]?.dataset.price || '0', 10);
+                const discount = parseInt(tr.querySelector('.inp-discount')?.value || '0', 10);
+
+                const netPrice = Math.max(price - discount, 0);
+                grand += qty * netPrice;
+            });
+            grandLabel.textContent = formatIdr(grand);
+        }
+
 
     tbody.addEventListener('change', (e)=>{
         if (e.target.classList.contains('sel-product') ||
@@ -219,10 +272,21 @@
         recomputeRow(tr);
         recomputeGrand();
         }
+        if (e.target.classList.contains('inp-discount')) {
+        const tr = e.target.closest('tr');
+        recomputeRow(tr);
+        recomputeGrand();
+}
+
     });
 
     tbody.addEventListener('input', (e)=>{
         if (e.target.classList.contains('inp-qty')) {
+        const tr = e.target.closest('tr');
+        recomputeRow(tr);
+        recomputeGrand();
+        }
+        if (e.target.classList.contains('inp-discount')) {
         const tr = e.target.closest('tr');
         recomputeRow(tr);
         recomputeGrand();
@@ -253,6 +317,12 @@
                 min="1" value="1" required>
         </td>
         <td><input type="text" class="form-control inp-price" readonly></td>
+        <td>
+            <input type="number"
+                class="form-control inp-discount"
+                name="items[${newIndex}][discount_per_unit]"
+                min="0" value="0">
+        </td>
         <td><input type="text" class="form-control inp-total" readonly></td>
         <td class="text-end">
             <button type="button" class="btn btn-sm btn-outline-danger btnRemoveRow">

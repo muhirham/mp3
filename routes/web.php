@@ -386,6 +386,8 @@ Route::get('/stock-adjustments/export/excel', [StockAdjustmentController::class,
     /* === Sales pages (SALES KEYS) === */
 
     // === Sales pages (SALES & WAREHOUSE) ===
+    Route::get('/sales/{sales}/active-handover-count', [SalesHandoverController::class, 'getActiveCount']);
+
 
     Route::get('/warehouse/sales-reports', [SalesHandoverController::class,'warehouseSalesReport'])
         ->name('sales.report')

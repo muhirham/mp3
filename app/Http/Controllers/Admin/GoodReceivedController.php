@@ -232,6 +232,19 @@ class GoodReceivedController extends Controller
             ->where('is_active', true)
             ->first();
 
+        
+        $goodByProduct = DB::table('restock_receipts')
+            ->where('purchase_order_id', $po->id)
+            ->selectRaw('product_id, SUM(qty_good) as qty_good')
+            ->groupBy('product_id')
+            ->pluck('qty_good', 'product_id');
+
+
+            $po->items->each(function ($item) use ($goodByProduct) {
+            $item->qty_received_good = $goodByProduct[$item->product_id] ?? 0;
+        });
+
+
         return view('admin.masterdata.partials.goodReceivedDetail', compact(
             'po',
             'company',
@@ -348,7 +361,7 @@ class GoodReceivedController extends Controller
                 if (! $firstReceiptId) $firstReceiptId = $receiptId;
 
                 // update qty_received item
-                $newReceived = $received + $good + $bad;
+                $newReceived = $received + $good;
                 DB::table('purchase_order_items')
                     ->where('id', $item->id)
                     ->update([
