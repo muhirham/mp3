@@ -85,6 +85,13 @@ return [
             'group' => 'warehouse',
             'icon'  => 'bx bx-bar-chart-alt-2',
         ],
+        [
+            'key'   => 'wh_transfers',
+            'label' => 'Warehouse Transfers',
+            'route' => 'warehouse-transfers.index',
+            'group' => 'warehouse',
+            'icon'  => 'bx bx-transfer',
+        ],
 
         // ================== PROCUREMENT ==================
         [
