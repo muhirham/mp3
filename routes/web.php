@@ -445,6 +445,12 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::post('/warehouse/transfer-forms/{transfer}/cancel', [WarehouseTransferController::class, 'cancel'])
         ->name('warehouse-transfer-forms.cancel')
         ->middleware('menu: wh_transfers');
+        
+
+    Route::get('/warehouse-transfer/{transfer}/print-sj',[WarehouseTransferController::class, 'printSJ'])
+        ->name('warehouse-transfer.print-sj')
+        ->middleware('menu:wh_transfers');
+
 
     /* === Sales pages (SALES KEYS) === */
 

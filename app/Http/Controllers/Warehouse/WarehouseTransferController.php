@@ -14,6 +14,7 @@ use App\Models\WarehouseTransferLog;
 use App\Models\Product;
 use App\Models\Warehouse;
 use App\Models\StockLevel;
+use App\Models\Company;
 
 class WarehouseTransferController extends Controller
 {
@@ -266,13 +267,13 @@ class WarehouseTransferController extends Controller
             403,
             'Transfer belum disetujui gudang tujuan'
         );
-
+        // hanya warehouse user yang wajib cocok gudang
         abort_if(
-            auth()->user()->warehouse_id !== $transfer->source_warehouse_id,
+            auth()->user()->hasRole('warehouse')
+                && auth()->user()->warehouse_id !== $transfer->source_warehouse_id,
             403,
             'Bukan gudang asal'
         );
-
         // ===============================
         // VALIDASI INPUT
         // ===============================
@@ -361,10 +362,10 @@ class WarehouseTransferController extends Controller
                     DB::table('stock_levels')->insert([
                         'owner_type' => 'warehouse',
                         'owner_id'   => $transfer->source_warehouse_id,
-                        'product_id'=> $item->product_id,
+                        'product_id' => $item->product_id,
                         'quantity'  => $good,
-                        'created_at'=> now(),
-                        'updated_at'=> now(),
+                        'created_at' => now(),
+                        'updated_at' => now(),
                     ]);
                 }
             }
@@ -380,7 +381,7 @@ class WarehouseTransferController extends Controller
             // LOG
             // ===============================
             $transfer->logs()->create([
-                'action'       => 'GR_SOURCE',
+                'action'       => 'RECEIVED',
                 'performed_by' => auth()->id(),
                 'note'         => $request->note,
             ]);
@@ -531,33 +532,92 @@ class WarehouseTransferController extends Controller
                 ($me->hasRole('warehouse') && $me->warehouse_id === $transfer->destination_warehouse_id)
 
                 // admin & superadmin bebas approve
-                || $me->hasRole(['admin','superadmin'])
+                || $me->hasRole(['admin', 'superadmin'])
+            );
+        // ✅ GR OLEH GUDANG ASAL
+        $canGrSource =
+            $transfer->status === 'approved'
+            && (
+                // warehouse user wajib match gudang asal
+                ($me->hasRole('warehouse') && $me->warehouse_id === $transfer->source_warehouse_id)
+
+                // admin & superadmin bebas GR
+                || $me->hasRole(['admin', 'superadmin'])
+            );
+
+        $canPrintSJ =
+            (
+                // SUPERADMIN BOLEH SELAMA BELUM DIBATALKAN
+                $me->hasRole('superadmin')
+                && in_array($transfer->status, ['approved', 'completed'])) ||
+            (
+                // GUDANG PENGIRIM HANYA SAAT APPROVED
+                $me->hasRole('warehouse')
+                && $me->warehouse_id === $transfer->destination_warehouse_id
+                && $transfer->status === 'approved'
             );
 
 
-        // ✅ GR OLEH GUDANG ASAL
-        $canGrSource =
-            $me->hasRole(['warehouse','admin','superadmin'])
-            && $transfer->status === 'approved'
-            && $me->warehouse_id === $transfer->source_warehouse_id;
 
-        // ❌ di DETAIL sebenernya cancel ga kepake
         $canCancel = false;
+
+        $receivedLog = $transfer->logs
+            ->where('action', 'RECEIVED')
+            ->sortByDesc('created_at')
+            ->first();
+
 
         return view('wh.transfer_form', [
             'me' => $me,
             'transfer' => $transfer,
-
-            // ⛔ INI GA DIPAKE DI DETAIL, KOSONGIN AJA
             'warehouses' => collect(),
             'toWarehouses' => collect(),
-
             'canSwitchWarehouse' => false,
             'canApproveSource' => $canApproveSource,
             'canApproveDestination' => $canApproveDestination,
             'canGrSource' => $canGrSource,
             'canCancel' => $canCancel,
+            'canPrintSJ' => $canPrintSJ,
+            'receivedLog' => $receivedLog,
         ]);
     }
 
+    public function printSJ(Request $request, WarehouseTransfer $transfer)
+    {
+        $me = auth()->user();
+
+        abort_if(
+            !$me->hasRole('superadmin')
+                && !(
+                    $me->hasRole('warehouse')
+                    && $me->warehouse_id === $transfer->destination_warehouse_id
+                    && $transfer->status === 'approved'
+                ),
+            403
+        );
+
+        $company = Company::where('is_default', true)
+            ->where('is_active', true)
+            ->first();
+
+        $transfer->load([
+            'items.product',
+            'sourceWarehouse',
+            'destinationWarehouse',
+            'creator',
+        ]);
+
+        $receivedLog = $transfer->logs()
+            ->where('action', 'RECEIVED')
+            ->latest()
+            ->first();
+
+
+        return view('wh.transfer_printSJ', [
+            'transfer'  => $transfer,
+            'company'   => $company,
+            'isDraft'   => false,
+            'receivedLog' => $receivedLog,
+        ]);
+    }
 }

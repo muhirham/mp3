@@ -90,30 +90,48 @@
             @endif
 
             {{-- ================= ACTION (APPROVAL) ================= --}}
-            @if ($canApproveDestination)
-                <div class="mb-4 d-flex gap-2">
-                    {{-- APPROVE --}}
-                    <button type="button" class="btn btn-success btn-approve-transfer"
-                        data-action="{{ route('warehouse-transfer-forms.approve.destination', $transfer->id) }}">
-                        <i class="bx bx-check"></i> Approve
-                    </button>
-                    {{-- REJECT --}}
-                    <button type="button" class="btn btn-danger btn-reject-transfer"
-                        data-action="{{ route('warehouse-transfer-forms.reject.destination', $transfer->id) }}">
-                        <i class="bx bx-x"></i> Reject
-                    </button>
+            <div class="card mb-3">
+                <div class="card-body d-flex flex-wrap gap-2">
+
+                    {{-- APPROVE + REJECT (PADANG) --}}
+                    @if ($canApproveDestination)
+                        <button class="btn btn-success btn-approve-transfer">
+                            <i class="bx bx-check-circle"></i> Approve
+                        </button>
+
+                        <button class="btn btn-outline-danger btn-reject-transfer">
+                            <i class="bx bx-x-circle"></i> Reject
+                        </button>
+                    @endif
+
+                    {{-- PRINT SJ (PADANG) --}}
+                    @if ($canPrintSJ)
+                        <button id="btnPrintSJ" class="btn btn-outline-primary">
+                            <i class="bx bx-printer"></i> Surat Jalan
+                        </button>
+                    @endif
+
+                    {{-- GR (BUKITTINGGI) --}}
+                    @if ($canGrSource)
+                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#mdlGRTransfer">
+                            <i class="bx bx-download"></i> Goods Received
+                        </button>
+                    @endif
+
                 </div>
+            </div>
+
+            @if ($canPrintSJ)
+                <iframe id="iframePrintSJ" src="" style="display:none;"></iframe>
             @endif
 
             {{-- ================= ITEMS (CREATE MODE) ================= --}}
             @if (!$transfer->exists)
                 <form id="formTransfer" method="POST" action="{{ route('warehouse-transfer-forms.store') }}">
                     @csrf
-
                     <div class="card mb-3">
                         <div class="card-header"><strong>Create Transfer</strong></div>
                         <div class="card-body row g-3">
-
                             {{-- FROM --}}
                             <div class="col-md-4">
                                 <label class="form-label">Requested by Warehouse</label>
@@ -123,7 +141,6 @@
                                     @endforeach
                                 </select>
                             </div>
-
                             {{-- TO --}}
                             <div class="col-md-4">
                                 <label class="form-label">Delivered by Warehouse</label>
@@ -133,16 +150,13 @@
                                     @endforeach
                                 </select>
                             </div>
-
                             {{-- NOTE --}}
                             <div class="col-md-4">
                                 <label class="form-label">Note</label>
                                 <input type="text" name="note" class="form-control">
                             </div>
-
                         </div>
                     </div>
-
                     {{-- ITEMS --}}
                     <div class="card mb-3">
                         <div class="card-header d-flex justify-content-between">
@@ -151,7 +165,6 @@
                                 + Add Item
                             </button>
                         </div>
-
                         <div class="table-responsive">
                             <table class="table table-sm align-middle mb-0 table-fixed" id="itemsTable">
                                 <thead>
@@ -175,23 +188,19 @@
                             </table>
                         </div>
                     </div>
-
                     <div class="text-end">
                         <button class="btn btn-primary">
                             <i class="bx bx-save"></i> Submit Transfer
                         </button>
                     </div>
-
                 </form>
             @endif
-
             {{-- ================= ITEMS (VIEW MODE) ================= --}}
             @if ($transfer->exists)
                 <div class="card mb-3">
                     <div class="card-header">
                         <strong>Transferred Items</strong>
                     </div>
-
                     <div class="table-responsive">
                         <table class="table table-sm align-middle mb-0 table-fixed">
                             <thead>
@@ -209,15 +218,12 @@
                                             {{ $item->product->product_code }} <br>
                                             <small class="text-muted">{{ $item->product->name }}</small>
                                         </td>
-
                                         <td class="text-end col-qty">
                                             {{ number_format($item->qty_transfer, 0, ',', '.') }}
                                         </td>
-
                                         <td class="text-end col-price">
                                             {{ number_format($item->unit_cost, 0, ',', '.') }}
                                         </td>
-
                                         <td class="text-end col-total">
                                             {{ number_format($item->subtotal_cost, 0, ',', '.') }}
                                         </td>
@@ -243,42 +249,28 @@
                 </div>
             @endif
 
-
-            {{-- ================= ACTION ================= --}}
-            @if ($canGrSource)
-                <div class="mb-4">
-                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#mdlGRTransfer">
-                        <i class="bx bx-download"></i> Goods Received (Source Warehouse)
-                    </button>
-                </div>
-            @endif
-
             @if ($transfer->exists && $canGrSource)
                 {{-- ================= MODAL GR ================= --}}
                 <div class="modal fade mdl-gr-transfer" id="mdlGRTransfer" tabindex="-1">
                     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
                         <div class="modal-content">
-
                             <div class="modal-header">
                                 <h5 class="modal-title">
                                     Goods Received – Warehouse Transfer
                                 </h5>
                                 <button class="btn-close" data-bs-dismiss="modal"></button>
                             </div>
-
                             <form method="POST"
                                 action="{{ route('warehouse-transfer-forms.gr.source', $transfer->id) }}"
                                 enctype="multipart/form-data">
                                 @csrf
-
                                 <div class="modal-body">
-
                                     <p class="small mb-3">
-                                        <strong>Delivered by:</strong>
-                                        {{ $transfer->destinationWarehouse->warehouse_name }}<br>
-
                                         <strong>Requested by:</strong>
                                         {{ $transfer->sourceWarehouse->warehouse_name }}
+                                        <br>
+                                        <strong>Delivered by:</strong>
+                                        {{ $transfer->destinationWarehouse->warehouse_name }}<br>
                                     </p>
                                     <div class="table-responsive">
                                         <table class="table table-sm align-middle">
@@ -638,16 +630,42 @@
             };
         </script>
     @endpush
-        @if (session('success'))
+    @if (session('success'))
         <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            Swal.fire({
-                icon: 'success',
-                title: 'Berhasil',
-                text: @json(session('success')),
-                timer: 1500,
-                showConfirmButton: false
+            document.addEventListener('DOMContentLoaded', function() {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Berhasil',
+                    text: @json(session('success')),
+                    timer: 1500,
+                    showConfirmButton: false
+                });
             });
-        });
         </script>
-        @endif
+    @endif
+
+    @push('scripts')
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                const btn = document.getElementById('btnPrintSJ');
+                const iframe = document.getElementById('iframePrintSJ');
+
+                if (!btn || !iframe) return;
+
+                btn.addEventListener('click', function() {
+
+                    // load ulang setiap klik → biar ga auto print pas refresh
+                    iframe.src = "{{ route('warehouse-transfer.print-sj', $transfer->id) }}";
+
+                    iframe.onload = function() {
+                        try {
+                            iframe.contentWindow.focus();
+                            iframe.contentWindow.print();
+                        } catch (e) {
+                            alert('Gagal membuka dialog print');
+                        }
+                    };
+                });
+            });
+        </script>
+    @endpush
