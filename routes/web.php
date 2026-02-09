@@ -17,14 +17,15 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\PreOController;
 use App\Http\Controllers\Admin\RestockApprovalController;
 use App\Http\Controllers\Admin\RoleController;
-use App\Http\Controllers\Admin\GoodReceivedController; 
+use App\Http\Controllers\Admin\GoodReceivedController;
 use App\Http\Controllers\Admin\StockAdjustmentController;
 use App\Http\Controllers\Admin\CompanyController;
 // WAREHOUSE
 use App\Http\Controllers\Warehouse\WarehouseDashboardController;
 use App\Http\Controllers\Warehouse\SalesController as WhSalesController;
 use App\Http\Controllers\Warehouse\StockWhController;
-use App\Http\Controllers\Warehouse\GRController;  
+use App\Http\Controllers\Warehouse\GRController;
+use App\Http\Controllers\Warehouse\WarehouseTransferController;
 
 // SALES
 use App\Http\Controllers\Warehouse\SalesHandoverController;
@@ -38,8 +39,15 @@ use App\Models\Warehouse;
 use App\Models\User;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderItem;
+use App\Models\Role;
+use App\Models\WarehouseTransfer;
+use App\Models\WarehouseTransferItem;
+use App\Models\WarehouseTransferLog;
+
 
 /* ===== Auth ===== */
+
 Route::middleware('guest')->group(function () {
     Route::get('/login',  [LoginController::class, 'showLoginForm'])->name('login');
     Route::post('/login', [LoginController::class, 'attempt'])->name('login.attempt');
@@ -57,194 +65,194 @@ Route::get('/dashboard', function () {
     }
 
     return redirect()->route($home);
-})->middleware(['auth','active'])->name('dashboard');
+})->middleware(['auth', 'active'])->name('dashboard');
 
 
 
-Route::get('/', fn() => redirect()->route('dashboard'))->middleware(['auth','active']);
+Route::get('/', fn() => redirect()->route('dashboard'))->middleware(['auth', 'active']);
 
 
-Route::post('/logout', [LoginController::class,'logout'])->name('logout')->middleware(['auth','active']);
+Route::post('/logout', [LoginController::class, 'logout'])->name('logout')->middleware(['auth', 'active']);
 
 
 /* ===== Protected by menu keys ===== */
-Route::middleware(['auth','active'])->group(function () {
+Route::middleware(['auth', 'active'])->group(function () {
 
     // ===== Dashboard (cukup auth, TIDAK pakai menu:xxx) =====
-    Route::get('/admin',     [AdminController::class,'index'])->name('admin.dashboard');
-    Route::get('/warehouse', [WarehouseDashboardController::class,'index'])->name('warehouse.dashboard');
+    Route::get('/admin',     [AdminController::class, 'index'])->name('admin.dashboard');
+    Route::get('/warehouse', [WarehouseDashboardController::class, 'index'])->name('warehouse.dashboard');
     Route::get('/warehouse/dashboard/kpi', [WarehouseDashboardController::class, 'kpiAjax'])->name('wh.dashboard.kpi');
-    Route::get('/warehouse/dashboard/inout', [WarehouseDashboardController::class,'inoutAjax'])
-  ->name('warehouse.dashboard.inoutAjax');
-    Route::get('/sales',     [WhSalesController::class,'dashboard'])->name('sales.dashboard');
+    Route::get('/warehouse/dashboard/inout', [WarehouseDashboardController::class, 'inoutAjax'])
+        ->name('warehouse.dashboard.inoutAjax');
+    Route::get('/sales',     [WhSalesController::class, 'dashboard'])->name('sales.dashboard');
 
     /* === Master Data (ADMIN KEYS) === */
 
 
     // key: roles
     Route::resource('roles', RoleController::class)
-        ->except(['show','create','edit'])
+        ->except(['show', 'create', 'edit'])
         ->middleware('menu:roles');
 
     // key: warehouses
     Route::resource('warehouses', WarehouseController::class)
-        ->only(['index','store','update','destroy'])
+        ->only(['index', 'store', 'update', 'destroy'])
         ->middleware('menu:warehouses');
 
     // key: categories
-    Route::get('categories/datatable', [CategoryController::class,'datatable'])
+    Route::get('categories/datatable', [CategoryController::class, 'datatable'])
         ->name('categories.datatable')
         ->middleware('menu:categories');
     Route::resource('categories', CategoryController::class)
-        ->only(['index','store','update','destroy'])
+        ->only(['index', 'store', 'update', 'destroy'])
         ->middleware('menu:categories');
 
     // key: products
-    Route::get('products/datatable', [ProductController::class,'datatable'])
+    Route::get('products/datatable', [ProductController::class, 'datatable'])
         ->name('products.datatable')
         ->middleware('menu:products');
-    Route::get('products/next-code', [ProductController::class,'nextCode'])
+    Route::get('products/next-code', [ProductController::class, 'nextCode'])
         ->name('products.next_code')
         ->middleware('menu:products');
     Route::resource('products', ProductController::class)
-        ->except(['create','edit','show'])
+        ->except(['create', 'edit', 'show'])
         ->middleware('menu:products');
 
-// Stock Adjustments
-Route::get('stock-adjustments', [StockAdjustmentController::class, 'index'])
-    ->name('stock-adjustments.index')
-    ->middleware('menu:stock_adjustments');
+    // Stock Adjustments
+    Route::get('stock-adjustments', [StockAdjustmentController::class, 'index'])
+        ->name('stock-adjustments.index')
+        ->middleware('menu:stock_adjustments');
 
-Route::get('stock-adjustments/datatable', [StockAdjustmentController::class, 'datatable'])
-    ->name('stock-adjustments.datatable')
-    ->middleware('menu:stock_adjustments');
+    Route::get('stock-adjustments/datatable', [StockAdjustmentController::class, 'datatable'])
+        ->name('stock-adjustments.datatable')
+        ->middleware('menu:stock_adjustments');
 
-Route::get('stock-adjustments/products', [StockAdjustmentController::class, 'products'])
-    ->name('stock-adjustments.products')
-    ->middleware('menu:stock_adjustments');
+    Route::get('stock-adjustments/products', [StockAdjustmentController::class, 'products'])
+        ->name('stock-adjustments.products')
+        ->middleware('menu:stock_adjustments');
 
-Route::get('stock-adjustments/{adjustment}/detail', [StockAdjustmentController::class, 'detail'])
-    ->name('stock-adjustments.detail')
-    ->middleware('menu:stock_adjustments');
+    Route::get('stock-adjustments/{adjustment}/detail', [StockAdjustmentController::class, 'detail'])
+        ->name('stock-adjustments.detail')
+        ->middleware('menu:stock_adjustments');
 
-Route::get('stock-adjustments/ajax-products', [StockAdjustmentController::class, 'ajaxProducts'])
-    ->name('stock-adjustments.ajax-products')
-    ->middleware('menu:stock_adjustments');
+    Route::get('stock-adjustments/ajax-products', [StockAdjustmentController::class, 'ajaxProducts'])
+        ->name('stock-adjustments.ajax-products')
+        ->middleware('menu:stock_adjustments');
 
-Route::post('stock-adjustments', [StockAdjustmentController::class, 'store'])
-    ->name('stock-adjustments.store')
-    ->middleware('menu:stock_adjustments');
+    Route::post('stock-adjustments', [StockAdjustmentController::class, 'store'])
+        ->name('stock-adjustments.store')
+        ->middleware('menu:stock_adjustments');
 
-Route::get('/stock-adjustments/export/excel', [StockAdjustmentController::class, 'exportIndexExcel'])
-    ->name('stock-adjustments.exportIndexExcel')
-    ->middleware('menu:stock_adjustments');
+    Route::get('/stock-adjustments/export/excel', [StockAdjustmentController::class, 'exportIndexExcel'])
+        ->name('stock-adjustments.exportIndexExcel')
+        ->middleware('menu:stock_adjustments');
 
 
     // key: suppliers
-    Route::get('suppliers/datatable', [SupplierController::class,'datatable'])
+    Route::get('suppliers/datatable', [SupplierController::class, 'datatable'])
         ->name('suppliers.datatable')
         ->middleware('menu:suppliers');
-    Route::get('suppliers/next-code', [SupplierController::class,'nextCode'])
+    Route::get('suppliers/next-code', [SupplierController::class, 'nextCode'])
         ->name('suppliers.next_code')
         ->middleware('menu:suppliers');
     Route::resource('suppliers', SupplierController::class)
-        ->only(['index','store','update','destroy'])
+        ->only(['index', 'store', 'update', 'destroy'])
         ->middleware('menu:suppliers');
 
     // key: packages
-    Route::get('packages/datatable', [PackageController::class,'datatable'])
+    Route::get('packages/datatable', [PackageController::class, 'datatable'])
         ->name('packages.datatable')
         ->middleware('menu:packages');
     Route::resource('packages', PackageController::class)
-        ->except(['create','edit','show'])
+        ->except(['create', 'edit', 'show'])
         ->middleware('menu:packages');
 
     // key: users
     Route::resource('users', UserController::class)
-        ->except(['show','create','edit'])
+        ->except(['show', 'create', 'edit'])
         ->middleware('menu:users');
-    Route::post('users/bulk-destroy', [UserController::class,'bulkDestroy'])
+    Route::post('users/bulk-destroy', [UserController::class, 'bulkDestroy'])
         ->name('users.bulk-destroy')
         ->middleware('menu:users');
 
     /* === Stock Level (shared) – key: wh_stocklevel === */
-    Route::get('/stock-level',           [StockLevelController::class,'index'])
+    Route::get('/stock-level',           [StockLevelController::class, 'index'])
         ->name('stocklevel.index')
         ->middleware('menu:wh_stocklevel');
-    Route::get('/stock-level/datatable', [StockLevelController::class,'datatable'])
+    Route::get('/stock-level/datatable', [StockLevelController::class, 'datatable'])
         ->name('stocklevel.datatable')
         ->middleware('menu:wh_stocklevel');
-        
 
-          /* === Purchase Orders === */
+
+    /* === Purchase Orders === */
     // key: po
-    Route::get('/po',                 [PreOController::class,'index'])
+    Route::get('/po',                 [PreOController::class, 'index'])
         ->name('po.index')
         ->middleware('menu:po');
 
-    Route::post('/po/create', [PreOController::class,'create'])
-    ->name('po.create')
-    ->middleware('menu:po');
+    Route::post('/po/create', [PreOController::class, 'create'])
+        ->name('po.create')
+        ->middleware('menu:po');
 
-    Route::post('/po',                [PreOController::class,'store'])
+    Route::post('/po',                [PreOController::class, 'store'])
         ->name('po.store')
         ->middleware('menu:po');
 
-    Route::post('/po/from-requests',  [PreOController::class,'createFromRequests'])
+    Route::post('/po/from-requests',  [PreOController::class, 'createFromRequests'])
         ->name('po.fromRequests')
         ->middleware('menu:po');
 
-    Route::get('/po/{po}',            [PreOController::class,'edit'])
+    Route::get('/po/{po}',            [PreOController::class, 'edit'])
         ->name('po.edit')
         ->middleware('menu:po');
 
-    Route::put('/po/{po}',            [PreOController::class,'update'])
+    Route::put('/po/{po}',            [PreOController::class, 'update'])
         ->name('po.update')
         ->middleware('menu:po');
 
-    Route::put('/po/{po}/receive',    [PreOController::class,'receive'])
+    Route::put('/po/{po}/receive',    [PreOController::class, 'receive'])
         ->name('po.receive')
         ->middleware('menu:po');
 
-    Route::post('/po/{po}/order',     [PreOController::class,'order'])
+    Route::post('/po/{po}/order',     [PreOController::class, 'order'])
         ->name('po.order')
         ->middleware('menu:po');
 
-    Route::post('/po/{po}/cancel',    [PreOController::class,'cancel'])
+    Route::post('/po/{po}/cancel',    [PreOController::class, 'cancel'])
         ->name('po.cancel')
         ->middleware('menu:po');
-        
+
     Route::post('/po/{po}/approve', [PreOController::class, 'approve'])
         ->name('po.approve')
         ->middleware('menu:po');
 
 
-    Route::post('/po/{po}/approve-proc', [PreOController::class,'approveProcurement'])
+    Route::post('/po/{po}/approve-proc', [PreOController::class, 'approveProcurement'])
         ->name('po.approve.proc')
         ->middleware('menu:po');
 
-    Route::post('/po/{po}/reject-proc', [PreOController::class,'rejectProcurement'])
+    Route::post('/po/{po}/reject-proc', [PreOController::class, 'rejectProcurement'])
         ->name('po.reject.proc')
         ->middleware('menu:po');
 
     // CEO
-    Route::post('/po/{po}/approve-ceo', [PreOController::class,'approveCeo'])
+    Route::post('/po/{po}/approve-ceo', [PreOController::class, 'approveCeo'])
         ->name('po.approve.ceo')
         ->middleware('menu:po');
 
-    Route::post('/po/{po}/reject-ceo', [PreOController::class,'rejectCeo'])
+    Route::post('/po/{po}/reject-ceo', [PreOController::class, 'rejectCeo'])
         ->name('po.reject.ceo')
         ->middleware('menu:po');
-    
-    Route::get('/po/{po}/pdf',        [PreOController::class,'exportPdf'])
+
+    Route::get('/po/{po}/pdf',        [PreOController::class, 'exportPdf'])
         ->name('po.pdf')
         ->middleware('menu:po');
-    
-    Route::get('/po/{po}/excel',      [PreOController::class,'exportExcel'])
+
+    Route::get('/po/{po}/excel',      [PreOController::class, 'exportExcel'])
         ->name('po.excel')
         ->middleware('menu:po');
 
-        Route::get('/po/table', [PreOController::class, 'table'])
+    Route::get('/po/table', [PreOController::class, 'table'])
         ->name('po.table')
         ->middleware('menu:po');
 
@@ -255,11 +263,11 @@ Route::get('/stock-adjustments/export/excel', [StockAdjustmentController::class,
     Route::get('/po/export/monthly', [PreOController::class, 'exportMonthlyExcel'])
         ->name('po.export.monthly')
         ->middleware('menu:po');
-    
+
     Route::post('/po/{po}/gr', [GoodReceivedController::class, 'storeFromPo'])
         ->name('po.gr.store')
         ->middleware('menu:po');
-    
+
     /* === Goods Received LIST (monitoring) – key: goodreceived === */
     Route::get('/good-received', [GoodReceivedController::class, 'index'])
         ->name('goodreceived.index')
@@ -275,7 +283,7 @@ Route::get('/stock-adjustments/export/excel', [StockAdjustmentController::class,
     Route::get('/good-received/{po}/detail', [GoodReceivedController::class, 'detail'])
         ->name('goodreceived.detail')
         ->middleware('menu:goodreceived');
-        
+
     // Halaman daftar permohonan
     // ================== MASTER COMPANY ==================
 
@@ -307,39 +315,39 @@ Route::get('/stock-adjustments/export/excel', [StockAdjustmentController::class,
 
 
     /* === Restock Approval – key: restock_request_ap === */
-    Route::get('stockRequest',               [RestockApprovalController::class,'index'])
+    Route::get('stockRequest',               [RestockApprovalController::class, 'index'])
         ->name('stockRequest.index')
         ->middleware('menu:restock_request_ap');
-    Route::get('stockRequest/json',          [RestockApprovalController::class,'json'])
+    Route::get('stockRequest/json',          [RestockApprovalController::class, 'json'])
         ->name('stockRequest.json')
         ->middleware('menu:restock_request_ap');
-    Route::post('stockRequest/{id}/approve', [RestockApprovalController::class,'approve'])
+    Route::post('stockRequest/{id}/approve', [RestockApprovalController::class, 'approve'])
         ->name('stockRequest.approve')
         ->middleware('menu:restock_request_ap');
-    Route::post('stockRequest/{id}/reject',  [RestockApprovalController::class,'reject'])
+    Route::post('stockRequest/{id}/reject',  [RestockApprovalController::class, 'reject'])
         ->name('stockRequest.reject')
         ->middleware('menu:restock_request_ap');
-    Route::post('stockRequest/bulk-po',      [RestockApprovalController::class,'bulkPO'])
+    Route::post('stockRequest/bulk-po',      [RestockApprovalController::class, 'bulkPO'])
         ->name('stockRequest.bulkpo')
         ->middleware('menu:restock_request_ap');
 
-    Route::get('/restocks/{restock}/items',   [StockWhController::class,'items'])
+    Route::get('/restocks/{restock}/items',   [StockWhController::class, 'items'])
         ->name('restocks.items')
         ->middleware('menu:wh_restock');
 
     /* === Warehouse – Restock + Sales Handover === */
 
     // key: wh_restock
-    Route::get('/restocks',                   [StockWhController::class,'index'])
+    Route::get('/restocks',                   [StockWhController::class, 'index'])
         ->name('restocks.index')
         ->middleware('menu:wh_restock');
-    Route::get('/restocks/datatable',         [StockWhController::class,'datatable'])
+    Route::get('/restocks/datatable',         [StockWhController::class, 'datatable'])
         ->name('restocks.datatable')
         ->middleware('menu:wh_restock');
-    Route::post('/restocks',                  [StockWhController::class,'store'])
+    Route::post('/restocks',                  [StockWhController::class, 'store'])
         ->name('restocks.store')
         ->middleware('menu:wh_restock');
-    Route::post('/restocks/{restock}/receive',[StockWhController::class,'receive'])
+    Route::post('/restocks/{restock}/receive', [StockWhController::class, 'receive'])
         ->name('restocks.receive')
         ->middleware('menu:wh_restock');
     Route::get('/restocks/export/excel', [StockWhController::class, 'exportExcel'])
@@ -378,18 +386,80 @@ Route::get('/stock-adjustments/export/excel', [StockAdjustmentController::class,
         ->middleware('menu:wh_reconcile');
 
     // GENERATE OTP SORE (untuk closing handover)
-    Route::post('/warehouse/handovers/{handover}/evening/generate-otp',[SalesHandoverController::class, 'generateEveningOtp'])
+    Route::post('/warehouse/handovers/{handover}/evening/generate-otp', [SalesHandoverController::class, 'generateEveningOtp'])
         ->name('warehouse.handovers.evening.generate-otp')
         ->middleware('menu:wh_sales_reports');
 
 
+    /* === Warehouse Transfer === */
+    Route::get('/warehouse/transfers', [WarehouseTransferController::class, 'index'])
+        ->name('warehouse-transfers.index')
+        ->middleware('menu:wh_transfers');
+
+    Route::get('/warehouse/transfer-forms/create', [WarehouseTransferController::class, 'create'])
+        ->name('warehouse-transfer-forms.create')
+        ->middleware('menu:wh_transfers');
+
+    Route::get('/warehouse/transfer-forms/{transfer}', [WarehouseTransferController::class, 'show'])
+        ->name('warehouse-transfer-forms.show')
+        ->middleware('menu:wh_transfers');
+
+    Route::get('/warehouse/transfers/data', [WarehouseTransferController::class, 'data'])
+        ->name('warehouse-transfers.data')
+        ->middleware('menu:wh_transfers');
+
+    Route::get('/warehouse/transfer-products', [WarehouseTransferController::class, 'products'])
+        ->name('warehouse.products.search')
+        ->middleware('menu:wh_transfers');
+
+    /* === AJAX / ACTION (TETAP FORM MENU) === */
+    Route::post('/warehouse/transfer-forms', [WarehouseTransferController::class, 'store'])
+        ->name('warehouse-transfer-forms.store')
+        ->middleware('menu:wh_transfers');
+
+
+    Route::post('/warehouse/transfer-forms/{transfer}/items', [WarehouseTransferController::class, 'addItem'])
+        ->name('warehouse-transfer-forms.items.add')
+        ->middleware('menu:wh_transfers');
+
+    Route::delete('/warehouse/transfer-forms/{transfer}/items/{item}', [WarehouseTransferController::class, 'removeItem'])
+        ->name('warehouse-transfer-forms.items.remove')
+        ->middleware('menu:wh_transfers');
     /* === Sales pages (SALES KEYS) === */
+    Route::post('/warehouse/transfer-forms/{transfer}/submit', [WarehouseTransferController::class, 'submit'])
+        ->name('warehouse-transfer-forms.submit')
+        ->middleware('menu:wh_transfers');
+
+    Route::post('/warehouse/transfer-forms/{transfer}/reject-destination', [WarehouseTransferController::class, 'rejectDestination'])
+        ->name('warehouse-transfer-forms.reject.destination')
+        ->middleware('menu:wh_transfers');
+
+    Route::post('/warehouse/transfer-forms/{transfer}/gr-source', [WarehouseTransferController::class, 'grSource'])
+        ->name('warehouse-transfer-forms.gr.source')
+        ->middleware('menu:wh_transfers');
+
+    Route::post('/warehouse/transfer-forms/{transfer}/approve-destination', [WarehouseTransferController::class, 'approveDestination'])
+        ->name('warehouse-transfer-forms.approve.destination')
+        ->middleware('menu:wh_transfers');
+
+    Route::post('/warehouse/transfer-forms/{transfer}/cancel', [WarehouseTransferController::class, 'cancel'])
+        ->name('warehouse-transfer-forms.cancel')
+        ->middleware('menu: wh_transfers');
+        
+
+    Route::get('/warehouse-transfer/{transfer}/print-sj',[WarehouseTransferController::class, 'printSJ'])
+        ->name('warehouse-transfer.print-sj')
+        ->middleware('menu:wh_transfers');
+
+
+    /* === Sales pages (SALES KEYS) === */
+
 
     // === Sales pages (SALES & WAREHOUSE) ===
     Route::get('/sales/{sales}/active-handover-count', [SalesHandoverController::class, 'getActiveCount']);
 
 
-    Route::get('/warehouse/sales-reports', [SalesHandoverController::class,'warehouseSalesReport'])
+    Route::get('/warehouse/sales-reports', [SalesHandoverController::class, 'warehouseSalesReport'])
         ->name('sales.report')
         ->middleware('menu:wh_sales_reports');
 
@@ -397,7 +467,7 @@ Route::get('/stock-adjustments/export/excel', [StockAdjustmentController::class,
         ->name('sales.report.detail')
         ->middleware('menu:wh_sales_reports');
 
-    Route::get('/sales/report', [SalesHandoverController::class,'salesReport'])
+    Route::get('/sales/report', [SalesHandoverController::class, 'salesReport'])
         ->name('daily.sales.report')
         ->middleware('menu:sales_daily');
 
@@ -423,7 +493,7 @@ Route::get('/stock-adjustments/export/excel', [StockAdjustmentController::class,
         ->middleware('menu:sales_otp');
 
     // ====== WAREHOUSE: APPROVAL PEMBAYARAN HANDOVER ======
-// FORM APPROVAL (GET) – sudah benar
+    // FORM APPROVAL (GET) – sudah benar
     Route::get('/warehouse/handovers/{handover}/payments', [SalesHandoverController::class, 'paymentApprovalForm'])
         ->name('warehouse.handovers.payments.form')
         ->middleware('menu:wh_sales_reports');
@@ -439,16 +509,14 @@ Route::get('/stock-adjustments/export/excel', [StockAdjustmentController::class,
         ->name('warehouse.handovers.payments.reject')
         ->middleware('menu:wh_sales_reports');
 
-    Route::get('/sales/return', [WhSalesController::class,'return'])
+    Route::get('/sales/return', [WhSalesController::class, 'return'])
         ->name('sales.return')
         ->middleware('menu:sales_return');
-        
+
 
     /* === Reports (umum) – key: reports === */
-    
+
     Route::resource('/reports', ReportController::class)
         ->only(['index'])
         ->middleware('menu:reports');
-    
-        
 });

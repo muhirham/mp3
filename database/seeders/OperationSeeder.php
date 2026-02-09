@@ -23,6 +23,10 @@ use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\User;
 use App\Models\Role;
+use App\Models\WarehouseTransfer;
+use App\Models\WarehouseTransferItem;
+use App\Models\WarehouseTransferLog;
+
 
 class OperationSeeder extends Seeder
 {
@@ -361,6 +365,109 @@ class OperationSeeder extends Seeder
                     ceoUserId: $ceoUser?->id
                 );
             }
+
+            /*
+            |--------------------------------------------------------------------------
+            | 9) WAREHOUSE TRANSFER (Warehouse -> Warehouse)
+            |--------------------------------------------------------------------------
+            */
+            if (
+                $prodVoucher &&
+                $admin &&
+                $this->tableExists(\App\Models\WarehouseTransfer::class)
+            ) {
+                $transferTable = $this->tableName(\App\Models\WarehouseTransfer::class);
+                $itemTable     = $this->tableName(\App\Models\WarehouseTransferItem::class);
+                $logTable      = $this->tableName(\App\Models\WarehouseTransferLog::class);
+
+                // ambil 2 gudang berbeda
+                $sourceWh = Warehouse::orderBy('id')->first();
+                $destWh   = Warehouse::orderByDesc('id')->first();
+
+                if ($sourceWh && $destWh && $sourceWh->id !== $destWh->id) {
+
+                    $transferCode = 'TRF-WH-' . Carbon::now()->format('Ym') . '-0001';
+
+                    // ambil HPP / harga beli
+                    $unitCost = $prodVoucher->purchasing_price
+                        ?? $prodVoucher->purchase_price
+                        ?? 10000;
+
+                    $qty      = 10;
+                    $subtotal = $qty * $unitCost;
+
+                    /** ======================
+                     *  CREATE TRANSFER
+                     *  ======================
+                     */
+                    $transfer = \App\Models\WarehouseTransfer::updateOrCreate(
+                        ['transfer_code' => $transferCode],
+                        $this->onlyExistingCols($transferTable, [
+                            'source_warehouse_id'      => $sourceWh->id,
+                            'destination_warehouse_id' => $destWh->id,
+                            'status'                   => 'approved',
+                            'total_cost'               => $subtotal,
+                            'created_by'               => $admin->id,
+                            'approved_source_by'       => $admin->id,
+                            'approved_destination_by'  => $admin->id,
+                            'approved_source_at'       => now(),
+                            'approved_destination_at'  => now(),
+                            'note'                     => 'Seed transfer antar gudang (real testing).',
+                        ])
+                    );
+
+                    if ($transfer) {
+
+                        /** ======================
+                         *  ITEMS
+                         *  ======================
+                         */
+                        if (Schema::hasTable($itemTable)) {
+                            DB::table($itemTable)
+                                ->where('warehouse_transfer_id', $transfer->id)
+                                ->delete();
+
+                            DB::table($itemTable)->insert(
+                                $this->withTimestamps($itemTable, [
+                                    'warehouse_transfer_id' => $transfer->id,
+                                    'product_id'            => $prodVoucher->id,
+                                    'qty_transfer'          => $qty,
+                                    'qty_good'              => $qty,
+                                    'qty_damaged'           => 0,
+                                    'unit_cost'             => $unitCost,
+                                    'subtotal_cost'         => $subtotal,
+                                    'note'                  => 'Seeder GR: barang kondisi baik',
+                                ])
+                            );
+                        }
+
+                        /** ======================
+                         *  LOGS
+                         *  ======================
+                         */
+                        if (Schema::hasTable($logTable)) {
+                            $logs = [
+                                ['action' => 'CREATED'],
+                                ['action' => 'SUBMITTED'],
+                                ['action' => 'DEST_APPROVED'],
+                                ['action' => 'GR_SOURCE'],
+                            ];
+
+                            foreach ($logs as $lg) {
+                                DB::table($logTable)->insert(
+                                    $this->withTimestamps($logTable, [
+                                        'warehouse_transfer_id' => $transfer->id,
+                                        'action'                => $lg['action'],
+                                        'performed_by'          => $admin->id,
+                                        'note'                  => 'Seeder auto log.',
+                                    ])
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+
         });
     }
 
@@ -517,3 +624,4 @@ class OperationSeeder extends Seeder
         }
     }
 }
+
