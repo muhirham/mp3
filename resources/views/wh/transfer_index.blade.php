@@ -77,9 +77,14 @@
 
                 <div class="d-flex justify-content-between mt-3">
                     <input id="searchTransfer" class="form-control w-25" placeholder="Search...">
-                    <a href="{{ route('warehouse-transfer-forms.create') }}" class="btn btn-primary">
-                        + Create Transfer
-                    </a>
+                    <div class="d-flex gap-2">
+                        <a href="#" id="btnExport" class="btn btn-success">
+                            <i class="bx bx-download"></i> Export Excel
+                        </a>
+                        <a href="{{ route('warehouse-transfer-forms.create') }}" class="btn btn-primary">
+                            + Create Transfer
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -157,5 +162,19 @@
 
         $('#searchTransfer').keyup(e => table.search(e.target.value).draw());
         $('#f_status,#f_from_wh,#f_to_wh').change(() => table.ajax.reload());
+
+        $('#btnExport').on('click', function(e) {
+            e.preventDefault();
+
+            const params = new URLSearchParams({
+                status: $('#f_status').val(),
+                from_warehouse_id: $('#f_from_wh').val(),
+                to_warehouse_id: $('#f_to_wh').val(),
+                q: $('#searchTransfer').val(),
+            });
+
+            window.location.href =
+                "{{ route('warehouse-transfer.export') }}?" + params.toString();
+        });
     </script>
 @endpush

@@ -49,7 +49,7 @@ class OperationSeeder extends Seeder
                     [
                         'name'     => 'Admin Pusat',
                         'username' => 'admin',
-                        'phone'    => '081200000000',
+                        'phone'    => '08120008000635',
                         'password' => bcrypt('password123'),
                         'status'   => 'active',
                     ]
@@ -76,30 +76,6 @@ class OperationSeeder extends Seeder
             $ceoUser   = User::firstWhere('username', 'ceo')
                         ?: User::whereHas('roles', fn($q) => $q->where('slug','ceo'))->first();
 
-            /*
-            |----------------------------------------------------------------------
-            | 1) COMPANY (REAL)
-            |----------------------------------------------------------------------
-            */
-            $company = Company::updateOrCreate(
-                ['code' => 'MANDAU'],
-                [
-                    'name'            => 'Mandau',
-                    'legal_name'      => 'PT Mandiri Daya Utama Nusantara',
-                    'short_name'      => 'MANDAU',
-                    'address'         => 'Komplek Golden Plaza Blok C17, Jl. RS Fatmawati No. 15',
-                    'city'            => 'Jakarta Selatan',
-                    'province'        => 'DKI Jakarta',
-                    'phone'           => '+62 21 7590 9945',
-                    'email'           => 'info@mandau.id',
-                    'website'         => 'https://mandau.id',
-                    'tax_number'      => null,
-                    'logo_path'       => null,
-                    'logo_small_path' => null,
-                    'is_default'      => true,
-                    'is_active'       => true,
-                ]
-            );
 
             /*
             |----------------------------------------------------------------------

@@ -1,667 +1,745 @@
 @extends('layouts.home')
 
 @section('content')
-@php
-    /** @var \App\Models\User $me */
-    $isWarehouseUser = $me?->hasRole('warehouse');
-@endphp
+    @php
+        /** @var \App\Models\User $me */
+        $isWarehouseUser = $me?->hasRole('warehouse');
+    @endphp
 
-<div class="container-xxl flex-grow-1 container-p-y">
+    <div class="container-xxl flex-grow-1 container-p-y">
 
-    {{-- Toolbar & Filters --}}
-    <div class="card mb-3">
-        <div class="card-body">
-            <div class="row g-2">
-                <div class="col-12 col-md-4">
-                    <label class="form-label mb-1">Role</label>
-                    <select id="f_role" class="form-select">
-                        <option value="">Select Role</option>
-                        @foreach($allRoles as $r)
-                            <option value="{{ $r->name }}">{{ $r->name }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="col-12 col-md-4">
-                    <label class="form-label mb-1">Status</label>
+        {{-- Toolbar & Filters --}}
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-12 col-md-4">
+                        <label class="form-label mb-1">Role</label>
+                        <select id="f_role" class="form-select">
+                            <option value="">Select Role</option>
+                            @foreach ($allRoles as $r)
+                                <option value="{{ $r->name }}">{{ $r->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label mb-1">Status</label>
                         <select id="f_status" class="form-select">
                             <option value="">Select Status</option>
                             <option value="active">Active</option>
                             <option value="inactive">Inactive</option>
                         </select>
-                </div>
-            </div>
-
-            <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
-                <div class="d-flex align-items-center gap-2">
-                    <label class="text-muted">Show</label>
-                    <select id="pageLength" class="form-select" style="width:90px">
-                        <option value="10" selected>10</option>
-                        <option value="25">25</option>
-                        <option value="50">50</option>
-                    </select>
+                    </div>
                 </div>
 
-                <div class="ms-auto d-flex flex-wrap align-items-center gap-2">
-                    <input id="searchUser" type="text" class="form-control" placeholder="Search user..." style="max-width:260px">
+                <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="text-muted">Show</label>
+                        <select id="pageLength" class="form-select" style="width:90px">
+                            <option value="10" selected>10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                        </select>
+                    </div>
 
-                    <div class="btn-group">
-                        <button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
-                            <i class="bx bx-export me-1"></i> Export
+                    <div class="ms-auto d-flex flex-wrap align-items-center gap-2">
+                        <input id="searchUser" type="text" class="form-control" placeholder="Search user..."
+                            style="max-width:260px">
+
+                        <div class="btn-group">
+                            <button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                                <i class="bx bx-export me-1"></i> Export
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="" id="btnExportCSV">CSV</a></li>
+                                <li><a class="dropdown-item" href="" id="btnExportPrint">Print</a></li>
+                            </ul>
+                        </div>
+
+                        <button id="btnBulkDelete" class="btn btn-outline-danger">
+                            <i class="bx bx-trash me-1"></i> Delete Selected
                         </button>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="" id="btnExportCSV">CSV</a></li>
-                            <li><a class="dropdown-item" href="" id="btnExportPrint">Print</a></li>
-                        </ul>
+
+                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#glassAddUser">
+                            <i class="bx bx-plus"></i> Add User
+                        </button>
                     </div>
-
-                    <button id="btnBulkDelete" class="btn btn-outline-danger">
-                        <i class="bx bx-trash me-1"></i> Delete Selected
-                    </button>
-
-                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#glassAddUser">
-                        <i class="bx bx-plus"></i> Add User
-                    </button>
                 </div>
+            </div>
+        </div>
+
+        {{-- Tabel Users --}}
+        <div class="card">
+            <div class="table-responsive">
+                <table id="tblUsers" class="table table-sm table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width:36px">
+                                <input class="form-check-input" type="checkbox" id="checkAll">
+                            </th>
+                            <th>ID</th>
+                            <th>NAME</th>
+                            <th>USERNAME</th>
+                            <th>EMAIL</th>
+                            <th>PHONE</th>
+                            <th>POSITION</th>
+                            <th>SIGNATURE</th>
+                            <th>ROLES</th>
+                            <th>WAREHOUSE</th>
+                            <th>STATUS</th>
+                            <th>CREATED</th>
+                            <th>UPDATED</th>
+                            <th style="width:120px">ACTIONS</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($users as $u)
+                            @php
+                                $roleSlugs = $u->roles->pluck('slug')->all();
+                                $roleNames = $u->roles->pluck('name')->all();
+                                $roleText = implode(', ', $roleNames);
+                                $rolesAttr = implode(',', $roleSlugs);
+                                $signatureUrl = $u->signature_path ? asset('storage/' . $u->signature_path) : null;
+
+                                // Admin WH hanya boleh manage SALES di warehouse dia
+                                $canManageRow =
+                                    !$isWarehouseUser ||
+                                    (in_array('sales', $roleSlugs, true) && $u->warehouse_id === $me->warehouse_id);
+                            @endphp
+                            <tr>
+                                <td>
+                                    <input class="form-check-input row-check" type="checkbox"
+                                        @if (!$canManageRow) disabled @endif>
+                                </td>
+                                <td>{{ $u->id }}</td>
+                                <td>{{ $u->name }}</td>
+                                <td>{{ $u->username }}</td>
+                                <td>{{ $u->email }}</td>
+                                <td>{{ $u->phone ?? '-' }}</td>
+                                <td>{{ $u->position ?? '-' }}</td>
+                                <td class="text-center">
+                                    @php
+                                        $signature = $u->signature_path;
+                                    @endphp
+
+                                    @if ($signature)
+                                        @if (file_exists(storage_path('app/public/' . $signature)))
+                                            <a href="#" class="js-signature"
+                                                data-img="{{ asset('storage/' . $signature) }}">
+                                                <img src="{{ asset('storage/' . $signature) }}" alt="signature"
+                                                    style="height:24px;">
+                                            </a>
+                                        @elseif (file_exists(public_path($signature)))
+                                            <a href="#" class="js-signature" data-img="{{ asset($signature) }}">
+                                                <img src="{{ asset($signature) }}" alt="signature" style="height:24px;">
+                                            </a>
+                                        @else
+                                            -
+                                        @endif
+                                    @else
+                                        -
+                                    @endif
+                                </td>
+
+                                <td>{{ $roleText ?: '-' }}</td>
+                                <td>{{ $u->warehouse?->warehouse_name ?? '-' }}</td>
+                                <td>
+                                    @if ($u->status === 'active')
+                                        <span class="badge bg-success">Active</span>
+                                    @else
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    @endif
+                                </td>
+                                <td>{{ $u->created_at?->format('Y-m-d') }}</td>
+                                <td>{{ $u->updated_at?->format('Y-m-d H:i') }}</td>
+                                <td>
+                                    <div class="d-flex gap-1">
+                                        @if ($canManageRow)
+                                            <a href="#" class="btn btn-sm btn-icon btn-outline-secondary js-edit"
+                                                title="Edit" data-id="{{ $u->id }}"
+                                                data-name="{{ $u->name }}" data-username="{{ $u->username }}"
+                                                data-email="{{ $u->email }}" data-phone="{{ $u->phone }}"
+                                                data-position="{{ $u->position }}" data-roles="{{ $rolesAttr }}"
+                                                data-status="{{ $u->status }}"
+                                                data-warehouse_id="{{ $u->warehouse_id ?? '' }}">
+                                                <i class="bx bx-edit-alt"></i>
+                                            </a>
+                                            <a href="#" class="btn btn-sm btn-icon btn-outline-danger js-del"
+                                                title="Delete" data-id="{{ $u->id }}"
+                                                data-name="{{ $u->name }}">
+                                                <i class="bx bx-trash"></i>
+                                            </a>
+                                        @endif
+                                    </div>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="14" class="text-center text-muted">No data</td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 
-    {{-- Tabel Users --}}
-    <div class="card">
-        <div class="table-responsive">
-            <table id="tblUsers" class="table table-sm table-hover align-middle mb-0">
-                <thead>
-                <tr>
-                    <th style="width:36px">
-                        <input class="form-check-input" type="checkbox" id="checkAll">
-                    </th>
-                    <th>ID</th>
-                    <th>NAME</th>
-                    <th>USERNAME</th>
-                    <th>EMAIL</th>
-                    <th>PHONE</th>
-                    <th>POSITION</th>
-                    <th>SIGNATURE</th>
-                    <th>ROLES</th>
-                    <th>WAREHOUSE</th>
-                    <th>STATUS</th>
-                    <th>CREATED</th>
-                    <th>UPDATED</th>
-                    <th style="width:120px">ACTIONS</th>
-                </tr>
-                </thead>
-                <tbody>
-                @forelse($users as $u)
-                    @php
-                        $roleSlugs    = $u->roles->pluck('slug')->all();
-                        $roleNames    = $u->roles->pluck('name')->all();
-                        $roleText     = implode(', ', $roleNames);
-                        $rolesAttr    = implode(',', $roleSlugs);
-                        $signatureUrl = $u->signature_path ? asset('storage/'.$u->signature_path) : null;
+    {{-- ADD USER – Glass modal --}}
+    <div class="modal fade" id="glassAddUser" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0" style="background:#fff;">
 
-                        // Admin WH hanya boleh manage SALES di warehouse dia
-                        $canManageRow = !$isWarehouseUser
-                            || (in_array('sales', $roleSlugs, true) && $u->warehouse_id === $me->warehouse_id);
-                    @endphp
-                    <tr>
-                        <td>
-                            <input class="form-check-input row-check" type="checkbox" @if(!$canManageRow) disabled @endif>
-                        </td>
-                        <td>{{ $u->id }}</td>
-                        <td>{{ $u->name }}</td>
-                        <td>{{ $u->username }}</td>
-                        <td>{{ $u->email }}</td>
-                        <td>{{ $u->phone ?? '-' }}</td>
-                        <td>{{ $u->position ?? '-' }}</td>
-                        <td class="text-center">
-                            @if($signatureUrl)
-                                <a href="#" class="js-signature" data-img="{{ $signatureUrl }}" title="Lihat tanda tangan">
-                                    <img src="{{ $signatureUrl }}" alt="signature" style="height:24px;">
-                                </a>
-                            @else
-                                -
-                            @endif
-                        </td>
-                        <td>{{ $roleText ?: '-' }}</td>
-                        <td>{{ $u->warehouse?->warehouse_name ?? '-' }}</td>
-                        <td>
-                            @if($u->status === 'active')
-                                <span class="badge bg-success">Active</span>
-                            @else
-                                <span class="badge bg-secondary">Inactive</span>
-                            @endif
-                        </td>
-                        <td>{{ $u->created_at?->format('Y-m-d') }}</td>
-                        <td>{{ $u->updated_at?->format('Y-m-d H:i') }}</td>
-                        <td>
-                            <div class="d-flex gap-1">
-                                @if($canManageRow)
-                                    <a href="#"
-                                       class="btn btn-sm btn-icon btn-outline-secondary js-edit"
-                                       title="Edit"
-                                       data-id="{{ $u->id }}"
-                                       data-name="{{ $u->name }}"
-                                       data-username="{{ $u->username }}"
-                                       data-email="{{ $u->email }}"
-                                       data-phone="{{ $u->phone }}"
-                                       data-position="{{ $u->position }}"
-                                       data-roles="{{ $rolesAttr }}"
-                                       data-status="{{ $u->status }}"
-                                       data-warehouse_id="{{ $u->warehouse_id ?? '' }}">
-                                        <i class="bx bx-edit-alt"></i>
-                                    </a>
-                                    <a href="#"
-                                       class="btn btn-sm btn-icon btn-outline-danger js-del"
-                                       title="Delete"
-                                       data-id="{{ $u->id }}"
-                                       data-name="{{ $u->name }}">
-                                        <i class="bx bx-trash"></i>
-                                    </a>
-                                @endif
-                            </div>
-                        </td>
-                    </tr>
-                @empty
-                    <tr>
-                        <td colspan="14" class="text-center text-muted">No data</td>
-                    </tr>
-                @endforelse
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
+                <div class="modal-header border-0">
+                    <h5 class="modal-title">Add User</h5>
+                    <button type="button" class="btn-close btn-" data-bs-dismiss="modal"></button>
+                </div>
 
-{{-- ADD USER – Glass modal --}}
-<div class="modal fade" id="glassAddUser" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0" style="background:#fff;">
-
-            <div class="modal-header border-0">
-                <h5 class="modal-title">Add User</h5>
-                <button type="button" class="btn-close btn-" data-bs-dismiss="modal"></button>
-            </div>
-
-            @if ($errors->any() && !session('edit_open_id'))
-                <div class="px-4">
-                    <div class="alert alert-danger mb-0">
-                        <div class="fw-semibold mb-1">Gagal menyimpan:</div>
-                        <ul class="mb-0 ps-3">
-                            @foreach ($errors->all() as $err)
-                                <li>{{ $err }}</li>
-                            @endforeach
-                        </ul>
+                @if ($errors->any() && !session('edit_open_id'))
+                    <div class="px-4">
+                        <div class="alert alert-danger mb-0">
+                            <div class="fw-semibold mb-1">Gagal menyimpan:</div>
+                            <ul class="mb-0 ps-3">
+                                @foreach ($errors->all() as $err)
+                                    <li>{{ $err }}</li>
+                                @endforeach
+                            </ul>
+                        </div>
                     </div>
-                </div>
-            @endif
+                @endif
 
-            <form id="formAddUser"
-                  method="POST"
-                  action="{{ route('users.store') }}"
-                  class="modal-body "
-                  enctype="multipart/form-data">
-                @csrf
+                <form id="formAddUser" method="POST" action="{{ route('users.store') }}" class="modal-body "
+                    enctype="multipart/form-data">
+                    @csrf
 
-                <div class="mb-3">
-                    <label class="form-label">Name</label>
-                    <input name="name" value="{{ old('name') }}" class="form-control bg-transparent border-secondary" required>
-                </div>
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input name="name" value="{{ old('name') }}"
+                            class="form-control bg-transparent border-secondary" required>
+                    </div>
 
-                <div class="mb-3">
-                    <label class="form-label">Username</label>
-                    <input name="username" value="{{ old('username') }}" class="form-control bg-transparent border-secondary" required>
-                </div>
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        <input name="username" value="{{ old('username') }}"
+                            class="form-control bg-transparent border-secondary" required>
+                    </div>
 
-                <div class="mb-3">
-                    <label class="form-label">Email</label>
-                    <input name="email" type="email" value="{{ old('email') }}" class="form-control bg-transparent border-secondary" required>
-                </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input name="email" type="email" value="{{ old('email') }}"
+                            class="form-control bg-transparent border-secondary" required>
+                    </div>
 
-                <div class="mb-3">
-                    <label class="form-label">Phone</label>
-                    <input name="phone" value="{{ old('phone') }}" class="form-control bg-transparent border-secondary" required>
-                </div>
+                    <div class="mb-3">
+                        <label class="form-label">Phone</label>
+                        <input name="phone" value="{{ old('phone') }}"
+                            class="form-control bg-transparent border-secondary" required>
+                    </div>
 
-                <div class="mb-3">
-                    <label class="form-label">Position (optional)</label>
-                    <input name="position" value="{{ old('position') }}" class="form-control bg-transparent border-secondary" required>
-                </div>
+                    <div class="mb-3">
+                        <label class="form-label">Position (optional)</label>
+                        <input name="position" value="{{ old('position') }}"
+                            class="form-control bg-transparent border-secondary" required>
+                    </div>
 
-                <div class="mb-3">
-                    <label class="form-label">Signature (optional)</label>
-                    <input type="file" name="signature" class="form-control bg-transparent border-secondary">
-                    <small class=-50">Format: jpg, jpeg, png, webp — max 2MB.</small>
-                </div>
+                    <div class="mb-3">
+                        <label class="form-label">Signature (optional)</label>
+                        <input type="file" name="signature" class="form-control bg-transparent border-secondary">
+                        <small class=-50">Format: jpg, jpeg, png, webp — max 2MB.</small>
+                    </div>
 
-                <div class="row g-2">
-                    <div class="col-md-6">
-                        <label class="form-label">Roles</label>
-                        @if($isWarehouseUser)
-                            {{-- Admin WH: selalu Sales --}}
-                            <input type="hidden" name="roles[]" value="sales">
-                            <input class="form-control bg-transparent border-secondary" value="Sales" disabled>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label">Roles</label>
+                            @if ($isWarehouseUser)
+                                {{-- Admin WH: selalu Sales --}}
+                                <input type="hidden" name="roles[]" value="sales">
+                                <input class="form-control bg-transparent border-secondary" value="Sales" disabled>
+                            @else
+                                <select name="roles[]" id="add_roles" class="form-select bg-transparent border-secondary"
+                                    required>
+                                    <option value="">— Choose role —</option>
+                                    @foreach ($allRoles as $r)
+                                        <option value="{{ $r->slug }}"
+                                            {{ old('roles.0') == $r->slug ? 'selected' : '' }}>
+                                            {{ $r->name }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            @endif
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Status</label>
+                            <select name="status" class="form-select bg-transparent border-secondary" required>
+                                <option value="active" {{ old('status') === 'active' ? 'selected' : '' }}>Active</option>
+                                <option value="inactive"{{ old('status') === 'inactive' ? 'selected' : '' }}>Inactive</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mt-3" id="wrap_add_wh" style="{{ $isWarehouseUser ? '' : 'display:none' }}">
+                        <label class="form-label">Warehouse</label>
+                        @if ($isWarehouseUser)
+                            <input type="hidden" name="warehouse_id" value="{{ $me->warehouse_id }}">
+                            <input class="form-control bg-transparent border-secondary"
+                                value="{{ $me->warehouse?->warehouse_name ?? 'My Warehouse' }}" disabled>
                         @else
-                            <select name="roles[]" id="add_roles" class="form-select bg-transparent border-secondary" required>
-                                <option value="">— Choose role —</option>
-                                @foreach ($allRoles as $r)
-                                    <option value="{{ $r->slug }}" {{ (old('roles.0') == $r->slug) ? 'selected' : '' }}>
-                                        {{ $r->name }}
+                            <select name="warehouse_id" class="form-select bg-transparent border-secondary">
+                                <option value="">— Choose warehouse —</option>
+                                @foreach ($warehouses as $w)
+                                    <option value="{{ $w->id }}"
+                                        {{ old('warehouse_id') == $w->id ? 'selected' : '' }}>
+                                        {{ $w->warehouse_name }}
                                     </option>
                                 @endforeach
                             </select>
                         @endif
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Status</label>
-                        <select name="status" class="form-select bg-transparent border-secondary" required>
-                            <option value="active"  {{ old('status')==='active' ? 'selected':'' }}>Active</option>
-                            <option value="inactive"{{ old('status')==='inactive' ? 'selected':'' }}>Inactive</option>
-                        </select>
-                    </div>
-                </div>
 
-                <div class="mt-3" id="wrap_add_wh" style="{{ $isWarehouseUser ? '' : 'display:none' }}">
-                    <label class="form-label">Warehouse</label>
-                    @if($isWarehouseUser)
-                        <input type="hidden" name="warehouse_id" value="{{ $me->warehouse_id }}">
-                        <input class="form-control bg-transparent border-secondary"
-                               value="{{ $me->warehouse?->warehouse_name ?? 'My Warehouse' }}" disabled>
-                    @else
-                        <select name="warehouse_id" class="form-select bg-transparent border-secondary">
-                            <option value="">— Choose warehouse —</option>
-                            @foreach($warehouses as $w)
-                                <option value="{{ $w->id }}" {{ old('warehouse_id') == $w->id ? 'selected':'' }}>
-                                    {{ $w->warehouse_name }}
-                                </option>
-                            @endforeach
-                        </select>
-                    @endif
-                </div>
-
-                <div class="row g-2 mt-3">
-                    <div class="col">
-                        <input name="password" type="password" placeholder="Password" class="form-control bg-transparent border-secondary" required>
+                    <div class="row g-2 mt-3">
+                        <div class="col">
+                            <input name="password" type="password" placeholder="Password"
+                                class="form-control bg-transparent border-secondary" required>
+                        </div>
+                        <div class="col">
+                            <input name="password_confirmation" type="password" placeholder="Confirm"
+                                class="form-control bg-transparent border-secondary" required>
+                        </div>
                     </div>
-                    <div class="col">
-                        <input name="password_confirmation" type="password" placeholder="Confirm" class="form-control bg-transparent border-secondary" required>
-                    </div>
-                </div>
 
-                <div class="mt-4 d-flex gap-2 justify-content-end">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button class="btn btn-primary text-white">Submit</button>
-                </div>
-            </form>
+                    <div class="mt-4 d-flex gap-2 justify-content-end">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button class="btn btn-primary text-white">Submit</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
-</div>
 
-{{-- EDIT USER – Glass modal --}}
-<div class="modal fade" id="glassEditUser" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0" style="background:rgb(255, 255, 255);backdrop-filter:blur(14px)">
-            <div class="modal-header border-0">
-                <h5 class="modal-title">Edit User</h5>
-                <button type="button" class="btn-close btn-" data-bs-dismiss="modal"></button>
-            </div>
-
-            <form id="formEditUser"
-                  method="POST"
-                  class="modal-body"
-                  enctype="multipart/form-data">
-                @csrf
-                @method('PUT')
-                <input type="hidden" id="edit_id">
-
-                <div class="mb-3">
-                    <label class="form-label">Name</label>
-                    <input id="edit_name" name="name" class="form-control bg-transparent border-secondary" required>
+    {{-- EDIT USER – Glass modal --}}
+    <div class="modal fade" id="glassEditUser" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0" style="background:rgb(255, 255, 255);backdrop-filter:blur(14px)">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title">Edit User</h5>
+                    <button type="button" class="btn-close btn-" data-bs-dismiss="modal"></button>
                 </div>
 
-                <div class="mb-3">
-                    <label class="form-label">Username</label>
-                    <input id="edit_username" name="username" class="form-control bg-transparent border-secondary" required>
-                </div>
+                <form id="formEditUser" method="POST" class="modal-body" enctype="multipart/form-data">
+                    @csrf
+                    @method('PUT')
+                    <input type="hidden" id="edit_id">
 
-                <div class="mb-3">
-                    <label class="form-label">Email</label>
-                    <input id="edit_email" name="email" type="email" class="form-control bg-transparent border-secondary" required>
-                </div>
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input id="edit_name" name="name" class="form-control bg-transparent border-secondary"
+                            required>
+                    </div>
 
-                <div class="mb-3">
-                    <label class="form-label">Phone</label>
-                    <input id="edit_phone" name="phone" class="form-control bg-transparent border-secondary">
-                </div>
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        <input id="edit_username" name="username" class="form-control bg-transparent border-secondary"
+                            required>
+                    </div>
 
-                <div class="mb-3">
-                    <label class="form-label">Position (optional)</label>
-                    <input id="edit_position" name="position" class="form-control bg-transparent border-secondary">
-                </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input id="edit_email" name="email" type="email"
+                            class="form-control bg-transparent border-secondary" required>
+                    </div>
 
-                <div class="mb-3">
-                    <label class="form-label">Signature (optional)</label>
-                    <input type="file" name="signature" class="form-control bg-transparent border-secondary">
-                    <small class=-50">Kosongkan bila tidak ingin mengubah tanda tangan.</small>
-                </div>
+                    <div class="mb-3">
+                        <label class="form-label">Phone</label>
+                        <input id="edit_phone" name="phone" class="form-control bg-transparent border-secondary">
+                    </div>
 
-                <div class="row g-2">
-                    <div class="col-md-6">
-                        <label class="form-label">Roles</label>
-                        @if($isWarehouseUser)
-                            {{-- Admin WH: selalu Sales --}}
-                            <input type="hidden" name="roles[]" id="edit_roles_force" value="sales">
-                            <input class="form-control bg-transparent border-secondary" value="Sales" disabled>
+                    <div class="mb-3">
+                        <label class="form-label">Position (optional)</label>
+                        <input id="edit_position" name="position" class="form-control bg-transparent border-secondary">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Signature (optional)</label>
+                        <input type="file" name="signature" class="form-control bg-transparent border-secondary">
+                        <small class=-50">Kosongkan bila tidak ingin mengubah tanda tangan.</small>
+                    </div>
+
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label">Roles</label>
+                            @if ($isWarehouseUser)
+                                {{-- Admin WH: selalu Sales --}}
+                                <input type="hidden" name="roles[]" id="edit_roles_force" value="sales">
+                                <input class="form-control bg-transparent border-secondary" value="Sales" disabled>
+                            @else
+                                <select id="edit_roles" name="roles[]"
+                                    class="form-select bg-transparent border-secondary" required>
+                                    @foreach ($allRoles as $r)
+                                        <option value="{{ $r->slug }}">{{ $r->name }}</option>
+                                    @endforeach
+                                </select>
+                            @endif
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Status</label>
+                            <select id="edit_status" name="status" class="form-select bg-transparent border-secondary"
+                                required>
+                                @foreach (['active', 'inactive'] as $s)
+                                    <option value="{{ $s }}">{{ ucfirst($s) }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mt-3" id="wrap_edit_wh" style="display:none">
+                        <label class="form-label">Warehouse</label>
+                        @if ($isWarehouseUser)
+                            <input type="hidden" name="warehouse_id" id="edit_warehouse_id"
+                                value="{{ $me->warehouse_id }}">
+                            <input class="form-control bg-transparent border-secondary"
+                                value="{{ $me->warehouse?->warehouse_name ?? 'My Warehouse' }}" disabled>
                         @else
-                            <select id="edit_roles" name="roles[]" class="form-select bg-transparent border-secondary" required>
-                                @foreach($allRoles as $r)
-                                    <option value="{{ $r->slug }}">{{ $r->name }}</option>
+                            <select id="edit_warehouse_id" name="warehouse_id"
+                                class="form-select bg-transparent border-secondary">
+                                <option value="">— Choose warehouse —</option>
+                                @foreach ($warehouses as $w)
+                                    <option value="{{ $w->id }}">{{ $w->warehouse_name }}</option>
                                 @endforeach
                             </select>
                         @endif
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Status</label>
-                        <select id="edit_status" name="status" class="form-select bg-transparent border-secondary" required>
-                            @foreach(['active','inactive'] as $s)
-                                <option value="{{ $s }}">{{ ucfirst($s) }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                </div>
 
-                <div class="mt-3" id="wrap_edit_wh" style="display:none">
-                    <label class="form-label">Warehouse</label>
-                    @if($isWarehouseUser)
-                        <input type="hidden" name="warehouse_id" id="edit_warehouse_id" value="{{ $me->warehouse_id }}">
-                        <input class="form-control bg-transparent border-secondary"
-                               value="{{ $me->warehouse?->warehouse_name ?? 'My Warehouse' }}" disabled>
-                    @else
-                        <select id="edit_warehouse_id" name="warehouse_id" class="form-select bg-transparent border-secondary">
-                            <option value="">— Choose warehouse —</option>
-                            @foreach($warehouses as $w)
-                                <option value="{{ $w->id }}">{{ $w->warehouse_name }}</option>
-                            @endforeach
-                        </select>
-                    @endif
-                </div>
-
-                <div class="row g-2 mt-3">
-                    <div class="col">
-                        <input name="password" type="password" placeholder="New password (optional)" class="form-control bg-transparent border-secondary">
+                    <div class="row g-2 mt-3">
+                        <div class="col">
+                            <input name="password" type="password" placeholder="New password (optional)"
+                                class="form-control bg-transparent border-secondary">
+                        </div>
+                        <div class="col">
+                            <input name="password_confirmation" type="password" placeholder="Confirm"
+                                class="form-control bg-transparent border-secondary">
+                        </div>
                     </div>
-                    <div class="col">
-                        <input name="password_confirmation" type="password" placeholder="Confirm" class="form-control bg-transparent border-secondary">
-                    </div>
-                </div>
 
-                <div class="mt-4 d-flex gap-2 justify-content-end">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button class="btn btn-primary text-white" type="submit">Save</button>
-                </div>
-            </form>
+                    <div class="mt-4 d-flex gap-2 justify-content-end">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button class="btn btn-primary text-white" type="submit">Save</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
-</div>
 @endsection
 
 @push('styles')
-<style>
-    .swal2-container { z-index: 20000 !important; }
+    <style>
+        .swal2-container {
+            z-index: 20000 !important;
+        }
 
-    /* Kecilkan tampilan tabel Users */
-    #tblUsers {
-        font-size: 0.75rem;
-    }
-    #tblUsers thead th,
-    #tblUsers tbody t-space: nowrap;
+        /* Kecilkan tampilan tabel Users */
+        #tblUsers {
+            font-size: 0.75rem;
+        }
+
+        #tblUsers thead th,
+        #tblUsers tbody t-space: nowrap;
         padding: .35rem .45rem;
-    }
+        }
 
-    #tblUsers th:nth-child(8),
-    #tblUsers td:nth-child(8) {
-        text-align: center;
-        width: 70px;
-    }
+        #tblUsers th:nth-child(8),
+        #tblUsers td:nth-child(8) {
+            text-align: center;
+            width: 70px;
+        }
 
-    #pageLength,
-    #f_role,
-    #f_status,
-    #searchUser {
-        font-size: 0.75rem;
-        height: calc(1.5em + .5rem + 2px);
-        padding: .25rem .5rem;
-    }
-    .dataTables_info,
-    .dataTables_paginate {
-        font-size: 0.75rem;
-    }
-</style>
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
+        #pageLength,
+        #f_role,
+        #f_status,
+        #searchUser {
+            font-size: 0.75rem;
+            height: calc(1.5em + .5rem + 2px);
+            padding: .25rem .5rem;
+        }
+
+        .dataTables_info,
+        .dataTables_paginate {
+            font-size: 0.75rem;
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
 @endpush
 
 @push('scripts')
-<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-<script>
-$(function () {
-    const table = $('#tblUsers').DataTable({
-        order: [[1,'asc']],
-        columnDefs: [
-            { targets: [0,13], orderable:false },
-            { targets: 1, type: 'num' }
-        ],
-        pageLength: 10,
-        lengthChange: false,
-        searching: true,
-        info: true,
-        dom: 't<"d-flex justify-content-between align-items-center p-3 pt-2"ip>'
-    });
+    <script>
+        $(function() {
+            const table = $('#tblUsers').DataTable({
+                order: [
+                    [1, 'asc']
+                ],
+                columnDefs: [{
+                        targets: [0, 13],
+                        orderable: false
+                    },
+                    {
+                        targets: 1,
+                        type: 'num'
+                    }
+                ],
+                pageLength: 10,
+                lengthChange: false,
+                searching: true,
+                info: true,
+                dom: 't<"d-flex justify-content-between align-items-center p-3 pt-2"ip>'
+            });
 
-    $('#searchUser').on('keyup', function(){ table.search(this.value).draw(); });
-    $('#pageLength').on('change', function(){ table.page.len(parseInt(this.value,10)).draw(); });
+            $('#searchUser').on('keyup', function() {
+                table.search(this.value).draw();
+            });
+            $('#pageLength').on('change', function() {
+                table.page.len(parseInt(this.value, 10)).draw();
+            });
 
-    $('#f_role').on('change', function(){
-        const v = this.value;
-        table.column(8).search(v ? v : '', true, false).draw();
-    });
+            $('#f_role').on('change', function() {
+                const v = this.value;
+                table.column(8).search(v ? v : '', true, false).draw();
+            });
 
-    $('#f_status').on('change', function(){
-        const v = (this.value || '').toLowerCase();
+            $('#f_status').on('change', function() {
+                const v = (this.value || '').toLowerCase();
 
-        if (!v) {
-            table.column(10).search('').draw();
-            return;
-        }
+                if (!v) {
+                    table.column(10).search('').draw();
+                    return;
+                }
 
-        // Karena isi kolom adalah badge "Active/Inactive"
-        const label = (v === 'active') ? 'Active' : 'Inactive';
-        table.column(10).search(label, false, true).draw(); // contains, case-insensitive
-    });
+                // Karena isi kolom adalah badge "Active/Inactive"
+                const label = (v === 'active') ? 'Active' : 'Inactive';
+                table.column(10).search(label, false, true).draw(); // contains, case-insensitive
+            });
 
 
-    $('#checkAll').on('change', function(){
-        $('#tblUsers tbody .row-check:not(:disabled)').prop('checked', this.checked);
-    });
+            $('#checkAll').on('change', function() {
+                $('#tblUsers tbody .row-check:not(:disabled)').prop('checked', this.checked);
+            });
 
-    // Preview signature
-    $(document).on('click', '.js-signature', function(e){
-        e.preventDefault();
-        const img = this.dataset.img;
-        if (!img) return;
-        Swal.fire({
-            title: 'Signature',
-            imageUrl: img,
-            imageAlt: 'Signature',
-            imageWidth: 450,
-            showCloseButton: true,
-            showConfirmButton: false
-        });
-    });
+            // Preview signature
+            $(document).on('click', '.js-signature', function(e) {
+                e.preventDefault();
+                const img = this.dataset.img;
+                if (!img) return;
+                Swal.fire({
+                    title: 'Signature',
+                    imageUrl: img,
+                    imageAlt: 'Signature',
+                    imageWidth: 450,
+                    showCloseButton: true,
+                    showConfirmButton: false
+                });
+            });
 
-    // Export CSV
-    $('#btnExportCSV').on('click', function(e){
-        e.preventDefault();
-        const headers = ['ID','Name','Username','Email','Phone','Position','Roles','Warehouse','Status','Created','Updated'];
-        let csv = headers.join(',') + '\n';
-        $('#tblUsers tbody tr:visible').each(function(){
-            const t = $(this).find('td');
-            csv += [
-                t.eq(1).text().trim(),
-                t.eq(2).text().trim(),
-                t.eq(3).text().trim(),
-                t.eq(4).text().trim(),
-                t.eq(5).text().trim(),
-                t.eq(6).text().trim(),
-                t.eq(8).text().trim(),
-                t.eq(9).text().trim(),
-                t.eq(10).text().trim(),
-                t.eq(11).text().trim(),
-                t.eq(12).text().trim()
-            ].join(',') + '\n';
-        });
-        const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-        const url  = URL.createObjectURL(blob);
-        $('<a>').attr({href:url, download:'users.csv'})[0].click();
-        setTimeout(()=>URL.revokeObjectURL(url), 500);
-    });
+            // Export CSV
+            $('#btnExportCSV').on('click', function(e) {
+                e.preventDefault();
+                const headers = ['ID', 'Name', 'Username', 'Email', 'Phone', 'Position', 'Roles',
+                    'Warehouse', 'Status', 'Created', 'Updated'
+                ];
+                let csv = headers.join(',') + '\n';
+                $('#tblUsers tbody tr:visible').each(function() {
+                    const t = $(this).find('td');
+                    csv += [
+                        t.eq(1).text().trim(),
+                        t.eq(2).text().trim(),
+                        t.eq(3).text().trim(),
+                        t.eq(4).text().trim(),
+                        t.eq(5).text().trim(),
+                        t.eq(6).text().trim(),
+                        t.eq(8).text().trim(),
+                        t.eq(9).text().trim(),
+                        t.eq(10).text().trim(),
+                        t.eq(11).text().trim(),
+                        t.eq(12).text().trim()
+                    ].join(',') + '\n';
+                });
+                const blob = new Blob([csv], {
+                    type: 'text/csv;charset=utf-8;'
+                });
+                const url = URL.createObjectURL(blob);
+                $('<a>').attr({
+                    href: url,
+                    download: 'users.csv'
+                })[0].click();
+                setTimeout(() => URL.revokeObjectURL(url), 500);
+            });
 
-    $('#btnExportPrint').on('click', function(e){ e.preventDefault(); window.print(); });
+            $('#btnExportPrint').on('click', function(e) {
+                e.preventDefault();
+                window.print();
+            });
 
-    // toggle warehouse on add
-    function toggleAddWarehouse() {
-        @if($isWarehouseUser)
-            $('#wrap_add_wh').show(); return;
-        @endif
-        const val = $('#add_roles').val();
-        const vals = val ? [val] : [];
-        const need = vals.includes('warehouse') || vals.includes('sales');
-        $('#wrap_add_wh').toggle(need);
-        if (!need) $('#wrap_add_wh select').val('');
-    }
-    $('#add_roles').on('change', toggleAddWarehouse);
-    toggleAddWarehouse();
-
-    // Edit modal
-    const modalEl = document.getElementById('glassEditUser');
-    const modal   = modalEl ? new bootstrap.Modal(modalEl) : null;
-    const form    = document.getElementById('formEditUser');
-    const baseUrl = @json(url('users'));
-
-    function toggleEditWarehouse() {
-        @if($isWarehouseUser)
-            $('#wrap_edit_wh').show(); return;
-        @endif
-        const val = $('#edit_roles').val();
-        const vals = val ? [val] : [];
-        const need = vals.includes('warehouse') || vals.includes('sales');
-        $('#wrap_edit_wh').toggle(need);
-        if (!need) $('#edit_warehouse_id').val('');
-    }
-
-    $(document).on('click', '.js-edit', function(e){
-        e.preventDefault();
-        const d = this.dataset;
-        form.setAttribute('action', baseUrl + '/' + d.id);
-        $('#edit_id').val(d.id);
-        $('#edit_name').val(d.name || '');
-        $('#edit_username').val(d.username || '');
-        $('#edit_email').val(d.email || '');
-        $('#edit_phone').val(d.phone || '');
-        $('#edit_position').val(d.position || '');
-
-        @if(!$isWarehouseUser)
-            const roles = (d.roles || '').split(',').filter(Boolean);
-            $('#edit_roles').val(roles[0] || '');
-        @endif
-
-        $('#edit_status').val((d.status || 'active').toLowerCase());
-
-        $('#edit_warehouse_id').val(d.warehouse_id || '');
-        toggleEditWarehouse();
-
-        form.querySelector('input[name="password"]').value = '';
-        form.querySelector('input[name="password_confirmation"]').value = '';
-        modal?.show();
-    });
-
-    $('#edit_roles').on('change', toggleEditWarehouse);
-
-    function getCheckedIds(){
-        const ids=[];
-        $('#tblUsers tbody tr').each(function(){
-            const cb = $(this).find('.row-check');
-            if (cb.is(':checked') && !cb.is(':disabled')) {
-                const id = $(this).find('td').eq(1).text().trim();
-                if (id) ids.push(Number(id));
+            // toggle warehouse on add
+            function toggleAddWarehouse() {
+                @if ($isWarehouseUser)
+                    $('#wrap_add_wh').show();
+                    return;
+                @endif
+                const val = $('#add_roles').val();
+                const vals = val ? [val] : [];
+                const need = vals.includes('warehouse') || vals.includes('sales');
+                $('#wrap_add_wh').toggle(need);
+                if (!need) $('#wrap_add_wh select').val('');
             }
+            $('#add_roles').on('change', toggleAddWarehouse);
+            toggleAddWarehouse();
+
+            // Edit modal
+            const modalEl = document.getElementById('glassEditUser');
+            const modal = modalEl ? new bootstrap.Modal(modalEl) : null;
+            const form = document.getElementById('formEditUser');
+            const baseUrl = @json(url('users'));
+
+            function toggleEditWarehouse() {
+                @if ($isWarehouseUser)
+                    $('#wrap_edit_wh').show();
+                    return;
+                @endif
+                const val = $('#edit_roles').val();
+                const vals = val ? [val] : [];
+                const need = vals.includes('warehouse') || vals.includes('sales');
+                $('#wrap_edit_wh').toggle(need);
+                if (!need) $('#edit_warehouse_id').val('');
+            }
+
+            $(document).on('click', '.js-edit', function(e) {
+                e.preventDefault();
+                const d = this.dataset;
+                form.setAttribute('action', baseUrl + '/' + d.id);
+                $('#edit_id').val(d.id);
+                $('#edit_name').val(d.name || '');
+                $('#edit_username').val(d.username || '');
+                $('#edit_email').val(d.email || '');
+                $('#edit_phone').val(d.phone || '');
+                $('#edit_position').val(d.position || '');
+
+                @if (!$isWarehouseUser)
+                    const roles = (d.roles || '').split(',').filter(Boolean);
+                    $('#edit_roles').val(roles[0] || '');
+                @endif
+
+                $('#edit_status').val((d.status || 'active').toLowerCase());
+
+                $('#edit_warehouse_id').val(d.warehouse_id || '');
+                toggleEditWarehouse();
+
+                form.querySelector('input[name="password"]').value = '';
+                form.querySelector('input[name="password_confirmation"]').value = '';
+                modal?.show();
+            });
+
+            $('#edit_roles').on('change', toggleEditWarehouse);
+
+            function getCheckedIds() {
+                const ids = [];
+                $('#tblUsers tbody tr').each(function() {
+                    const cb = $(this).find('.row-check');
+                    if (cb.is(':checked') && !cb.is(':disabled')) {
+                        const id = $(this).find('td').eq(1).text().trim();
+                        if (id) ids.push(Number(id));
+                    }
+                });
+                return ids;
+            }
+
+            // Delete single
+            $('#tblUsers').on('click', '.js-del', function(e) {
+                e.preventDefault();
+                const id = this.dataset.id;
+                const name = this.dataset.name || 'user';
+                Swal.fire({
+                    title: 'Hapus user?',
+                    html: `<div class="text-muted">Data <b>${name}</b> akan dihapus permanen.</div>`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Ya, hapus!',
+                    cancelButtonText: 'Batal',
+                    confirmButtonColor: '#d33'
+                }).then(res => {
+                    if (!res.isConfirmed) return;
+                    fetch(baseUrl + '/' + id, {
+                        method: 'DELETE',
+                        headers: {
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                            'Accept': 'application/json'
+                        }
+                    }).then(async r => {
+                        if (!r.ok) {
+                            const tx = await r.text();
+                            throw new Error(tx || 'Gagal menghapus.');
+                        }
+                        location.reload();
+                    }).catch(err => Swal.fire('Error', err.message || 'Gagal menghapus.',
+                        'error'));
+                });
+            });
+
+            // Bulk delete
+            $('#btnBulkDelete').on('click', function(e) {
+                e.preventDefault();
+                const ids = getCheckedIds();
+                if (!ids.length) return Swal.fire('Info', 'Pilih minimal satu baris.', 'info');
+                Swal.fire({
+                    title: 'Hapus data terpilih?',
+                    html: `Total <b>${ids.length}</b> user`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Ya, hapus!',
+                    confirmButtonColor: '#d33'
+                }).then(res => {
+                    if (!res.isConfirmed) return;
+                    fetch(@json(route('users.bulk-destroy')), {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        },
+                        body: JSON.stringify({
+                            ids
+                        })
+                    }).then(async r => {
+                        if (!r.ok) {
+                            throw new Error(await r.text() || 'Gagal bulk delete.');
+                        }
+                        location.reload();
+                    }).catch(err => Swal.fire('Error', err.message || 'Gagal bulk delete.',
+                        'error'));
+                });
+            });
+
+            // auto show add modal on validation error
+            @if ($errors->any() && !session('edit_open_id'))
+                new bootstrap.Modal(document.getElementById('glassAddUser')).show();
+            @endif
+
+            @if (session('success'))
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Success',
+                    text: @json(session('success')),
+                    timer: 1800,
+                    showConfirmButton: false
+                });
+            @endif
+            @if (session('edit_success'))
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Success',
+                    text: @json(session('edit_success')),
+                    timer: 1800,
+                    showConfirmButton: false
+                });
+            @endif
         });
-        return ids;
-    }
-
-    // Delete single
-    $('#tblUsers').on('click', '.js-del', function(e){
-        e.preventDefault();
-        const id   = this.dataset.id;
-        const name = this.dataset.name || 'user';
-        Swal.fire({
-            title: 'Hapus user?',
-            html: `<div class="text-muted">Data <b>${name}</b> akan dihapus permanen.</div>`,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonText: 'Ya, hapus!',
-            cancelButtonText: 'Batal',
-            confirmButtonColor: '#d33'
-        }).then(res => {
-            if (!res.isConfirmed) return;
-            fetch(baseUrl + '/' + id, {
-                method: 'DELETE',
-                headers: {'X-CSRF-TOKEN':'{{ csrf_token() }}','Accept':'application/json'}
-            }).then(async r => {
-                if (!r.ok) { const tx = await r.text(); throw new Error(tx || 'Gagal menghapus.'); }
-                location.reload();
-            }).catch(err => Swal.fire('Error', err.message || 'Gagal menghapus.','error'));
-        });
-    });
-
-    // Bulk delete
-    $('#btnBulkDelete').on('click', function(e){
-        e.preventDefault();
-        const ids = getCheckedIds();
-        if (!ids.length) return Swal.fire('Info','Pilih minimal satu baris.','info');
-        Swal.fire({
-            title:'Hapus data terpilih?',
-            html:`Total <b>${ids.length}</b> user`,
-            icon:'warning',
-            showCancelButton:true,
-            confirmButtonText:'Ya, hapus!',
-            confirmButtonColor:'#d33'
-        }).then(res=>{
-            if (!res.isConfirmed) return;
-            fetch(@json(route('users.bulk-destroy')), {
-                method:'POST',
-                headers:{'Content-Type':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}'},
-                body: JSON.stringify({ids})
-            }).then(async r=>{
-                if (!r.ok) { throw new Error(await r.text() || 'Gagal bulk delete.'); }
-                location.reload();
-            }).catch(err=> Swal.fire('Error', err.message || 'Gagal bulk delete.','error'));
-        });
-    });
-
-    // auto show add modal on validation error
-    @if ($errors->any() && !session('edit_open_id'))
-        new bootstrap.Modal(document.getElementById('glassAddUser')).show();
-    @endif
-
-    @if (session('success'))
-        Swal.fire({icon:'success',title:'Success',text:@json(session('success')),timer:1800,showConfirmButton:false});
-    @endif
-    @if (session('edit_success'))
-        Swal.fire({icon:'success',title:'Success',text:@json(session('edit_success')),timer:1800,showConfirmButton:false});
-    @endif
-});
-</script>
+    </script>
 @endpush

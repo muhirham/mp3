@@ -138,30 +138,6 @@ return [
             'group'      => 'sales',
             'icon'       => 'bx bx-key',
         ],
-        [
-            'key'   => 'sales_return',
-            'label' => 'Return Products',
-            'route' => 'sales.return',
-            'group' => 'sales',
-            'icon'  => 'bx bx-undo',
-        ],
-
-        // ================== REPORT / TRANSACTIONS ==================
-        [
-            'key'   => 'transactions',
-            'label' => 'Transactions',
-            'route' => 'transactions.index', // masih placeholder
-            'group' => 'reports',
-            'icon'  => 'bx bx-transfer',
-        ],
-        [
-            'key'   => 'reports',
-            'label' => 'Reports',
-            'route' => 'reports.index',
-            'group' => 'reports',
-            'icon'  => 'bx bx-file',
-        ],
-
         // ================== MASTER DATA ==================
         [
         'key'   => 'company',
@@ -192,7 +168,6 @@ return [
         'warehouse'   => ['label' => 'Warehouse',   'icon' => 'bx bx-buildings'],
         'procurement' => ['label' => 'Procurement', 'icon' => 'bx bx-cart'],
         'sales'       => ['label' => 'Sales',       'icon' => 'bx bx-line-chart'],
-        'reports'     => ['label' => 'Reports',     'icon' => 'bx bx-file'],
         'master'      => ['label' => 'Master Data', 'icon' => 'bx bx-slider-alt'],
     ],
 

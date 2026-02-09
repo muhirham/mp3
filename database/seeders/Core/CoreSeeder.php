@@ -1,6 +1,6 @@
 <?php
 
-namespace Database\Seeders;
+namespace Database\Seeders\Core;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -18,6 +18,8 @@ class CoreSeeder extends Seeder
 {
     public function run(): void
     {
+        $sales_bkt = User::where('username', 'sales_bukittinggi')->firstOrFail();
+        $sales_pdg = User::where('username', 'sales_padang')->firstOrFail();
         /*
          * ===========================
          *  SUPPLIER (REAL)
@@ -279,205 +281,6 @@ class CoreSeeder extends Seeder
             'selling_price'    => 10900,
         ]);
 
-        /*
-         * ===========================
-         *  ROLES (ALL) + MENU KEYS
-         *  - nyambung ke config/menu.php lu
-         * ===========================
-         */
-        $basicRoles = [
-            'superadmin'  => 'Super Admin',
-            'admin'       => 'Admin',
-            'warehouse'   => 'Warehouse',
-            'sales'       => 'Sales',
-            'procurement' => 'Procurement',
-            'ceo'         => 'CEO',
-        ];
-
-        foreach ($basicRoles as $slug => $name) {
-            Role::updateOrCreate(['slug' => $slug], ['name' => $name]);
-        }
-
-        $items = collect(config('menu.items', []));
-        $allKeys = $items->pluck('key')->filter()->values()->all(); // keep order
-
-        $pickByOrder = function (array $wanted) use ($allKeys) {
-            $wantedSet = array_flip($wanted);
-            $out = [];
-            foreach ($allKeys as $k) {
-                if (isset($wantedSet[$k])) $out[] = $k;
-            }
-            return array_values(array_unique($out));
-        };
-
-        $warehouseKeys = $pickByOrder(array_merge(
-            $items->where('group', 'warehouse')->pluck('key')->all(),
-            ['wh_restock'] // walau group-nya procurement, warehouse tetap butuh menu ini
-        ));
-
-        $salesKeys = $items->where('group', 'sales')->pluck('key')->filter()->values()->all();
-
-        $procurementKeys = $pickByOrder([
-            'products','packages','categories','suppliers',
-            'warehouses',
-            'wh_restock','restock_request_ap','po',
-            'company',
-        ]);
-
-        $ceoKeys = $pickByOrder([
-            'po',
-            'wh_sales_reports',
-            'reports',
-            'company',
-        ]);
-
-        $roleMenuRows = [
-            [
-                'slug'       => 'superadmin',
-                'home_route' => 'admin.dashboard',
-                'menu_keys'  => $allKeys,
-            ],
-            [
-                'slug'       => 'admin',
-                'home_route' => 'admin.dashboard',
-                'menu_keys'  => $allKeys,
-            ],
-            [
-                'slug'       => 'warehouse',
-                'home_route' => 'warehouse.dashboard',
-                'menu_keys'  => $warehouseKeys,
-            ],
-            [
-                'slug'       => 'sales',
-                'home_route' => 'sales.dashboard',
-                'menu_keys'  => $salesKeys,
-            ],
-            [
-                'slug'       => 'procurement',
-                'home_route' => 'admin.dashboard',
-                'menu_keys'  => $procurementKeys,
-            ],
-            [
-                'slug'       => 'ceo',
-                'home_route' => 'admin.dashboard',
-                'menu_keys'  => $ceoKeys,
-            ],
-        ];
-
-        foreach ($roleMenuRows as $data) {
-            Role::updateOrCreate(
-                ['slug' => $data['slug']],
-                [
-                    'home_route' => $data['home_route'],
-                    'menu_keys'  => $data['menu_keys'],
-                ]
-            );
-        }
-
-        /*
-         * ===========================
-         *  USERS
-         * ===========================
-         */
-        $roleSuperadmin  = Role::where('slug', 'superadmin')->first();
-        $roleAdmin       = Role::where('slug', 'admin')->first();
-        $roleWarehouse   = Role::where('slug', 'warehouse')->first();
-        $roleSales       = Role::where('slug', 'sales')->first();
-        $roleProcurement = Role::where('slug', 'procurement')->first();
-        $roleCeo         = Role::where('slug', 'ceo')->first();
-
-        $roleForAdminUser = $roleSuperadmin ?: $roleAdmin;
-
-        $admin = User::updateOrCreate(
-            ['email' => 'admin@local'],
-            [
-                'name'         => 'Admin Pusat',
-                'username'     => 'admin',
-                'phone'        => '081200000001',
-                'password'     => Hash::make('password123'),
-                'warehouse_id' => null,
-                'status'       => 'active',
-            ]
-        );
-        if ($roleForAdminUser) $admin->roles()->sync([$roleForAdminUser->id]);
-
-        $wh_bkt = User::updateOrCreate(
-            ['email' => 'wh_bukittinggi@local'],
-            [
-                'name'         => 'Admin DEPO Bukittinggi',
-                'username'     => 'wh_bukittinggi',
-                'phone'        => '081200000002',
-                'password'     => Hash::make('password123'),
-                'warehouse_id' => $wh1->id,
-                'status'       => 'active',
-            ]
-        );
-        if ($roleWarehouse) $wh_bkt->roles()->sync([$roleWarehouse->id]);
-
-        $wh_pdg = User::updateOrCreate(
-            ['email' => 'wh_padang@local'],
-            [
-                'name'         => 'Admin DEPO Padang',
-                'username'     => 'wh_padang',
-                'phone'        => '081200000003',
-                'password'     => Hash::make('password123'),
-                'warehouse_id' => $wh2->id,
-                'status'       => 'active',
-            ]
-        );
-        if ($roleWarehouse) $wh_pdg->roles()->sync([$roleWarehouse->id]);
-
-        $sales_bkt = User::updateOrCreate(
-            ['email' => 'sales_bukittinggi@local'],
-            [
-                'name'         => 'Sales DEPO Bukittinggi',
-                'username'     => 'sales_bukittinggi',
-                'phone'        => '081200000004',
-                'password'     => Hash::make('password123'),
-                'warehouse_id' => $wh1->id,
-                'status'       => 'active',
-            ]
-        );
-        if ($roleSales) $sales_bkt->roles()->sync([$roleSales->id]);
-
-        $sales_pdg = User::updateOrCreate(
-            ['email' => 'sales_padang@local'],
-            [
-                'name'         => 'Sales DEPO Padang',
-                'username'     => 'sales_padang',
-                'phone'        => '081200000005',
-                'password'     => Hash::make('password123'),
-                'warehouse_id' => $wh2->id,
-                'status'       => 'active',
-            ]
-        );
-        if ($roleSales) $sales_pdg->roles()->sync([$roleSales->id]);
-
-        $procUser = User::updateOrCreate(
-            ['email' => 'procurement@local'],
-            [
-                'name'         => 'User Procurement',
-                'username'     => 'procurement',
-                'phone'        => '081200000006',
-                'password'     => Hash::make('password123'),
-                'warehouse_id' => null,
-                'status'       => 'active',
-            ]
-        );
-        if ($roleProcurement) $procUser->roles()->sync([$roleProcurement->id]);
-
-        $ceoUser = User::updateOrCreate(
-            ['email' => 'ceo@local'],
-            [
-                'name'         => 'Chief Executive Officer',
-                'username'     => 'ceo',
-                'phone'        => '081200000007',
-                'password'     => Hash::make('password123'),
-                'warehouse_id' => null,
-                'status'       => 'active',
-            ]
-        );
-        if ($roleCeo) $ceoUser->roles()->sync([$roleCeo->id]);
 
         /*
          * ===========================
@@ -521,3 +324,5 @@ class CoreSeeder extends Seeder
         }
     }
 }
+
+
