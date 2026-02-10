@@ -16,7 +16,6 @@
         <small class="text-muted">Animated cards • SweetAlert CRUD • Client pagination</small>
         </div>
         <div class="d-flex gap-2">
-        <input id="searchBox" class="form-control" placeholder="Search warehouse..." style="min-width:260px">
         </div>
     </div>
 
@@ -118,6 +117,11 @@
     </style>
 
     <script>
+        window.IS_WAREHOUSE_USER = @json(auth()->user()->hasRole('warehouse'));
+        window.MY_WAREHOUSE_ID   = @json(auth()->user()->warehouse_id);
+    </script>
+
+    <script>
     $(function(){
     const baseUrl = @json(url('warehouses'));
     const CSRF   = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
@@ -157,6 +161,9 @@
     function clamp(p){ return Math.min(Math.max(1,p), totalPages()); }
 
     function cardHTML(w, no){
+        const canEdit =
+        !window.IS_WAREHOUSE_USER ||
+        (window.IS_WAREHOUSE_USER && w.id === window.MY_WAREHOUSE_ID);
         return `
         <div class="col-sm-6 col-lg-4">
             <div class="wh-card" data-id="${w.id}">
@@ -167,8 +174,15 @@
                 <div class="small-dim">${w.address || '-'}</div>
                 <div class="small-dim mt-1">${w.note || ''}</div>
                 <div class="mt-3 d-flex gap-2">
-                    <button class="btn btn-outline-dark btn-sm js-edit">Edit</button>
-                    <button class="btn btn-outline-danger btn-sm js-del">Del</button>
+                    ${
+                            canEdit
+                                ? `<button class="btn btn-outline-dark btn-sm js-edit">Edit</button>`
+                                : `<span class="badge bg-secondary">Read only</span>`
+                        }
+                ${!window.IS_WAREHOUSE_USER
+                    ? `<button class="btn btn-outline-danger btn-sm js-del">Del</button>`
+                    : ''
+                }
                 </div>
                 </div>
                 <div class="wh-face wh-back">
@@ -198,6 +212,7 @@
         slice.forEach((w,i)=> grid.append(cardHTML(w, start+i+1)));
 
         // Add-card
+        if (!window.IS_WAREHOUSE_USER) {
         grid.append(`
         <div class="col-sm-6 col-lg-4">
             <div class="wh-card add-card" id="cardAdd">
@@ -209,6 +224,7 @@
             </div>
         </div>
         `);
+        }
 
         // pager
         pager.empty();
@@ -240,7 +256,7 @@
     render();
 
     // Search
-    $('#searchBox').on('input', function(){
+    $('#globalSearch').on('input', function(){
         keyword = this.value || '';
         currentPage = 1;
         render();
@@ -273,6 +289,7 @@
 
     // DELETE
     grid.on('click','.js-del', async function(e){
+        if (window.IS_WAREHOUSE_USER) return;
         e.stopPropagation();
         const id = $(this).closest('.wh-card').data('id');
         const wh = warehouses.find(x=>x.id==id);
@@ -332,6 +349,7 @@
 
     // CREATE
     grid.on('click','#cardAdd', function(){
+        if (window.IS_WAREHOUSE_USER) return;
         const defaultCode = suggestNextCode();
 
         Alert.fire({
@@ -382,7 +400,7 @@
 
             const j = await res.json(); // {row: {...}}
             warehouses.push(j.row);
-            if(keyword){ keyword=''; $('#searchBox').val(''); }
+            if(keyword){ keyword=''; $('#globalSearch').val(''); }
             currentPage = Math.ceil(warehouses.length / pageSize);
             render();
             await okBx('Added','New warehouse created.');
