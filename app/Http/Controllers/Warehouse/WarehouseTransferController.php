@@ -7,7 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
-
+use App\Exports\TransferWarehouse\WarehouseTransferIndexWithItemsExport;
+use Maatwebsite\Excel\Facades\Excel;
 use App\Models\WarehouseTransfer;
 use App\Models\WarehouseTransferItem;
 use App\Models\WarehouseTransferLog;
@@ -528,7 +529,7 @@ class WarehouseTransferController extends Controller
         $canApproveDestination =
             $transfer->status === 'pending_destination'
             && (
-                // warehouse user WAJIB cocok gudang tujuan
+                // warehouse user WAJIB cocok gudang tujuan€
                 ($me->hasRole('warehouse') && $me->warehouse_id === $transfer->destination_warehouse_id)
 
                 // admin & superadmin bebas approve
@@ -620,4 +621,84 @@ class WarehouseTransferController extends Controller
             'receivedLog' => $receivedLog,
         ]);
     }
+
+    public function exportIndexExcel(Request $request)
+    {
+        $q      = trim((string) $request->input('q', ''));
+        $status = (string) $request->input('status', '');
+        $fromWh = (string) $request->input('from_warehouse_id', '');
+        $toWh   = (string) $request->input('to_warehouse_id', '');
+
+        $from = $request->input('from_date');
+        $to   = $request->input('to_date');
+        $useDate = $from && $to;
+
+        $key = now()->format('YmdHis');
+
+        $query = WarehouseTransfer::query()
+            ->with([
+                'items.product',
+                'sourceWarehouse',
+                'destinationWarehouse',
+                'creator',
+            ])
+            ->orderByDesc('id');
+
+        if ($q !== '') {
+            $query->where('transfer_code', 'like', "%{$q}%");
+        }
+
+        if ($status !== '') {
+            $query->where('status', $status);
+        }
+
+        if ($fromWh !== '') {
+            $query->where('source_warehouse_id', $fromWh);
+        }
+
+        if ($toWh !== '') {
+            $query->where('destination_warehouse_id', $toWh);
+        }
+
+        if ($useDate) {
+            $query->whereBetween(
+                'created_at',
+                [
+                    \Carbon\Carbon::parse($from)->startOfDay(),
+                    \Carbon\Carbon::parse($to)->endOfDay()
+                ]
+            );
+        }
+
+        $transfers = $query->get();
+
+        $company = Company::where('is_default', true)
+            ->where('is_active', true)
+            ->first();
+
+        $meta = [
+                'filters' => [
+                    'Status' => $request->status ?: 'All',
+                    'From Warehouse' => optional(
+                        \App\Models\Warehouse::find($request->from_warehouse_id)
+                    )->warehouse_name ?: 'All',
+                    'To Warehouse' => optional(
+                        \App\Models\Warehouse::find($request->to_warehouse_id)
+                    )->warehouse_name ?: 'All',
+                    'Search' => $request->q ?: '-',
+                ]
+            ];
+
+        $filename = "WT-INDEX-DETAIL-{$key}.xlsx";
+
+        return Excel::download(
+            new WarehouseTransferIndexWithItemsExport(
+                $transfers,
+                $meta,
+                $company
+            ),
+            $filename
+        );
+    }
+
 }

@@ -445,10 +445,14 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::post('/warehouse/transfer-forms/{transfer}/cancel', [WarehouseTransferController::class, 'cancel'])
         ->name('warehouse-transfer-forms.cancel')
         ->middleware('menu: wh_transfers');
-        
 
-    Route::get('/warehouse-transfer/{transfer}/print-sj',[WarehouseTransferController::class, 'printSJ'])
+    Route::get('/warehouse-transfer/{transfer}/print-sj', [WarehouseTransferController::class, 'printSJ'])
         ->name('warehouse-transfer.print-sj')
+        ->middleware('menu:wh_transfers');
+
+    // routes/web.php
+    Route::get('/warehouse/transfer/export',[WarehouseTransferController::class, 'exportIndexExcel'])
+        ->name('warehouse-transfer.export')
         ->middleware('menu:wh_transfers');
 
 
@@ -509,14 +513,6 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->name('warehouse.handovers.payments.reject')
         ->middleware('menu:wh_sales_reports');
 
-    Route::get('/sales/return', [WhSalesController::class, 'return'])
-        ->name('sales.return')
-        ->middleware('menu:sales_return');
-
 
     /* === Reports (umum) – key: reports === */
-
-    Route::resource('/reports', ReportController::class)
-        ->only(['index'])
-        ->middleware('menu:reports');
 });

@@ -11,6 +11,7 @@ class WarehouseController extends Controller
 {
     public function index()
     {
+    
         $warehouses = Warehouse::orderBy('id')->get();
 
         // kirim juga kode berikutnya untuk dipakai default di modal
@@ -21,6 +22,11 @@ class WarehouseController extends Controller
 
     public function store(Request $r)
     {
+
+        if (auth()->user()->hasRole('warehouse')) {
+        abort(403);
+    }
+
         $data = $r->validate([
             'warehouse_code' => ['nullable','string','max:50','unique:warehouses,warehouse_code'],
             'warehouse_name' => ['required','string','max:150'],
@@ -40,6 +46,14 @@ class WarehouseController extends Controller
 
     public function update(Request $r, Warehouse $warehouse)
     {
+
+        $me = auth()->user();
+
+        // warehouse cuma boleh edit gudangnya sendiri
+        if ($me->hasRole('warehouse') && $me->warehouse_id !== $warehouse->id) {
+            abort(403);
+        }
+
         $data = $r->validate([
             'warehouse_code' => [
                 'required','string','max:50',
@@ -57,6 +71,9 @@ class WarehouseController extends Controller
 
     public function destroy(Warehouse $warehouse)
     {
+        if (auth()->user()->hasRole('warehouse')) {
+            abort(403);
+        }
         $warehouse->delete();
         return response()->noContent(); // 204
     }
