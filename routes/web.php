@@ -479,6 +479,11 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->name('daily.report.detail')
         ->middleware('menu:sales_daily');
 
+    Route::get('/reports/sales/export', [SalesHandoverController::class,'exportSalesExcel'])
+        ->name('sales.report.export');
+        
+
+
     // key: sales_otp
     Route::get('/sales/otp-items', [HandoverOtpItemsController::class, 'index'])
         ->name('sales.otp.items')

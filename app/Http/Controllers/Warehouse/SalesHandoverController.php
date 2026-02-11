@@ -8,6 +8,7 @@ use App\Models\SalesHandover;
 use App\Models\SalesHandoverItem;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Models\Company; 
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +17,9 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use App\Mail\SalesHandoverOtpMail;
 use Illuminate\Support\Collection;
+use App\Exports\Sales\SalesReportExport;
+use Maatwebsite\Excel\Facades\Excel;
+
 
 class SalesHandoverController extends Controller
 {
@@ -1645,4 +1649,81 @@ class SalesHandoverController extends Controller
         ]);
     }
 
+    
+
+    public function exportSalesExcel(Request $request)
+    {
+        $me = auth()->user();
+
+        // 🔥 AMBIL FILTER PERSIS SAMA reportIndex
+        $dateFrom = $request->query('date_from', now()->toDateString());
+        $dateTo   = $request->query('date_to', now()->toDateString());
+        if ($dateFrom > $dateTo) [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
+
+        $status      = $request->query('status', 'all');
+        $warehouseId = $request->query('warehouse_id');
+        $salesId     = $request->query('sales_id');
+        $search      = trim((string) $request->query('q', ''));
+        $view        = $request->query('view', 'handover');
+
+        // ===== ROLE LOCK (COPY DARI reportIndex) =====
+        $roles = $me->roles ?? collect();
+        $isWarehouse = $roles->contains('slug', 'warehouse');
+        $isSales     = $roles->contains('slug', 'sales');
+        $isAdminLike = $roles->contains('slug','admin') || $roles->contains('slug','superadmin');
+
+        if ($isWarehouse && $me->warehouse_id && ! $isAdminLike) {
+            $warehouseId = $me->warehouse_id;
+        }
+
+        if ($isSales && ! $isAdminLike && ! $isWarehouse) {
+            $salesId = $me->id;
+            if ($me->warehouse_id) $warehouseId = $me->warehouse_id;
+        }
+
+        // ===== QUERY BASE =====
+        $query = SalesHandover::with(['warehouse','sales','items'])
+            ->whereBetween('handover_date', [$dateFrom, $dateTo]);
+
+        if ($status !== 'all') $query->where('status', $status);
+        if ($warehouseId)      $query->where('warehouse_id', $warehouseId);
+        if ($salesId)          $query->where('sales_id', $salesId);
+
+        if ($search !== '') {
+            $q = "%{$search}%";
+            $query->where(function ($sub) use ($q) {
+                $sub->where('code','like',$q)
+                    ->orWhereHas('sales', fn($s)=>$s->where('name','like',$q));
+            });
+        }
+
+        $handovers = $query
+            ->orderBy('handover_date','desc')
+            ->orderBy('code')
+            ->get();
+
+        // ===== META BUAT HEADER EXCEL =====
+        $meta = [
+            'filters' => [
+                'Periode'   => "{$dateFrom} s/d {$dateTo}",
+                'View'      => ucfirst($view),
+                'Status'    => $status === 'all' ? 'Semua' : strtoupper($status),
+                'Warehouse' => optional(Warehouse::find($warehouseId))->warehouse_name ?? 'Semua',
+                'Sales'     => optional(User::find($salesId))->name ?? 'Semua',
+                'Search'    => $search ?: '-',
+            ]
+        ];
+
+        $me = auth()->user()->load('company');
+
+        $company = $me->company
+            ?? Company::where('is_default', true)->first()
+            ?? Company::first();
+
+        return Excel::download(
+            new SalesReportExport($handovers, $view, $meta, $company),
+            'SALES-REPORT-' . now()->format('Ymd_His') . '.xlsx'
+        );
+
+    }
 }

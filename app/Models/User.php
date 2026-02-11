@@ -7,6 +7,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Models\Role;
 use App\Models\Warehouse;
+use App\Models\Company;
 
 class User extends Authenticatable
 {
@@ -82,5 +83,10 @@ class User extends Authenticatable
     public function allowedMenuKeys(): array
     {
         return $this->allMenuKeys();
+    }
+
+    public function company()
+    {
+        return $this->belongsTo(Company::class);
     }
 }

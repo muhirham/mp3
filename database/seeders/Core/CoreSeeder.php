@@ -324,5 +324,3 @@ class CoreSeeder extends Seeder
         }
     }
 }
-
-
