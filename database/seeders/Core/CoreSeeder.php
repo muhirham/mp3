@@ -3,7 +3,6 @@
 namespace Database\Seeders\Core;
 
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
 use App\Models\Supplier;
 use App\Models\Warehouse;
@@ -11,7 +10,6 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
 use App\Models\StockLevel;
-use App\Models\Role;
 use App\Models\Package;
 
 class CoreSeeder extends Seeder
@@ -127,6 +125,11 @@ class CoreSeeder extends Seeder
             ['category_name' => 'Saldo Elektronik', 'description' => 'Produk saldo elektronik']
         );
 
+        $catKpk = Category::updateOrCreate(
+            ['category_code' => 'CAT-KPK'],
+            ['category_name' => 'Kartu', 'description' => 'Produk kartu pedana kosong']
+        );
+
         $catAset = Category::updateOrCreate(
             ['category_code' => 'CAT-AST'],
             ['category_name' => 'Aset & Perangkat', 'description' => 'Modem, brankas, filling cabinet, sewa depo, dll.']
@@ -148,10 +151,30 @@ class CoreSeeder extends Seeder
             'purchasing_price' => 500,
             'selling_price'    => 500,
         ]);
+        $p_Sld = Product::updateOrCreate(['product_code' => '0001-P'], [
+            'name'             => 'Saldo Pulsa',
+            'category_id'      => $catSaldo->id,
+            'package_id'       => $pkgRp->id,
+            'supplier_id'      => $supIOH->id,
+            'description'      => 'Saldo Pulsa Elektronik',
+            'stock_minimum'    => 1000000,
+            'purchasing_price' => 1,
+            'selling_price'    => 1,
+        ]);
+        $p_kpk = Product::updateOrCreate(['product_code' => '0002-P'], [
+            'name'             => 'Kartu Perdana Kosong',
+            'category_id'      => $catKpk->id,
+            'package_id'       => $pkgRp->id,
+            'supplier_id'      => $supIOH->id,
+            'description'      => 'Stock Kartu Perdana Kosong',
+            'stock_minimum'    => 500,
+            'purchasing_price' => 1000,
+            'selling_price'    => 1000,
+        ]);
 
         $p_vo_elc = Product::updateOrCreate(['product_code' => '0081-P'], [
             'name'             => 'VO-ELC',
-            'category_id'      => $catSaldo->id,
+            'category_id'      => $catVoucher->id,
             'package_id'       => $pkgPcs->id,
             'supplier_id'      => $supIOH->id,
             'description'      => 'Voucher Saldo Elektronik',
@@ -289,7 +312,7 @@ class CoreSeeder extends Seeder
          * ===========================
          */
         $allProducts = [
-            $p_vo_elc, $p_blank, $p_phy_9gb, $p_phy_3gb, $p_5gb,
+            $p_vo_elc,$p_Sld,$p_kpk, $p_blank, $p_phy_9gb, $p_phy_3gb, $p_5gb,
             $p_hkm, $p_total_asset, $p_modem_pool, $p_brangkas,
             $p_modem_hifi, $p_fingerprint, $p_filling, $p_sewa_depo,
         ];

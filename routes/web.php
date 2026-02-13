@@ -33,6 +33,7 @@ use App\Http\Controllers\Sales\HandoverOtpItemsController;
 
 // OTHERS
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\AssemblyController;
 use App\Http\Controllers\StockLevelController;
 use App\Models\SalesHandover;
 use App\Models\Warehouse;
@@ -481,7 +482,7 @@ Route::middleware(['auth', 'active'])->group(function () {
 
     Route::get('/reports/sales/export', [SalesHandoverController::class,'exportSalesExcel'])
         ->name('sales.report.export');
-        
+
 
 
     // key: sales_otp
@@ -520,4 +521,15 @@ Route::middleware(['auth', 'active'])->group(function () {
 
 
     /* === Reports (umum) – key: reports === */
+    Route::get('/assembly', [AssemblyController::class, 'index'])
+        ->name('assembly.index')
+        ->middleware('menu:assembly');
+
+    Route::get('/assembly/create', [AssemblyController::class, 'create'])
+        ->name('assembly.create')
+        ->middleware('menu:assembly');
+
+    Route::post('/assembly/store', [AssemblyController::class, 'store'])
+        ->name('assembly.store')
+        ->middleware('menu:assembly');
 });

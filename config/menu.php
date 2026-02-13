@@ -160,6 +160,14 @@ return [
             'group' => 'master',
             'icon'  => 'bx bx-shield-quarter',
         ],
+        [
+            'key'   => 'assembly',
+            'label' => 'Assembly',
+            'route' => 'assembly.index',
+            'group' => 'production',
+            'icon'  => 'bx bx-cog',
+        ],
+
     ],
 
     // ==== LABEL & ICON GRUP UNTUK DROPDOWN PARENT ====

@@ -21,4 +21,14 @@ class Product extends Model
     public function stockMovements() { return $this->hasMany(StockMovement::class); }
     public function stockRequests()  { return $this->hasMany(StockRequest::class); }
     public function restocks()       { return $this->hasMany(RequestRestock::class); }
+    
+        public function assemblySaldoUsages()
+    {
+        return $this->hasMany(AssemblyTransaction::class, 'saldo_id');
+    }
+
+    public function assemblyKpkUsages()
+    {
+        return $this->hasMany(AssemblyTransaction::class, 'kpk_id');
+    }
 }
