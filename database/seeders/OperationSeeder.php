@@ -27,6 +27,7 @@ use App\Models\WarehouseTransferItem;
 use App\Models\WarehouseTransferLog;
 
 
+
 class OperationSeeder extends Seeder
 {
     public function run(): void

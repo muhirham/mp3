@@ -136,6 +136,9 @@ class StockLevelController extends Controller
                 DB::raw('products.product_code'),
                 DB::raw('products.name as product_name'),
 
+                DB::raw('COALESCE(products.standard_cost,0) as standard_cost'),
+                DB::raw("COALESCE(products.product_type,'normal') as product_type"),
+
                 $pkgNameCol
                     ? DB::raw("COALESCE(pk.$pkgNameCol, '-') as package_name")
                     : DB::raw("'-' as package_name"),
@@ -183,15 +186,17 @@ class StockLevelController extends Controller
 
             // ==== Ordering ====
                 $orderMap = [
-                    1 => 'products.product_code',
-                    2 => 'product_name',
-                    3 => 'package_name',
-                    4 => 'category_name',
-                    5 => 'supplier_name',
-                    6 => 'quantity',
-                    7 => 'stock_minimum',
-                    9 => 'selling_price',
-                ];
+                1 => 'products.product_code',
+                2 => 'product_name',
+                3 => 'product_type',
+                4 => 'package_name',
+                5 => 'category_name',
+                6 => 'supplier_name',
+                7 => 'quantity',
+                8 => 'stock_minimum',
+                10 => 'standard_cost',
+                11 => 'selling_price',
+            ];
 
             $orderCol = $orderMap[$orderColIdx] ?? 'products.product_code';
             $base->orderBy($orderCol, $orderDir);
@@ -217,12 +222,14 @@ class StockLevelController extends Controller
                             'rownum'        => $start + $idx + 1,
                             'product_code'  => e($r->product_code),
                             'product_name'  => e($r->product_name),
+                            'product_type'  => ucfirst($r->product_type),
                             'package_name'  => e($r->package_name ?? '-'),
                             'category_name' => e($r->category_name ?? '-'),
                             'supplier_name' => e($r->supplier_name ?? '-'),
                             'quantity'      => number_format($qty, 0, ',', '.'),
                             'stock_minimum' => number_format($min, 0, ',', '.'),
                             'status'        => $badge,
+                            'hpp'           => 'Rp' . number_format((float)$r->standard_cost, 0, ',', '.'),
                             'selling_price' => 'Rp' . number_format($selling, 0, ',', '.'),
                         ];
                     });

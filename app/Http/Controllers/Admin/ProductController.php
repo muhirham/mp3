@@ -179,7 +179,6 @@ public function datatable(Request $request)
                 }
             }
 
-
             $stockHtml = $isLow
                 ? '<span class="text-danger fw-bold">' . number_format($qty, 0, ',', '.') . '</span>'
                 : number_format($qty, 0, ',', '.');
