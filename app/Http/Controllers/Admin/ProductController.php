@@ -139,15 +139,17 @@ public function datatable(Request $request)
             1  => 'p.product_code',
             2  => 'p.name',
             3  => 'c.category_name',
-            4  => 'g.package_name',
-            5  => 's.name',
-            6  => 'p.description',
-            7  => 'total_stock',
-            8  => 'p.stock_minimum',
-            // 9 status sengaja ga dipakai
-            10 => 'p.purchasing_price',
-            11 => 'p.selling_price',
+            4  => 'p.product_type',
+            5  => 'g.package_name',
+            6  => 's.name',
+            7  => 'p.description',
+            8  => 'total_stock',
+            9  => 'p.stock_minimum',
+            11 => 'p.purchasing_price',
+            12 => 'p.standard_cost',
+            13 => 'p.selling_price',
         ];
+
         $orderCol = $orderMap[$orderColIdx] ?? 'p.product_code';
 
         $recordsTotal = DB::table('products')

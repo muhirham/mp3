@@ -6,43 +6,62 @@
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css" />
 
     <style>
-        .swal2-container {
-            z-index: 20000 !important;
+        /* Matikan scroll horizontal */
+        .card-body {
+            overflow-x: hidden !important;
         }
 
-        /* ==== TABEL LEBIH RINGKES, GA PERLU SCROLL SAMPING ==== */
+        /* Table */
         #tblProducts {
             width: 100% !important;
             table-layout: fixed;
-            /* lebar kolom dibagi rata, ga nambahin width */
-            font-size: 0.75rem;
-            /* ~12px, lebih kecil biar muat */
+            font-size: 13px;
         }
 
+        /* Semua cell 1 baris */
         #tblProducts th,
         #tblProducts td {
             white-space: nowrap;
-            /* biar teks 1 baris, ga turun ke bawah */
             vertical-align: middle;
-            padding: .35rem .45rem;
-            /* padding diperkecil */
+            padding: 6px 8px;
             overflow: hidden;
-            /* kalau kepanjangan, dipotong */
             text-overflow: ellipsis;
-            /* tampil "..." kalau kepanjangan */
         }
 
-        /* Kolom nama produk dan deskripsi biasanya paling panjang → kasih max-width */
+        /* Perbesar kolom penting */
         #tblProducts th:nth-child(3),
         #tblProducts td:nth-child(3) {
-            max-width: 180px;
+            width: 180px;
         }
 
-        #tblProducts th:nth-child(7),
-        #tblProducts td:nth-child(7) {
-            max-width: 220px;
+        #tblProducts th:nth-child(8),
+        #tblProducts td:nth-child(8) {
+            width: 180px;
+        }
+
+        /* KECILIN KOLOM ANGKA */
+        #tblProducts th:nth-child(9),
+        #tblProducts td:nth-child(9),
+        #tblProducts th:nth-child(10),
+        #tblProducts td:nth-child(10),
+        #tblProducts th:nth-child(11),
+        #tblProducts td:nth-child(11) {
+            width: 75px;
+        }
+
+        /* SEMBUNYIKAN KOLOM YANG GA WAJIB */
+        #tblProducts th:nth-child(12),
+        #tblProducts td:nth-child(12),
+        #tblProducts th:nth-child(13),
+        #tblProducts td:nth-child(13),
+        #tblProducts th:nth-child(14),
+        #tblProducts td:nth-child(14) {
+            display: none;
         }
     </style>
+
+
+
 
     <div class="container-xxl flex-grow-1 container-p-y">
 
