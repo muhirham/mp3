@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+
 class Product extends Model
 {
     use SoftDeletes;
@@ -65,16 +66,6 @@ class Product extends Model
         return $this->hasMany(RequestRestock::class);
     }
 
-        public function assemblySaldoUsages()
-    {
-        return $this->hasMany(AssemblyTransaction::class, 'saldo_id');
-    }
-
-    public function assemblyKpkUsages()
-    {
-        return $this->hasMany(AssemblyTransaction::class, 'kpk_id');
-    }
-
         public function isMaterial()
     {
         return $this->product_type === 'material';
@@ -90,4 +81,23 @@ class Product extends Model
         return $this->product_type === 'normal';
     }
     
+    // BOM sebagai finished product
+    public function bom()
+    {
+        return $this->hasMany(Bom::class);
+    }
+
+    // BOM sebagai material
+    public function usedInBomItems()
+    {
+        return $this->hasMany(BomItem::class, 'material_id');
+    }
+
+    // Production history
+    public function productionTransactions()
+    {
+        return $this->hasMany(BomTransaction::class, 'product_id');
+    }
+
+
 }

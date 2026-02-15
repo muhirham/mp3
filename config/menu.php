@@ -161,12 +161,12 @@ return [
             'icon'  => 'bx bx-shield-quarter',
         ],
         [
-            'key'   => 'assembly',
-            'label' => 'Assembly',
-            'route' => 'assembly.index',
-            'group' => 'production',
+            'key'   => 'bom',
+            'label' => 'BOM & Production',
+            'route' => 'bom.index',
+            'group' => 'master',
             'icon'  => 'bx bx-cog',
-        ],
+        ]
 
     ],
 

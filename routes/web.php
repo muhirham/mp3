@@ -1,8 +1,6 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\DB;
 
 use App\Http\Controllers\Auth\LoginController;
 
@@ -20,11 +18,10 @@ use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\GoodReceivedController;
 use App\Http\Controllers\Admin\StockAdjustmentController;
 use App\Http\Controllers\Admin\CompanyController;
-// WAREHOUSE
+
 use App\Http\Controllers\Warehouse\WarehouseDashboardController;
 use App\Http\Controllers\Warehouse\SalesController as WhSalesController;
 use App\Http\Controllers\Warehouse\StockWhController;
-use App\Http\Controllers\Warehouse\GRController;
 use App\Http\Controllers\Warehouse\WarehouseTransferController;
 
 // SALES
@@ -32,19 +29,9 @@ use App\Http\Controllers\Warehouse\SalesHandoverController;
 use App\Http\Controllers\Sales\HandoverOtpItemsController;
 
 // OTHERS
-use App\Http\Controllers\ReportController;
-use App\Http\Controllers\AssemblyController;
 use App\Http\Controllers\StockLevelController;
-use App\Models\SalesHandover;
+use App\Http\Controllers\BomController;
 use App\Models\Warehouse;
-use App\Models\User;
-use App\Models\Product;
-use App\Models\PurchaseOrder;
-use App\Models\PurchaseOrderItem;
-use App\Models\Role;
-use App\Models\WarehouseTransfer;
-use App\Models\WarehouseTransferItem;
-use App\Models\WarehouseTransferLog;
 
 
 /* ===== Auth ===== */
@@ -521,15 +508,41 @@ Route::middleware(['auth', 'active'])->group(function () {
 
 
     /* === Reports (umum) – key: reports === */
-    Route::get('/assembly', [AssemblyController::class, 'index'])
-        ->name('assembly.index')
-        ->middleware('menu:assembly');
+    Route::get('/bom', [BomController::class, 'index'])
+        ->name('bom.index')
+        ->middleware('menu:bom');
+    Route::get('/bom/datatable', [BomController::class, 'datatable'])
+        ->name('bom.datatable')
+        ->middleware('menu:bom');
 
-    Route::get('/assembly/create', [AssemblyController::class, 'create'])
-        ->name('assembly.create')
-        ->middleware('menu:assembly');
+    Route::post('/bom', [BomController::class, 'store'])
+        ->name('bom.store')
+        ->middleware('menu:bom');
 
-    Route::post('/assembly/store', [AssemblyController::class, 'store'])
-        ->name('assembly.store')
-        ->middleware('menu:assembly');
+    Route::put('/bom/{bom}', [BomController::class, 'update'])
+        ->name('bom.update')
+        ->middleware('menu:bom');
+
+    Route::delete('/bom/{bom}', [BomController::class, 'destroy'])
+        ->name('bom.destroy')
+        ->middleware('menu:bom');
+
+    Route::get('/bom/next-code', [BomController::class,'nextCode'])
+        ->name('bom.next_code')
+        ->middleware('menu:bom');
+
+    Route::get('/bom/{bom}/edit', [BomController::class, 'edit'])
+        ->name('bom.edit')
+        ->middleware('menu:bom');
+
+    Route::post('/bom/{bom}/produce', [BomController::class, 'produce'])
+        ->name('bom.produce')
+        ->middleware('menu:bom');
+
+    Route::get('/bom/{bom}/page', [BomController::class, 'showPage'])
+        ->name('bom.show.page')
+        ->middleware('menu:bom');
+
+
+
 });
