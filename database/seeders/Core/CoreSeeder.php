@@ -3,7 +3,6 @@
 namespace Database\Seeders\Core;
 
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
 use App\Models\Supplier;
 use App\Models\Warehouse;
@@ -11,7 +10,6 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
 use App\Models\StockLevel;
-use App\Models\Role;
 use App\Models\Package;
 
 class CoreSeeder extends Seeder
@@ -127,17 +125,22 @@ class CoreSeeder extends Seeder
             ['category_name' => 'Saldo Elektronik', 'description' => 'Produk saldo elektronik']
         );
 
+        $catKpk = Category::updateOrCreate(
+            ['category_code' => 'CAT-KPK'],
+            ['category_name' => 'Kartu', 'description' => 'Produk kartu pedana kosong']
+        );
+
         $catAset = Category::updateOrCreate(
             ['category_code' => 'CAT-AST'],
             ['category_name' => 'Aset & Perangkat', 'description' => 'Modem, brankas, filling cabinet, sewa depo, dll.']
         );
 
         /*
-         * ===========================
-         *  PRODUCTS
-         *  - supplier_id disamakan ke IOH (konsekuensi supplier cuma IOH)
-         * ===========================
-         */
+        |--------------------------------------------------------------------------
+        | PRODUCTS
+        |--------------------------------------------------------------------------
+        */
+
         $p_blank = Product::updateOrCreate(['product_code' => '0079-P'], [
             'name'             => 'VO-BLANK-MINI3-CSS',
             'category_id'      => $catVoucher->id,
@@ -147,17 +150,51 @@ class CoreSeeder extends Seeder
             'stock_minimum'    => 10,
             'purchasing_price' => 500,
             'selling_price'    => 500,
+            'product_type'     => 'finished',
+            'standard_cost'    => 500.00,
+            'is_active'        => true,
+        ]);
+
+        $p_Sld = Product::updateOrCreate(['product_code' => '0001-P'], [
+            'name'             => 'Saldo Pulsa',
+            'category_id'      => $catSaldo->id,
+            'package_id'       => $pkgRp->id,
+            'supplier_id'      => $supIOH->id,
+            'description'      => 'Saldo Pulsa Elektronik',
+            'stock_minimum'    => 1000000,
+            'purchasing_price' => 1,
+            'selling_price'    => 1,
+            'product_type'     => 'material',
+            'standard_cost'    => 1.00,
+            'is_active'        => true,
+        ]);
+
+        $p_kpk = Product::updateOrCreate(['product_code' => '0002-P'], [
+            'name'             => 'Kartu Perdana Kosong',
+            'category_id'      => $catKpk->id,
+            'package_id'       => $pkgRp->id,
+            'supplier_id'      => $supIOH->id,
+            'description'      => 'Stock Kartu Perdana Kosong',
+            'stock_minimum'    => 500,
+            'purchasing_price' => 1000,
+            'selling_price'    => 1000,
+            'product_type'     => 'material',
+            'standard_cost'    => 1000.00,
+            'is_active'        => true,
         ]);
 
         $p_vo_elc = Product::updateOrCreate(['product_code' => '0081-P'], [
             'name'             => 'VO-ELC',
-            'category_id'      => $catSaldo->id,
+            'category_id'      => $catVoucher->id,
             'package_id'       => $pkgPcs->id,
             'supplier_id'      => $supIOH->id,
             'description'      => 'Voucher Saldo Elektronik',
             'stock_minimum'    => 10,
             'purchasing_price' => 1000,
             'selling_price'    => 5000,
+            'product_type'     => 'finished',
+            'standard_cost'    => 1000.00,
+            'is_active'        => true,
         ]);
 
         $p_sewa_depo = Product::updateOrCreate(['product_code' => '0087-P'], [
@@ -169,6 +206,9 @@ class CoreSeeder extends Seeder
             'stock_minimum'    => 1,
             'purchasing_price' => 500000,
             'selling_price'    => 500000,
+            'product_type'     => 'normal',
+            'standard_cost'    => 500000.00,
+            'is_active'        => true,
         ]);
 
         $p_filling = Product::updateOrCreate(['product_code' => '0088-P'], [
@@ -180,6 +220,9 @@ class CoreSeeder extends Seeder
             'stock_minimum'    => 1,
             'purchasing_price' => 500000,
             'selling_price'    => 500000,
+            'product_type'     => 'normal',
+            'standard_cost'    => 500000.00,
+            'is_active'        => true,
         ]);
 
         $p_fingerprint = Product::updateOrCreate(['product_code' => '0089-P'], [
@@ -191,6 +234,9 @@ class CoreSeeder extends Seeder
             'stock_minimum'    => 1,
             'purchasing_price' => 150000,
             'selling_price'    => 150000,
+            'product_type'     => 'normal',
+            'standard_cost'    => 150000.00,
+            'is_active'        => true,
         ]);
 
         $p_modem_hifi = Product::updateOrCreate(['product_code' => '0090-P'], [
@@ -202,6 +248,9 @@ class CoreSeeder extends Seeder
             'stock_minimum'    => 1,
             'purchasing_price' => 250000,
             'selling_price'    => 250000,
+            'product_type'     => 'normal',
+            'standard_cost'    => 250000.00,
+            'is_active'        => true,
         ]);
 
         $p_brangkas = Product::updateOrCreate(['product_code' => '0091-P'], [
@@ -213,6 +262,9 @@ class CoreSeeder extends Seeder
             'stock_minimum'    => 1,
             'purchasing_price' => 5000000,
             'selling_price'    => 5000000,
+            'product_type'     => 'normal',
+            'standard_cost'    => 5000000.00,
+            'is_active'        => true,
         ]);
 
         $p_modem_pool = Product::updateOrCreate(['product_code' => '0092-P'], [
@@ -224,6 +276,9 @@ class CoreSeeder extends Seeder
             'stock_minimum'    => 1,
             'purchasing_price' => 4500000,
             'selling_price'    => 4500000,
+            'product_type'     => 'normal',
+            'standard_cost'    => 4500000.00,
+            'is_active'        => true,
         ]);
 
         $p_total_asset = Product::updateOrCreate(['product_code' => '0093-P'], [
@@ -235,6 +290,9 @@ class CoreSeeder extends Seeder
             'stock_minimum'    => 1,
             'purchasing_price' => 51500000,
             'selling_price'    => 51500000,
+            'product_type'     => 'normal',
+            'standard_cost'    => 51500000.00,
+            'is_active'        => true,
         ]);
 
         $p_hkm = Product::updateOrCreate(['product_code' => '0094-P'], [
@@ -246,6 +304,9 @@ class CoreSeeder extends Seeder
             'stock_minimum'    => 1,
             'purchasing_price' => 368000,
             'selling_price'    => 368000,
+            'product_type'     => 'normal',
+            'standard_cost'    => 368000.00,
+            'is_active'        => true,
         ]);
 
         $p_phy_9gb = Product::updateOrCreate(['product_code' => '0095-P'], [
@@ -257,6 +318,9 @@ class CoreSeeder extends Seeder
             'stock_minimum'    => 10,
             'purchasing_price' => 500,
             'selling_price'    => 500,
+            'product_type'     => 'finished',
+            'standard_cost'    => 500.00,
+            'is_active'        => true,
         ]);
 
         $p_phy_3gb = Product::updateOrCreate(['product_code' => '0096-P'], [
@@ -268,6 +332,9 @@ class CoreSeeder extends Seeder
             'stock_minimum'    => 10,
             'purchasing_price' => 500,
             'selling_price'    => 500,
+            'product_type'     => 'finished',
+            'standard_cost'    => 500.00,
+            'is_active'        => true,
         ]);
 
         $p_5gb = Product::updateOrCreate(['product_code' => '0097-P'], [
@@ -279,7 +346,11 @@ class CoreSeeder extends Seeder
             'stock_minimum'    => 10,
             'purchasing_price' => 10900,
             'selling_price'    => 10900,
+            'product_type'     => 'finished',
+            'standard_cost'    => 10900.00,
+            'is_active'        => true,
         ]);
+
 
 
         /*
@@ -289,7 +360,7 @@ class CoreSeeder extends Seeder
          * ===========================
          */
         $allProducts = [
-            $p_vo_elc, $p_blank, $p_phy_9gb, $p_phy_3gb, $p_5gb,
+            $p_vo_elc,$p_Sld,$p_kpk, $p_blank, $p_phy_9gb, $p_phy_3gb, $p_5gb,
             $p_hkm, $p_total_asset, $p_modem_pool, $p_brangkas,
             $p_modem_hifi, $p_fingerprint, $p_filling, $p_sewa_depo,
         ];
@@ -324,5 +395,3 @@ class CoreSeeder extends Seeder
         }
     }
 }
-
-

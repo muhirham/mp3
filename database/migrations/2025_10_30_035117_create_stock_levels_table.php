@@ -11,7 +11,7 @@ return new class extends Migration {
             $t->enum('owner_type', ['pusat','warehouse','sales']);
             $t->unsignedBigInteger('owner_id'); // warehouse.id atau users.id (role sales)
             $t->foreignId('product_id')->constrained('products')->cascadeOnDelete();
-            $t->integer('quantity')->default(0);
+            $t->bigInteger('quantity')->default(0);
             $t->timestamps();
         });
     }
