@@ -95,14 +95,17 @@
 
                     {{-- APPROVE + REJECT (PADANG) --}}
                     @if ($canApproveDestination)
-                        <button class="btn btn-success btn-approve-transfer">
+                        <button class="btn btn-success btn-approve-transfer"
+                            data-action="{{ route('warehouse-transfer-forms.approve.destination', $transfer->id) }}">
                             <i class="bx bx-check-circle"></i> Approve
                         </button>
 
-                        <button class="btn btn-outline-danger btn-reject-transfer">
+                        <button class="btn btn-outline-danger btn-reject-transfer"
+                            data-action="{{ route('warehouse-transfer-forms.reject.destination', $transfer->id) }}">
                             <i class="bx bx-x-circle"></i> Reject
                         </button>
                     @endif
+
 
                     {{-- PRINT SJ (PADANG) --}}
                     @if ($canPrintSJ)
@@ -644,28 +647,24 @@
         </script>
     @endif
 
-    @push('scripts')
-        <script>
-            document.addEventListener('DOMContentLoaded', function() {
-                const btn = document.getElementById('btnPrintSJ');
-                const iframe = document.getElementById('iframePrintSJ');
+    @if ($transfer->exists && $canPrintSJ)
+        @push('scripts')
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    const btn = document.getElementById('btnPrintSJ');
+                    const iframe = document.getElementById('iframePrintSJ');
 
-                if (!btn || !iframe) return;
+                    if (!btn || !iframe) return;
 
-                btn.addEventListener('click', function() {
+                    btn.addEventListener('click', function() {
+                        iframe.src = "{{ route('warehouse-transfer.print-sj', $transfer->id) }}";
 
-                    // load ulang setiap klik → biar ga auto print pas refresh
-                    iframe.src = "{{ route('warehouse-transfer.print-sj', $transfer->id) }}";
-
-                    iframe.onload = function() {
-                        try {
+                        iframe.onload = function() {
                             iframe.contentWindow.focus();
                             iframe.contentWindow.print();
-                        } catch (e) {
-                            alert('Gagal membuka dialog print');
-                        }
-                    };
+                        };
+                    });
                 });
-            });
-        </script>
-    @endpush
+            </script>
+        @endpush
+    @endif

@@ -14,7 +14,6 @@ use App\Models\WarehouseTransferItem;
 use App\Models\WarehouseTransferLog;
 use App\Models\Product;
 use App\Models\Warehouse;
-use App\Models\StockLevel;
 use App\Models\Company;
 
 class WarehouseTransferController extends Controller
@@ -69,6 +68,8 @@ class WarehouseTransferController extends Controller
             'canApproveDestination' => false,
             'canGrSource' => false,
             'canCancel' => false,
+            'canPrintSJ' => false, // ✅ TAMBAH INI
+            'receivedLog' => null,
         ]);
     }
 
