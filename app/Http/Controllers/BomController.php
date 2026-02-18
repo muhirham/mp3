@@ -23,7 +23,8 @@ class BomController extends Controller
             ->groupBy('product_id');
 
         $products = Product::leftJoinSub($stockSub, 'st', 'st.product_id', '=', 'products.id')
-            ->where('product_type', 'finished')
+            ->where('product_type', 'BOM')
+             ->where('products.is_active', 1) // 🔥 TAMBAH INI
             ->select(
                 'products.id',
                 'products.name',
@@ -34,7 +35,8 @@ class BomController extends Controller
             ->get();
 
         $materials = Product::leftJoinSub($stockSub, 'st', 'st.product_id', '=', 'products.id')
-            ->whereIn('product_type', ['material','finished'])
+            ->whereIn('product_type', ['material','BOM'])
+             ->where('products.is_active', 1) // 🔥 TAMBAH INI
             ->select(
                 'products.id',
                 'products.name',
@@ -171,7 +173,7 @@ class BomController extends Controller
                     'product_code'     => $r->new_product_code,
                     'name'             => $r->new_product_name,
                     'description'      => $r->new_description,
-                    'product_type'     => 'finished',
+                    'product_type'     => 'BOM',
                     'selling_price'    => 0,
                     'purchasing_price' => 0,
                 ]);

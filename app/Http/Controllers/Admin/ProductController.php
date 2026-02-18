@@ -271,7 +271,7 @@ public function datatable(Request $request)
             'purchasing_price' => ['required','numeric','min:0'],
             'selling_price'    => ['required','numeric','min:0'],
             'standard_cost'    => ['nullable','numeric','min:0'],
-            'product_type'     => ['required','in:material,finished,normal'],
+            'product_type'     => ['required','in:material,BOM,normal'],
             'is_active'        => ['nullable','boolean'],
             'stock_minimum' => ['nullable','integer','min:0'],
 
@@ -298,7 +298,7 @@ public function datatable(Request $request)
             'purchasing_price' => ['required','numeric','min:0'],
             'selling_price'    => ['required','numeric','min:0'],
             'standard_cost'    => ['nullable','numeric','min:0'],
-            'product_type'     => ['required','in:material,finished,normal'],
+            'product_type'     => ['required','in:material,BOM,normal'],
             'is_active'        => ['nullable','boolean'],
             'stock_minimum' => ['nullable','integer','min:0'],
 

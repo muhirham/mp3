@@ -23,7 +23,7 @@ return new class extends Migration {
             // 🔹 Behavior (logic system)
             $t->enum('product_type', [
                 'material',   // bahan baku
-                'finished',   // hasil produksi
+                'BOM',   // hasil produksi
                 'normal'      // barang biasa
             ])->default('normal');
 
