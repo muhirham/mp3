@@ -95,11 +95,6 @@
                                         <label class="form-check-label">Use Existing Product</label>
                                     </div>
 
-                                    <div class="form-check mb-3">
-                                        <input class="form-check-input" type="radio" name="product_mode" value="new">
-                                        <label class="form-check-label">Create New Product</label>
-                                    </div>
-
                                     {{-- EXISTING --}}
                                     <div id="existingProductBox">
                                         <select name="product_id" class="form-select">
@@ -112,25 +107,6 @@
                                             @endforeach
                                         </select>
                                     </div>
-
-                                    {{-- NEW --}}
-                                    <div id="newProductBox" class="mt-3 d-none">
-                                        <div class="row g-3">
-                                            <div class="col-md-4">
-                                                <input type="text" name="new_product_code" class="form-control"
-                                                    placeholder="Product Code">
-                                            </div>
-                                            <div class="col-md-4">
-                                                <input type="text" name="new_product_name" class="form-control"
-                                                    placeholder="Product Name">
-                                            </div>
-                                            <div class="col-md-4">
-                                                <input type="text" name="new_description" class="form-control"
-                                                    placeholder="Description">
-                                            </div>
-                                        </div>
-                                    </div>
-
                                 </div>
                             </div>
 
@@ -174,8 +150,7 @@
 
                             <div class="mb-3">
                                 <label>Production Batch</label>
-                                <input type="number" id="previewBatch" class="form-control" min="1"
-                                    value="1">
+                                <input type="number" id="previewBatch" class="form-control" min="1" value="1">
                             </div>
 
                             <div class="card">
@@ -218,10 +193,6 @@
                         <div class="footer-step-2 d-none">
                             <button type="button" class="btn btn-secondary" id="btnBack">
                                 Back
-                            </button>
-
-                            <button type="button" class="btn btn-primary" id="btnSaveOnly">
-                                Save
                             </button>
 
                             <button type="button" class="btn btn-success" id="btnSaveProduce">
@@ -428,9 +399,10 @@
                     <option value="">Choose material</option>
                     @foreach ($materials as $m)
                         <option value="{{ $m->id }}"
-        data-cost="{{ $m->standard_cost ?? 0 }}">
+    data-cost="{{ $m->standard_cost ?? 0 }}">
     {{ $m->name }} (Stock: {{ number_format($m->stock) }})
 </option>
+
                     @endforeach
                 </select>
             </td>
@@ -448,46 +420,6 @@
 
             $(document).on('click', '.btnRemove', function() {
                 $(this).closest('tr').remove();
-            });
-
-            /* =========================================================
-                FORM SUBMIT (CREATE / UPDATE)
-            ========================================================= */
-
-            $('#formBom').on('submit', function(e) {
-                e.preventDefault();
-
-                let id = $('#bom_id').val();
-                let method = $('#formMethod').val();
-                let url = method === 'PUT' ?
-                    '/bom/' + id :
-                    storeUrl;
-
-                $.ajax({
-                    url: url,
-                    type: 'POST',
-                    data: $(this).serialize(),
-                    success: function(res) {
-
-                        $('#mdlBom').modal('hide');
-                        table.ajax.reload(null, false);
-
-                        Swal.fire({
-                            icon: 'success',
-                            title: res.success,
-                            timer: 1500,
-                            showConfirmButton: false
-                        });
-
-                        resetForm();
-                    },
-                    error: function() {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Terjadi kesalahan'
-                        });
-                    }
-                });
             });
 
             /* =========================================================
@@ -533,64 +465,6 @@
                     }
                 });
 
-            });
-
-
-            /* =========================================================
-                EDIT
-            ========================================================= */
-
-            $(document).on('click', '.js-edit', function() {
-
-                const id = $(this).data('id');
-
-                $.get('/bom/' + id + '/edit', function(res) {
-
-                    resetForm();
-
-                    $('#bom_id').val(res.id);
-                    $('#formMethod').val('PUT');
-                    $('.modal-title').text('Edit BOM');
-
-                    $('#bom_code').val(res.bom_code);
-                    $('input[name="version"]').val(res.version);
-                    $('select[name="is_active"]').val(res.is_active ? 1 : 0);
-                    $('select[name="product_id"]').val(res.product_id);
-
-                    $('#tblItems tbody').empty();
-
-                    res.items.forEach(item => {
-
-                        let row = `
-                <tr>
-                    <td>
-                        <select name="materials[]" class="form-select">
-                            @foreach ($materials as $m)
-                                <<option value="{{ $m->id }}"
-        data-cost="{{ $m->standard_cost ?? 0 }}">
-    {{ $m->name }} (Stock: {{ number_format($m->stock) }})
-</option>
-                            @endforeach
-                        </select>
-                    </td>
-                    <td>
-                        <input type="number" name="quantities[]" class="form-control" min="1" required>
-                    </td>
-                    <td>
-                        <button type="button" class="btn btn-sm btn-danger btnRemove">X</button>
-                    </td>
-                </tr>
-                `;
-
-                        $('#tblItems tbody').append(row);
-
-                        let lastRow = $('#tblItems tbody tr').last();
-                        lastRow.find('select').val(item.material_id);
-                        lastRow.find('input').val(item.quantity);
-                    });
-
-                    new bootstrap.Modal(document.getElementById('mdlBom')).show();
-                });
             });
 
             /* =========================================================

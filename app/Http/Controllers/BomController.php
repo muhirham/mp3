@@ -80,7 +80,7 @@ class BomController extends Controller
                 $like = "%{$search}%";
                 $base->where(function($q) use ($like){
                     $q->where('b.bom_code','like',$like)
-                      ->orWhere('p.name','like',$like);
+                    ->orWhere('p.name','like',$like);
                 });
             }
 
@@ -121,7 +121,6 @@ class BomController extends Controller
                         'updated_block' => $updatedBlock,
                         'actions' => '
                             <button class="btn btn-sm btn-info js-detail" data-id="'.$r->id.'">Detail</button>
-                            <button class="btn btn-sm btn-outline-primary js-edit" data-id="'.$r->id.'">Edit</button>
                             <button class="btn btn-sm btn-outline-danger js-del" data-id="'.$r->id.'">Delete</button>
                             <button class="btn btn-sm btn-success js-produce" data-id="'.$r->id.'">Produce</button>
                         '
