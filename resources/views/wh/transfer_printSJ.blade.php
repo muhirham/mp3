@@ -86,15 +86,11 @@
 
         {{-- ================= HEADER / KOP ================= --}}
         @if ($company)
-            @php
-                $logoUrl = $company->logo_path ? asset('storage/' . $company->logo_path) : null;
-            @endphp
-
             <table>
                 <tr>
                     <td style="width:25%; vertical-align:top;">
-                        @if ($logoUrl)
-                            <img src="{{ $logoUrl }}" style="max-width:140px;">
+                        @if ($company && $company->logo_url)
+                            <img src="{{ $company->logo_url }}" style="max-width:140px;">
                         @endif
                     </td>
                     <td style="vertical-align:top;">
@@ -214,15 +210,6 @@
         @endif
 
         {{-- ================= SIGNATURE ================= --}}
-        @php
-            $sign = function ($user) {
-                if (!$user || !$user->signature_path) {
-                    return null;
-                }
-                return asset('storage/' . $user->signature_path);
-            };
-        @endphp
-
         <div class="mt-20"></div>
 
         <table>
@@ -235,10 +222,10 @@
                     </div>
 
                     <div style="height:50px; margin:8px 0;">
-                        @if ($transfer->approvedDestinationBy?->signature_path)
-                            <img src="{{ asset('storage/' . $transfer->approvedDestinationBy->signature_path) }}"
-                                style="height:45px;">
+                        @if ($transfer->approvedDestinationBy?->signature_url)
+                            <img src="{{ $transfer->approvedDestinationBy->signature_url }}" style="height:45px;">
                         @endif
+
                     </div>
 
                     <strong>
@@ -255,9 +242,10 @@
                     </div>
 
                     <div style="height:50px; margin:8px 0;">
-                        @if ($receivedLog && $receivedLog->user?->signature_path)
-                            <img src="{{ asset('storage/' . $receivedLog->user->signature_path) }}" style="height:45px;">
+                        @if ($receivedLog && $receivedLog->user?->signature_url)
+                            <img src="{{ $receivedLog->user->signature_url }}" style="height:45px;">
                         @endif
+
                     </div>
 
                     <strong>{{ $receivedLog->user->name ?? '______________' }}</strong>

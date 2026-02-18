@@ -32,4 +32,25 @@ class Company extends Model
         'is_default' => 'boolean',
         'is_active'  => 'boolean',
     ];
+
+public function getLogoUrlAttribute()
+{
+    if (!$this->logo_path) {
+        return null;
+    }
+
+    // Kalau file ada di public langsung
+    if (file_exists(public_path($this->logo_path))) {
+        return asset($this->logo_path);
+    }
+
+    // Kalau file ada di storage/app/public
+    if (file_exists(storage_path('app/public/' . $this->logo_path))) {
+        return asset('storage/' . $this->logo_path);
+    }
+
+    return null;
+}
+
+
 }
