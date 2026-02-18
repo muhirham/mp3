@@ -10,10 +10,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 use App\Models\Company;
+use App\Models\StockAdjustment;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Validation\ValidationException;
 use App\Exports\Restocks\RestockIndexWithItemsExport;
-use Illuminate\Support\Str;
 
 
 class StockWhController extends Controller
@@ -40,7 +40,8 @@ class StockWhController extends Controller
         }
 
         // cuma product (supplier nanti diambil dari kolom di tabel products)
-        $products = Product::orderBy('name')
+        $products = Product::where('is_active', true)
+            ->orderBy('name')
             ->get(['id', 'name', 'product_code']);
 
         return view('wh.restocks', compact(
@@ -117,15 +118,6 @@ public function datatable(Request $r)
     $base = DB::table('request_restocks as rr')
         ->leftJoin('products as p', 'p.id', '=', 'rr.product_id')
         ->leftJoin('suppliers as s', 's.id', '=', 'rr.supplier_id');
-
-        $rcvSub = DB::table('restock_receipts')
-        ->selectRaw('request_id, SUM(qty_good) as qty_good')
-        ->groupBy('request_id');
-
-    $base->leftJoinSub($rcvSub, 'gr', 'gr.request_id', '=', 'rr.id');
-
-
-
     if ($hasWh) {
         $base->leftJoin('warehouses as w', 'w.id', '=', 'rr.warehouse_id');
     }
@@ -142,9 +134,7 @@ public function datatable(Request $r)
         DB::raw("GROUP_CONCAT(DISTINCT COALESCE(s.name,'-') SEPARATOR ', ') as supplier_name"),
 
         DB::raw('SUM('.$qtyReqExpr.') as qty_req'),
-        DB::raw('SUM(COALESCE(gr.qty_good,0)) as qty_rcv'),
-
-
+        DB::raw('SUM(COALESCE(rr.quantity_received,0)) as qty_rcv'),
         DB::raw("MAX(COALESCE(rr.status,'pending')) as status"),
         DB::raw('MIN(rr.created_at) as created_at'),
 
@@ -203,7 +193,10 @@ public function datatable(Request $r)
         });
     }
 
-    $recordsFiltered = (clone $base)->count();
+    $recordsFiltered = DB::query()
+    ->fromSub(clone $base, 't')
+    ->count();
+
 
     // ORDER
     if ($orderBy === 'code') {
@@ -235,23 +228,29 @@ public function datatable(Request $r)
 
         $codeSafe = e($row->code ?? ('RR-'.$row->id));
 
-        $actions = '
-            <div class="d-flex gap-1 justify-content-center">
-              <button type="button"
-                class="btn btn-sm btn-outline-primary js-detail"
-                data-id="'.(int)$row->id.'"
-                data-code="'.$codeSafe.'">
-                <i class="bx bx-search-alt"></i>
-              </button>
-              <button type="button"
-                class="btn btn-sm btn-outline-success js-receive"
-                data-id="'.(int)$row->id.'"
-                data-code="'.$codeSafe.'"
-                data-action="'.e(route('restocks.receive', $row->id)).'">
-                <i class="bx bx-package"></i>
-              </button>
-            </div>
-        ';
+        $canReceive = ((int)$row->qty_rcv < (int)$row->qty_req);
+
+$actions = '<div class="d-flex gap-1 justify-content-center">
+    <button type="button"
+        class="btn btn-sm btn-outline-primary js-detail"
+        data-id="'.(int)$row->id.'"
+        data-code="'.$codeSafe.'">
+        <i class="bx bx-search-alt"></i>
+    </button>';
+
+if ($canReceive) {
+    $actions .= '
+    <button type="button"
+        class="btn btn-sm btn-outline-success js-receive"
+        data-id="'.(int)$row->id.'"
+        data-code="'.$codeSafe.'"
+        data-action="'.e(route('restocks.receive', $row->id)).'">
+        <i class="bx bx-package"></i>
+    </button>';
+}
+
+$actions .= '</div>';
+
 
         $data[] = [
             'rownum'    => $rownum,
@@ -523,6 +522,24 @@ public function datatable(Request $r)
 
         $data = validator($payload, $rules)->validate();
 
+        $productIds = collect($data['items'])
+        ->pluck('product_id')
+        ->unique()
+        ->all();
+
+        $inactive = Product::whereIn('id', $productIds)
+            ->where('is_active', false)
+            ->pluck('name')
+            ->all();
+
+        if (!empty($inactive)) {
+            throw ValidationException::withMessages([
+                'items' => 'Product berikut NONAKTIF dan tidak bisa direquest: '
+                    . implode(', ', $inactive),
+            ]);
+        }
+
+
         // Tentukan warehouse yang dipakai
         if ($isWarehouseUser && ! $canSwitchWarehouse) {
             $warehouseId = $me->warehouse_id;
@@ -649,6 +666,20 @@ public function datatable(Request $r)
 
         if ($rrRows->isEmpty()) {
             return back()->with('error', 'Item restock yang dipilih tidak ditemukan.');
+        }
+
+        $productIds = $rrRows->pluck('product_id')->unique()->all();
+
+        $inactive = Product::whereIn('id', $productIds)
+            ->where('is_active', false)
+            ->pluck('name')
+            ->all();
+
+        if (!empty($inactive)) {
+            return back()->with('error',
+                'Tidak bisa menerima barang untuk product NONAKTIF: '
+                . implode(', ', $inactive)
+            );
         }
 
         $rrIds = $rrRows->pluck('id')->all();
@@ -896,65 +927,59 @@ try {
             ) {
                 $hasWhCol = Schema::hasColumn('restock_receipts', 'warehouse_id');
 
-                foreach (array_keys($touchedPoIds) as $poId) {
-                    // hitung total qty rcv semua produk utk PO ini
-                    $rcvQuery = DB::table('restock_receipts')
-                        ->where('purchase_order_id', $poId)
-                        ->selectRaw('product_id' . ($hasWhCol ? ', warehouse_id' : '') . ',SUM(qty_good) as qty_rcv')
-                        ->groupBy('product_id');
+                        foreach (array_keys($touchedPoIds) as $poId) {
 
-                    if ($hasWhCol) {
-                        $rcvQuery->groupBy('warehouse_id');
-                    }
+                // 🔥 hitung berdasarkan request_id (BUKAN product_id)
+                $rcvRows = DB::table('restock_receipts')
+                    ->where('purchase_order_id', $poId)
+                    ->selectRaw('request_id, SUM(qty_good) as qty_rcv')
+                    ->groupBy('request_id')
+                    ->get()
+                    ->keyBy('request_id');
 
-                    $rcvRows = $rcvQuery->get();
+                $items = DB::table('purchase_order_items')
+                    ->where('purchase_order_id', $poId)
+                    ->get(['id', 'request_id', 'qty_ordered', 'qty_received']);
 
-                    $rcvIndex = [];
-                    foreach ($rcvRows as $row) {
-                        $key = $row->product_id . '-' . ($hasWhCol ? ($row->warehouse_id ?? 0) : 0);
-                        $rcvIndex[$key] = (int) $row->qty_rcv;
-                    }
+                $allFull     = true;
+                $anyReceived = false;
 
-                    $items = DB::table('purchase_order_items')
-                        ->where('purchase_order_id', $poId)
-                        ->get(['id', 'product_id', 'warehouse_id', 'qty_ordered', 'qty_received']);
+                foreach ($items as $it) {
 
-                    $allFull     = true;
-                    $anyReceived = false;
+                    // ambil berdasarkan request_id (fix utama)
+                    $qtyRcv  = $rcvRows[$it->request_id]->qty_rcv ?? 0;
+                    $ordered = (int) $it->qty_ordered;
 
-                    foreach ($items as $it) {
-                        $key     = $it->product_id . '-' . ($hasWhCol ? ($it->warehouse_id ?? 0) : 0);
-                        $qtyRcv  = $rcvIndex[$key] ?? 0;
-                        $ordered = (int) $it->qty_ordered;
+                    DB::table('purchase_order_items')
+                        ->where('id', $it->id)
+                        ->update([
+                            'qty_received' => $qtyRcv,
+                            'updated_at'   => $now,
+                        ]);
 
-                        DB::table('purchase_order_items')
-                            ->where('id', $it->id)
-                            ->update([
-                                'qty_received' => $qtyRcv,
-                                'updated_at'   => $now,
-                            ]);
-
-                        if ($qtyRcv > 0)        $anyReceived = true;
-                        if ($qtyRcv < $ordered) $allFull    = false;
-                    }
-
-                    $updatePo = [];
-                    if ($allFull && $anyReceived) {
-                        $updatePo['status'] = 'completed';
-                        if (Schema::hasColumn('purchase_orders', 'received_at')) {
-                            $updatePo['received_at'] = $now;
-                        }
-                    } elseif ($anyReceived) {
-                        $updatePo['status'] = 'partially_received';
-                    }
-
-                    if (! empty($updatePo)) {
-                        $updatePo['updated_at'] = $now;
-                        DB::table('purchase_orders')
-                            ->where('id', $poId)
-                            ->update($updatePo);
-                    }
+                    if ($qtyRcv > 0)        $anyReceived = true;
+                    if ($qtyRcv < $ordered) $allFull    = false;
                 }
+
+                $updatePo = [];
+
+                if ($allFull && $anyReceived) {
+                    $updatePo['status'] = 'completed';
+                    if (Schema::hasColumn('purchase_orders', 'received_at')) {
+                        $updatePo['received_at'] = $now;
+                    }
+                } elseif ($anyReceived) {
+                    $updatePo['status'] = 'partially_received';
+                }
+
+                if (! empty($updatePo)) {
+                    $updatePo['updated_at'] = $now;
+                    DB::table('purchase_orders')
+                        ->where('id', $poId)
+                        ->update($updatePo);
+                }
+            }
+
             }
 
             DB::commit();
