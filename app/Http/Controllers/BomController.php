@@ -23,7 +23,8 @@ class BomController extends Controller
             ->groupBy('product_id');
 
         $products = Product::leftJoinSub($stockSub, 'st', 'st.product_id', '=', 'products.id')
-            ->where('product_type', 'finished')
+            ->where('product_type', 'BOM')
+             ->where('products.is_active', 1) // 🔥 TAMBAH INI
             ->select(
                 'products.id',
                 'products.name',
@@ -34,7 +35,8 @@ class BomController extends Controller
             ->get();
 
         $materials = Product::leftJoinSub($stockSub, 'st', 'st.product_id', '=', 'products.id')
-            ->whereIn('product_type', ['material','finished'])
+            ->whereIn('product_type', ['material','BOM'])
+             ->where('products.is_active', 1) // 🔥 TAMBAH INI
             ->select(
                 'products.id',
                 'products.name',
@@ -80,7 +82,7 @@ class BomController extends Controller
                 $like = "%{$search}%";
                 $base->where(function($q) use ($like){
                     $q->where('b.bom_code','like',$like)
-                      ->orWhere('p.name','like',$like);
+                    ->orWhere('p.name','like',$like);
                 });
             }
 
@@ -121,7 +123,6 @@ class BomController extends Controller
                         'updated_block' => $updatedBlock,
                         'actions' => '
                             <button class="btn btn-sm btn-info js-detail" data-id="'.$r->id.'">Detail</button>
-                            <button class="btn btn-sm btn-outline-primary js-edit" data-id="'.$r->id.'">Edit</button>
                             <button class="btn btn-sm btn-outline-danger js-del" data-id="'.$r->id.'">Delete</button>
                             <button class="btn btn-sm btn-success js-produce" data-id="'.$r->id.'">Produce</button>
                         '
@@ -172,7 +173,7 @@ class BomController extends Controller
                     'product_code'     => $r->new_product_code,
                     'name'             => $r->new_product_name,
                     'description'      => $r->new_description,
-                    'product_type'     => 'finished',
+                    'product_type'     => 'BOM',
                     'selling_price'    => 0,
                     'purchasing_price' => 0,
                 ]);

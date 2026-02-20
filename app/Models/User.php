@@ -89,4 +89,22 @@ class User extends Authenticatable
     {
         return $this->belongsTo(Company::class);
     }
+
+        public function getSignatureUrlAttribute()
+    {
+        if (!$this->signature_path) {
+            return null;
+        }
+
+        if (file_exists(public_path($this->signature_path))) {
+            return asset($this->signature_path);
+        }
+
+        if (file_exists(storage_path('app/public/'.$this->signature_path))) {
+            return asset('storage/'.$this->signature_path);
+        }
+
+        return null;
+    }
+
 }

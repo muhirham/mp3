@@ -150,7 +150,7 @@ class CoreSeeder extends Seeder
             'stock_minimum'    => 10,
             'purchasing_price' => 500,
             'selling_price'    => 500,
-            'product_type'     => 'finished',
+            'product_type'     => 'BOM',
             'standard_cost'    => 500.00,
             'is_active'        => true,
         ]);
@@ -192,7 +192,7 @@ class CoreSeeder extends Seeder
             'stock_minimum'    => 10,
             'purchasing_price' => 1000,
             'selling_price'    => 5000,
-            'product_type'     => 'finished',
+            'product_type'     => 'BOM',
             'standard_cost'    => 1000.00,
             'is_active'        => true,
         ]);
@@ -318,7 +318,7 @@ class CoreSeeder extends Seeder
             'stock_minimum'    => 10,
             'purchasing_price' => 500,
             'selling_price'    => 500,
-            'product_type'     => 'finished',
+            'product_type'     => 'BOM',
             'standard_cost'    => 500.00,
             'is_active'        => true,
         ]);
@@ -332,7 +332,7 @@ class CoreSeeder extends Seeder
             'stock_minimum'    => 10,
             'purchasing_price' => 500,
             'selling_price'    => 500,
-            'product_type'     => 'finished',
+            'product_type'     => 'BOM',
             'standard_cost'    => 500.00,
             'is_active'        => true,
         ]);
@@ -346,7 +346,7 @@ class CoreSeeder extends Seeder
             'stock_minimum'    => 10,
             'purchasing_price' => 10900,
             'selling_price'    => 10900,
-            'product_type'     => 'finished',
+            'product_type'     => 'BOM',
             'standard_cost'    => 10900.00,
             'is_active'        => true,
         ]);

@@ -29,5 +29,24 @@ class CompanySeeder extends Seeder
                 'is_active'       => true,
             ]
         );
+                Company::updateOrCreate(
+            ['code' => 'IOH'], // sesuai KODE di form
+            [
+                'name'            => 'IOH',
+                'legal_name'      => 'Indosat Ooredoo Hutchison',
+                'short_name'      => 'IOH',
+                'address'         => 'Jl. Medan Merdeka Barat No.21, RW.3, Gambir, Kecamatan Gambir, Kota Jakarta Pusat, Indonesia',
+                'city'            => 'Jakarta',
+                'province'        => 'Jakarta Pusat',
+                'phone'           => '08116027598',
+                'email'           => 'care@im3.id',
+                'website'         => 'https://ioh.co.id/portal/id/iohindex',
+                'tax_number'      => null,
+                'logo_path'       => 'ImageAsset/logo-indosat.png', // isi kalau sudah upload
+                'logo_small_path' => null,
+                'is_default'      => false,
+                'is_active'       => true,
+            ]
+        );
     }
 }

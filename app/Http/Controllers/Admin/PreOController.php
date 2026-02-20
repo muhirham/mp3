@@ -9,23 +9,15 @@ use App\Models\PurchaseOrderItem;
 use App\Models\Supplier;
 use App\Models\Product;
 use App\Models\Warehouse;
-use App\Models\RestockReceipt;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Barryvdh\DomPDF\Facade\Pdf; 
 use Maatwebsite\Excel\Facades\Excel;
 use Carbon\Carbon;
-use Maatwebsite\Excel\Concerns\FromArray;
-use Maatwebsite\Excel\Concerns\WithHeadings;
 use App\Exports\PO\PoIndexWithItemsExport;
 use Illuminate\Validation\ValidationException;
-use Maatwebsite\Excel\Concerns\WithMultipleSheets;
-use Maatwebsite\Excel\Concerns\WithTitle;
-use Maatwebsite\Excel\Concerns\WithStyles;
-use Maatwebsite\Excel\Concerns\WithDrawings;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
-use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
+
 
 
 
@@ -208,9 +200,11 @@ class PreOController extends Controller
             if (Schema::hasColumn('products', 'cost_price'))     $cols[] = 'cost_price';
             if (Schema::hasColumn('products', 'selling_price'))  $cols[] = 'selling_price';
 
-            $products = Product::with('supplier:id,name')
+            $products = Product::where('is_active', true)
+                ->with('supplier:id,name')
                 ->orderBy('name')
                 ->get($cols);
+
 
             $isFromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
 
@@ -280,6 +274,28 @@ class PreOController extends Controller
                 'items.*.discount_value'=> ['nullable', 'numeric', 'min:0'],
                 'items.*.request_id'    => ['nullable', 'integer'],
             ]);
+
+            $productIds = collect($validated['items'] ?? [])
+                ->pluck('product_id')
+                ->filter()
+                ->unique()
+                ->all();
+
+            if (!empty($productIds)) {
+
+                $inactive = Product::whereIn('id', $productIds)
+                    ->where('is_active', false)
+                    ->pluck('name')
+                    ->all();
+
+                if (!empty($inactive)) {
+                    throw ValidationException::withMessages([
+                        'items' => 'Product berikut NONAKTIF dan tidak bisa dipakai: '
+                            . implode(', ', $inactive),
+                    ]);
+                }
+            }
+
 
             DB::transaction(function () use ($validated, $po, $wasFromRequest) {
 
@@ -459,6 +475,18 @@ class PreOController extends Controller
                 return redirect()->route('po.edit', $po->id)
                     ->with('error', 'PO tidak boleh kosong. Isi item dan harga dulu sebelum mengajukan approval.');
             }
+
+            $inactive = $po->items()
+                ->whereHas('product', function ($q) {
+                    $q->where('is_active', false);
+                })
+                ->exists();
+
+            if ($inactive) {
+                return redirect()->route('po.edit', $po->id)
+                    ->with('error', 'PO mengandung product NONAKTIF. Tidak bisa diajukan approval.');
+            }
+
 
             // logistik tetap draft
             $po->status           = 'draft';

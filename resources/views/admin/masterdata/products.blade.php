@@ -6,10 +6,14 @@
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css" />
 
     <style>
+        .swal2-container {
+            z-index: 20000 !important;
+        }
         /* Matikan scroll horizontal */
         .card-body {
-            overflow-x: hidden !important;
-        }
+    overflow-x: auto !important;
+}
+
 
         /* Table */
         #tblProducts {
@@ -47,16 +51,6 @@
         #tblProducts th:nth-child(11),
         #tblProducts td:nth-child(11) {
             width: 75px;
-        }
-
-        /* SEMBUNYIKAN KOLOM YANG GA WAJIB */
-        #tblProducts th:nth-child(12),
-        #tblProducts td:nth-child(12),
-        #tblProducts th:nth-child(13),
-        #tblProducts td:nth-child(13),
-        #tblProducts th:nth-child(14),
-        #tblProducts td:nth-child(14) {
-            display: none;
         }
     </style>
 
@@ -204,7 +198,7 @@
                             <select name="product_type" id="product_type" class="form-select" required>
                                 <option value="normal">Normal</option>
                                 <option value="material">Material</option>
-                                <option value="finished">Finished</option>
+                                <option value="BOM">BOM</option>
                             </select>
                         </div>
 
@@ -481,15 +475,6 @@
 
                 $('#product_type').val(d.product_type || 'normal');
                 $('#is_active').prop('checked', d.is_active == 1);
-
-
-                Swal.fire({
-                    icon: 'info',
-                    title: 'Harga tidak bisa diubah',
-                    text: 'Harga beli dan harga jual tidak dapat di-edit dari sini. Silakan gunakan menu Adjustment.',
-                    timer: 2500,
-                    showConfirmButton: false
-                });
 
                 $('#mdlProduct').modal('show');
             });
