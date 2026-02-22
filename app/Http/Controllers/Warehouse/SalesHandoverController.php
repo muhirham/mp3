@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
-use App\Mail\SalesHandoverOtpMail;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Collection;
 use App\Exports\Sales\SalesReportExport;
 use Maatwebsite\Excel\Facades\Excel;
@@ -899,7 +899,6 @@ class SalesHandoverController extends Controller
                     'status_label'       => $stLabel,
                     'status_badge_class' => $badgeClass,
                     'amount_dispatched'  => $this->formatRp($dispatched),
-                    'amount_diff'        => $this->formatRp($diff),
                     'amount_original' => $this->formatRp($original),
                     'amount_sold'     => $this->formatRp($real),
                     'amount_discount' => $this->formatRp($discount),

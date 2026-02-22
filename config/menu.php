@@ -92,6 +92,13 @@ return [
             'group' => 'warehouse',
             'icon'  => 'bx bx-transfer',
         ],
+        [
+            'key'   => 'sales_return_approval',
+            'label' => 'Approval Sales Return',
+            'route' => 'warehouse.returns.index',
+            'group' => 'warehouse',
+            'icon'  => 'bx bx-check-circle',
+        ],
 
         // ================== PROCUREMENT ==================
         [
@@ -130,6 +137,13 @@ return [
             'route' => 'sales.otp.items',
             'group' => 'sales',
             'icon'  => 'bx bx-key', // bebas mau ganti icon apa
+        ],
+        [
+            'key'   => 'sales_return',
+            'label' => 'Sales Return',
+            'route' => 'sales.returns.index',
+            'group' => 'sales',
+            'icon'  => 'bx bx-undo',
         ],
         [
             'key'        => 'sales-handover-otp',

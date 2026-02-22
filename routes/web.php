@@ -20,13 +20,14 @@ use App\Http\Controllers\Admin\StockAdjustmentController;
 use App\Http\Controllers\Admin\CompanyController;
 
 use App\Http\Controllers\Warehouse\WarehouseDashboardController;
-use App\Http\Controllers\Warehouse\SalesController as WhSalesController;
 use App\Http\Controllers\Warehouse\StockWhController;
 use App\Http\Controllers\Warehouse\WarehouseTransferController;
 
 // SALES
 use App\Http\Controllers\Warehouse\SalesHandoverController;
 use App\Http\Controllers\Sales\HandoverOtpItemsController;
+use App\Http\Controllers\Sales\SalesController;
+use App\Http\Controllers\Sales\SalesReturnController;
 
 // OTHERS
 use App\Http\Controllers\StockLevelController;
@@ -72,7 +73,7 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/warehouse/dashboard/kpi', [WarehouseDashboardController::class, 'kpiAjax'])->name('wh.dashboard.kpi');
     Route::get('/warehouse/dashboard/inout', [WarehouseDashboardController::class, 'inoutAjax'])
         ->name('warehouse.dashboard.inoutAjax');
-    Route::get('/sales',     [WhSalesController::class, 'dashboard'])->name('sales.dashboard');
+    Route::get('/sales',     [SalesController::class, 'dashboard'])->name('sales.dashboard');
 
     /* === Master Data (ADMIN KEYS) === */
 
@@ -443,8 +444,33 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->name('warehouse-transfer.export')
         ->middleware('menu:wh_transfers');
 
+    //SALES RETURN
+    Route::get('/sales/returns', [SalesReturnController::class,'index'])
+        ->name('sales.returns.index')
+        ->middleware('menu:sales_return');
 
-    /* === Sales pages (SALES KEYS) === */
+    Route::post('/sales/returns', [SalesReturnController::class,'store'])
+        ->name('sales.returns.store')
+        ->middleware('menu:sales_return');
+
+    Route::get('/sales/returns/load/{handoverId}',[SalesReturnController::class,'loadItems'])
+        ->name('sales.returns.load')
+        ->middleware('menu:sales_return');
+
+    // Halaman approval retur sales untuk WAREHOUSE (bukan SALES)
+    Route::get('/warehouse/returns', [SalesReturnController::class,'approvalList'])
+        ->name('warehouse.returns.index')
+        ->middleware('menu:sales_return_approval');
+
+    Route::post('/warehouse/returns/{salesReturn}/approve',
+        [SalesReturnController::class,'approve'])
+        ->name('warehouse.returns.approve')
+        ->middleware('menu:sales_return_approval');
+
+    Route::post('/warehouse/returns/{salesReturn}/reject',
+        [SalesReturnController::class,'reject'])
+        ->name('warehouse.returns.reject')
+        ->middleware('menu:sales_return_approval');
 
 
     // === Sales pages (SALES & WAREHOUSE) ===
@@ -505,8 +531,7 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::post('/warehouse/handovers/{handover}/payments/reject', [SalesHandoverController::class, 'rejectPayment'])
         ->name('warehouse.handovers.payments.reject')
         ->middleware('menu:wh_sales_reports');
-
-
+        
     /* === Reports (umum) – key: reports === */
     Route::get('/bom', [BomController::class, 'index'])
         ->name('bom.index')
@@ -542,7 +567,5 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/bom/{bom}/page', [BomController::class, 'showPage'])
         ->name('bom.show.page')
         ->middleware('menu:bom');
-
-
 
 });
