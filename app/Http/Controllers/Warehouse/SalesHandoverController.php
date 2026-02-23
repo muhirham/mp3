@@ -1518,111 +1518,55 @@ class SalesHandoverController extends Controller
                             $product = $item->product;
                             if (!$product) continue;
 
-                            $qtyStart = (int) $item->qty_start;
-
-                            // safety: kalau ada mismatch, paksa konsisten
                             $qtySold = (int) $item->qty_sold;
-                            if ($qtySold < 0) $qtySold = 0;
-                            if ($qtySold > $qtyStart) $qtySold = $qtyStart;
 
-                            $qtyRet = (int) $item->qty_returned;
-                            $expectedRet = max(0, $qtyStart - $qtySold);
-                            if ($qtyRet !== $expectedRet) {
-                                $qtyRet = $expectedRet;
-                                $item->qty_returned = $qtyRet;
-                                $item->save();
-                            }
+                            // ================================
+                            // 1️⃣ KURANGI STOK SALES HANYA YANG TERJUAL
+                            // ================================
+                            if ($qtySold > 0) {
 
-                            // Stok sales: kurangi semua qty_start
-                            $salesStock = DB::table('stock_levels')
-                                ->where('owner_type', 'sales')
-                                ->where('owner_id', $handover->sales_id)
-                                ->where('product_id', $product->id)
-                                ->lockForUpdate()
-                                ->first();
-
-                            if (!$salesStock || $salesStock->quantity < $qtyStart) {
-                                throw new \RuntimeException("Stok sales kurang untuk produk {$product->name}.");
-                            }
-
-                            DB::table('stock_levels')
-                                ->where('id', $salesStock->id)
-                                ->update([
-                                    'quantity'   => $salesStock->quantity - $qtyStart,
-                                    'updated_at' => now(),
-                                ]);
-
-                            // Qty kembali: sales -> warehouse
-                            if ($qtyRet > 0) {
-                                $whStock = DB::table('stock_levels')
-                                    ->where('owner_type', 'warehouse')
-                                    ->where('owner_id', $handover->warehouse_id)
+                                $salesStock = DB::table('stock_levels')
+                                    ->where('owner_type', 'sales')
+                                    ->where('owner_id', $handover->sales_id)
                                     ->where('product_id', $product->id)
                                     ->lockForUpdate()
                                     ->first();
 
-                                if ($whStock) {
-                                    DB::table('stock_levels')
-                                        ->where('id', $whStock->id)
-                                        ->update([
-                                            'quantity'   => $whStock->quantity + $qtyRet,
-                                            'updated_at' => now(),
-                                        ]);
-                                } else {
-                                    DB::table('stock_levels')->insert([
-                                        'owner_type' => 'warehouse',
-                                        'owner_id'   => $handover->warehouse_id,
-                                        'product_id' => $product->id,
-                                        'quantity'   => $qtyRet,
-                                        'created_at' => now(),
+                                if (!$salesStock || $salesStock->quantity < $qtySold) {
+                                    throw new \RuntimeException("Stok sales kurang untuk produk {$product->name}.");
+                                }
+
+                                DB::table('stock_levels')
+                                    ->where('id', $salesStock->id)
+                                    ->update([
+                                        'quantity'   => $salesStock->quantity - $qtySold,
                                         'updated_at' => now(),
                                     ]);
-                                }
 
-                                $movement = [
+                                // movement sales -> customer
+                                DB::table('stock_movements')->insert([
                                     'product_id' => $product->id,
                                     'from_type'  => 'sales',
                                     'from_id'    => $handover->sales_id,
-                                    'to_type'    => 'warehouse',
-                                    'to_id'      => $handover->warehouse_id,
-                                    'quantity'   => $qtyRet,
-                                    'note'       => "Handover {$handover->code} (return sore - auto close)",
-                                    'created_at' => now(),
-                                    'updated_at' => now(),
-                                ];
-
-                                if (Schema::hasColumn('stock_movements', 'status')) {
-                                    $movement['status'] = 'completed';
-                                }
-
-                                DB::table('stock_movements')->insert($movement);
-                            }
-
-                            // Qty terjual: sales -> customer
-                            if ($qtySold > 0) {
-                                $movement = [
-                                    'product_id' => $product->id,
-                                    'from_type'  => 'sales',
-                                    'from_id'    => $handover->sales_id,
-                                    'to_type'    => 'sales',
-                                    'to_id'      => 0,
+                                    'to_type' => 'sales',
+                                    'to_id'   => $handover->sales_id,
                                     'quantity'   => $qtySold,
-                                    'note'       => "Handover {$handover->code} (sold closing - auto close)",
+                                    'note'       => "Handover {$handover->code} (sold closing)",
                                     'created_at' => now(),
                                     'updated_at' => now(),
-                                ];
-
-                                if (Schema::hasColumn('stock_movements', 'status')) {
-                                    $movement['status'] = 'completed';
-                                }
-
-                                DB::table('stock_movements')->insert($movement);
+                                ]);
                             }
+
+                            // ================================
+                            // ❌ JANGAN BALIKIN QTY_RETURNED KE WAREHOUSE
+                            // ================================
+                            // qty_returned tetap ada di stock sales
+                            // return dilakukan lewat Sales Return menu
                         }
 
                         $handover->status                  = 'closed';
                         $handover->closed_by               = $me->id;
-                        $handover->evening_otp_verified_at = now(); // biar konsisten field waktu closing
+                        $handover->evening_otp_verified_at = now();
                         $handover->save();
                     }
                 }

@@ -45,15 +45,18 @@ class SalesReturnController extends Controller
             ->get()
             ->map(function ($item) {
 
-                $remaining = $item->qty_dispatched - $item->qty_sold;
+                $qtyStart = (int) $item->qty_start;
+                $qtySold  = (int) $item->qty_sold;
+
+                $remaining = max(0, $qtyStart - $qtySold);
 
                 if ($remaining <= 0) return null;
 
                 return [
-                    'id'        => $item->id,
-                    'product'   => $item->product->name,
-                    'product_id'=> $item->product_id,
-                    'remaining' => $remaining,
+                    'id'         => $item->id,
+                    'product'    => $item->product?->name ?? '-',
+                    'product_id' => $item->product_id,
+                    'remaining'  => $remaining,
                 ];
             })
             ->filter()
@@ -127,5 +130,79 @@ class SalesReturnController extends Controller
         });
 
         return back()->with('success', 'Return berhasil diajukan.');
+    }
+
+    /**
+     * WAREHOUSE VIEW
+     */
+    public function approvalList()
+    {
+        $returns = SalesReturn::with(['sales','product','warehouse'])
+            ->where('status', 'pending')
+            ->latest()
+            ->get();
+
+        return view('wh.approval_sales_returns', compact('returns'));
+    }
+
+    public function approve(SalesReturn $return)
+    {
+        if ($return->status !== 'pending') {
+            return back()->with('error','Return sudah diproses.');
+        }
+
+        DB::transaction(function () use ($return) {
+
+            // kalau GOOD → masuk stok warehouse
+            if ($return->condition === 'good') {
+
+                $stock = DB::table('stock_levels')
+                    ->where('owner_type','warehouse')
+                    ->where('owner_id',$return->warehouse_id)
+                    ->where('product_id',$return->product_id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($stock) {
+                    DB::table('stock_levels')
+                        ->where('id',$stock->id)
+                        ->update([
+                            'quantity' => $stock->quantity + $return->quantity,
+                            'updated_at' => now(),
+                        ]);
+                } else {
+                    DB::table('stock_levels')->insert([
+                        'owner_type' => 'warehouse',
+                        'owner_id'   => $return->warehouse_id,
+                        'product_id' => $return->product_id,
+                        'quantity'   => $return->quantity,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+            }
+
+            // damaged / expired bisa lu handle beda nanti
+            $return->update([
+                'status'      => 'received',
+                'approved_by' => auth()->id(),
+                'approved_at' => now(),
+            ]);
+        });
+
+        return back()->with('success','Return berhasil di-approve & stok diperbarui.');
+    }
+    
+    public function reject(SalesReturn $return)
+    {
+        if ($return->status !== 'pending') {
+            return back()->with('error','Return sudah diproses.');
+        }
+
+        $return->update([
+            'status' => 'rejected'
+        ]);
+
+        return back()->with('success','Return ditolak.');
     }
 }
