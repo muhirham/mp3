@@ -1,6 +1,61 @@
 @extends('layouts.home')
 
 @section('content')
+<style>
+/* ================================
+   MOBILE FRIENDLY IMPROVEMENT
+================================ */
+
+/* Filter biar lebih rapih di mobile */
+@media (max-width: 768px) {
+  #filterForm .col-md-3 {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
+}
+
+/* Table to card layout (mobile) */
+@media (max-width: 768px) {
+
+  .table-responsive {
+    overflow: visible;
+  }
+
+  table.table thead {
+    display: none;
+  }
+
+  table.table tbody tr {
+    display: block;
+    background: #fff;
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  }
+
+  table.table tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: none !important;
+    padding: 6px 0;
+    font-size: 14px;
+  }
+
+  table.table tbody td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: #696cff;
+    margin-right: 10px;
+  }
+
+  table.table tbody td:first-child {
+    display: none;
+  }
+}
+</style>
+
 <div class="container-xxl flex-grow-1 container-p-y">
 
   <h4 class="fw-bold py-2 mb-3">
@@ -8,8 +63,8 @@
   </h4>
 
   <div class="card mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <h5 class="mb-0 fw-bold">Daftar OTP Handover</h5>
+    <div class="card-header d-flex flex-column flex-md-row justify-content-between align-items-md-center align-items-start">
+      <h5 class="mb-2 mb-md-0 fw-bold">Daftar OTP Handover</h5>
       <small class="text-muted">
         Halaman ini menampilkan OTP <b>pagi</b> untuk handover milik Anda.
       </small>
@@ -17,7 +72,7 @@
 
     <div class="card-body">
 
-      {{-- Filter (tanpa tombol, trigger via JS) --}}
+      {{-- Filter --}}
       <form id="filterForm" class="row g-2 mb-3">
         <div class="col-md-3">
           <label class="form-label">Dari Tanggal</label>
@@ -39,7 +94,7 @@
         </div>
       </form>
 
-      {{-- Tabel --}}
+      {{-- Table --}}
       <div class="table-responsive">
         <table class="table table-striped table-hover align-middle">
           <thead>
@@ -54,7 +109,7 @@
           </thead>
 
           <tbody id="handoverBody">
-            {{-- initial render (fallback kalau JS mati) --}}
+
             @forelse($handovers as $idx => $h)
               @php
                   $badgeClass = match ($h->status) {
@@ -69,19 +124,28 @@
 
               <tr>
                 <td>{{ $idx + 1 }}</td>
-                <td>{{ optional($h->handover_date)->format('Y-m-d') }}</td>
-                <td class="fw-semibold">{{ $h->code }}</td>
-                <td>
+
+                <td data-label="Tanggal">
+                  {{ optional($h->handover_date)->format('Y-m-d') }}
+                </td>
+
+                <td class="fw-semibold" data-label="Kode">
+                  {{ $h->code }}
+                </td>
+
+                <td data-label="Warehouse">
                   {{ $h->warehouse->warehouse_name
                       ?? $h->warehouse->name
                       ?? '-' }}
                 </td>
-                <td>
+
+                <td data-label="Status">
                   <span class="badge {{ $badgeClass }}">
                     {{ $h->status }}
                   </span>
                 </td>
-                <td>
+
+                <td data-label="OTP Pagi">
                   @if($h->morning_otp_plain)
                     <span class="badge bg-label-primary fs-6">
                       {{ $h->morning_otp_plain }}
@@ -102,8 +166,8 @@
                 </td>
               </tr>
             @endforelse
-          </tbody>
 
+          </tbody>
         </table>
       </div>
 
@@ -132,7 +196,6 @@
 
     if (!bodyEl || !dateFromEl || !dateToEl || !statusEl || !filterForm) return;
 
-    // Jangan submit form ke server, kita pakai AJAX
     filterForm.addEventListener('submit', function (e) {
         e.preventDefault();
     });
@@ -173,15 +236,15 @@
             html += `
                 <tr>
                     <td>${r.no}</td>
-                    <td>${r.date || '-'}</td>
-                    <td class="fw-semibold">${r.code}</td>
-                    <td>${r.warehouse || '-'}</td>
-                    <td>
+                    <td data-label="Tanggal">${r.date || '-'}</td>
+                    <td class="fw-semibold" data-label="Kode">${r.code}</td>
+                    <td data-label="Warehouse">${r.warehouse || '-'}</td>
+                    <td data-label="Status">
                         <span class="badge ${r.status_badge_class}">
                             ${r.status}
                         </span>
                     </td>
-                    <td>${morningOtp}</td>
+                    <td data-label="OTP Pagi">${morningOtp}</td>
                 </tr>
             `;
         });
@@ -220,12 +283,10 @@
         }
     }
 
-    // Trigger saat filter berubah
     dateFromEl.addEventListener('change', loadData);
     dateToEl.addEventListener('change', loadData);
     statusEl.addEventListener('change', loadData);
 
-    // First load
     loadData();
 })();
 </script>

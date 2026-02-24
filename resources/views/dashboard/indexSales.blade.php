@@ -1,6 +1,91 @@
 @extends('layouts.home')
 @section('title', 'Sales Dashboard')
 
+@push('styles')
+<style>
+
+/* =========================
+   MOBILE RESPONSIVE UPGRADE
+========================= */
+
+@media (max-width: 768px) {
+
+    /* Header spacing */
+    h4 {
+        font-size: 18px;
+    }
+
+    /* KPI cards lebih compact */
+    .card .fs-5 {
+        font-size: 16px !important;
+    }
+
+    /* Chart container lebih fleksibel */
+    canvas {
+        max-width: 100% !important;
+    }
+
+    /* ===== STACK TABLE STYLE ===== */
+    .table-responsive {
+        overflow: visible;
+    }
+
+    .table-responsive table thead {
+        display: none;
+    }
+
+    .table-responsive table tbody tr {
+        display: block;
+        background: #fff;
+        border-radius: 14px;
+        padding: 12px;
+        margin-bottom: 14px;
+        box-shadow: 0 3px 12px rgba(0,0,0,0.05);
+    }
+
+    .table-responsive table tbody td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border: none !important;
+        padding: 6px 0;
+        font-size: 13px;
+    }
+
+    .table-responsive table tbody td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        font-size: 11px;
+        color: #6c757d;
+        text-transform: uppercase;
+    }
+
+    /* Quick action full width */
+    .row.g-3 > .col-md-4 {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+
+    /* Filter full width */
+    #salesFilterForm .col-md-3 {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+
+    /* Modal full screen feel */
+    .modal-dialog {
+        margin: 10px;
+    }
+
+    .modal-content {
+        border-radius: 16px;
+    }
+
+}
+
+</style>
+@endpush
+
 @section('content')
 @php
     $me = $me ?? auth()->user();

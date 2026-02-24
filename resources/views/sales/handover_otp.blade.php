@@ -2,84 +2,122 @@
 
 @push('styles')
 <style>
-    /* ====== MOBILE STACKED TABLE ====== */
-    @media (max-width: 768px) {
-        #itemsTable {
-            border-collapse: separate;
-            border-spacing: 0 0.5rem;
-        }
 
-        #itemsTable thead {
-            display: none;
-        }
+/* ===============================
+   MOBILE OPTIMIZATION UPGRADE
+================================ */
 
-        #itemsTable tbody tr {
-            display: block;
-            background: #ffffff;
-            border-radius: .75rem;
-            padding: .5rem .75rem;
-            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
-            margin-bottom: .75rem;
-        }
-
-        #itemsTable tbody tr:last-child {
-            margin-bottom: 0;
-        }
-
-        #itemsTable td {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border: 0;
-            padding: .15rem 0;
-            font-size: 11px;
-        }
-
-        /* Baris produk ditampilkan di atas tanpa label kiri */
-        #itemsTable td[data-label="Produk"] {
-            display: block;
-            padding-bottom: .25rem;
-        }
-
-        #itemsTable td[data-label="Produk"]::before {
-            content: '';
-            margin: 0;
-        }
-
-        #itemsTable td[data-label="Produk"] .product-name {
-            font-weight: 600;
-            font-size: 12px;
-        }
-
-        #itemsTable td[data-label="Produk"] .product-code {
-            font-size: 10px;
-        }
-
-        #itemsTable td::before {
-            content: attr(data-label);
-            font-weight: 600;
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: .03em;
-            color: #6c757d;
-            margin-right: .75rem;
-        }
-
-        #itemsTable input.form-control-sm,
-        #itemsTable select.form-select-sm {
-            font-size: 11px;
-            padding: .15rem .35rem;
-            max-width: 130px;
-        }
-
-        #itemsTable .badge {
-            font-size: 10px;
-        }
-
-        #itemsTable .form-text {
-            font-size: 9px;
-        }
+/* Card info lebih rapi di mobile */
+@media (max-width: 768px) {
+    .card-body .row > div {
+        flex: 0 0 100%;
+        max-width: 100%;
     }
+}
+
+/* ====== MOBILE STACKED TABLE ====== */
+@media (max-width: 768px) {
+
+    #itemsTable {
+        border-collapse: separate;
+        border-spacing: 0 0.75rem;
+    }
+
+    #itemsTable thead {
+        display: none;
+    }
+
+    #itemsTable tbody tr {
+        display: block;
+        background: #ffffff;
+        border-radius: 14px;
+        padding: .75rem .9rem;
+        box-shadow: 0 3px 12px rgba(15, 23, 42, 0.06);
+        margin-bottom: 1rem;
+        transition: 0.2s ease;
+    }
+
+    #itemsTable tbody tr:last-child {
+        margin-bottom: 0;
+    }
+
+    #itemsTable td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border: 0 !important;
+        padding: .25rem 0;
+        font-size: 12px;
+    }
+
+    /* Produk tampil paling atas */
+    #itemsTable td[data-label="Produk"] {
+        display: block;
+        padding-bottom: .5rem;
+        border-bottom: 1px dashed #eee;
+        margin-bottom: .5rem;
+    }
+
+    #itemsTable td[data-label="Produk"]::before {
+        content: '';
+        margin: 0;
+    }
+
+    #itemsTable td[data-label="Produk"] .product-name {
+        font-weight: 600;
+        font-size: 13px;
+    }
+
+    #itemsTable td[data-label="Produk"] .product-code {
+        font-size: 11px;
+    }
+
+    #itemsTable td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: #6c757d;
+        margin-right: .75rem;
+    }
+
+    #itemsTable input.form-control-sm,
+    #itemsTable select.form-select-sm {
+        font-size: 12px;
+        padding: .2rem .4rem;
+        max-width: 140px;
+    }
+
+    #itemsTable input[type="file"] {
+        font-size: 11px;
+    }
+
+    #itemsTable .badge {
+        font-size: 10px;
+    }
+
+    #itemsTable .form-text {
+        font-size: 10px;
+    }
+
+    /* Button submit full width */
+    .text-end .btn-primary {
+        width: 100%;
+    }
+
+    /* Header title lebih compact */
+    .card-header {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: .5rem;
+    }
+
+    .card-header small {
+        text-align: left !important;
+    }
+}
+
 </style>
 @endpush
 
