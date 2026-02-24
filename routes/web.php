@@ -472,6 +472,38 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->name('warehouse.returns.reject')
         ->middleware('menu:sales_return_approval');
 
+    Route::post('/sales/returns/{salesReturn}/resubmit',[SalesReturnController::class,'resubmit'])
+        ->name('sales.returns.resubmit')
+        ->middleware('menu:sales_return');
+
+    Route::get('/sales/returns/rejected/{handover}', [SalesReturnController::class,'getRejected'])
+        ->name('sales.returns.rejected')
+        ->middleware('menu:sales_return');
+
+    Route::post('/sales/returns/{handover}/update-rejected',[SalesReturnController::class, 'updateRejected'])
+        ->name('sales.returns.update_rejected')
+        ->middleware('menu:sales_return');
+
+    Route::get('/sales/returns/hdo/{id}', [SalesReturnController::class, 'getHdoDetails'])
+        ->name('sales.returns.hdo.details')
+        ->middleware('menu:sales_return');
+
+    Route::get('/sales/returns/filter', [SalesReturnController::class, 'filterAjax'])
+        ->name('sales.returns.filter')
+        ->middleware('menu:sales_return');
+
+    Route::get('/warehouse/returns/filter', [SalesReturnController::class, 'filterAjaxWhApproved'])
+        ->name('warehouse.returns.filter')
+        ->middleware('menu:sales_return_approval');
+
+    Route::get('/warehouse/returns/hdo/{handover}',[SalesReturnController::class, 'getHdoDetails'])
+        ->name('warehouse.returns.hdo.details')
+        ->middleware('menu:sales_return_approval');
+    
+    Route::get('/sales/by-warehouse/{id}', [SalesReturnController::class,'getSalesByWarehouse'])
+        ->name('sales.returns.by_warehouse')
+        ->middleware('menu:sales_return');
+
 
     // === Sales pages (SALES & WAREHOUSE) ===
     Route::get('/sales/{sales}/active-handover-count', [SalesHandoverController::class, 'getActiveCount']);
@@ -495,8 +527,6 @@ Route::middleware(['auth', 'active'])->group(function () {
 
     Route::get('/reports/sales/export', [SalesHandoverController::class,'exportSalesExcel'])
         ->name('sales.report.export');
-
-
 
     // key: sales_otp
     Route::get('/sales/otp-items', [HandoverOtpItemsController::class, 'index'])
@@ -526,6 +556,9 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->name('warehouse.handovers.payments.approve')
         ->middleware('menu:wh_sales_reports');
 
+    Route::post('/warehouse/returns/{handover}/approve-all',[SalesReturnController::class,'approveAll'])
+        ->name('warehouse.returns.approveAll')
+        ->middleware('menu:sales_return_approval');
 
     // Reject 1 item payment (dipanggil via AJAX dari tabel item)
     Route::post('/warehouse/handovers/{handover}/payments/reject', [SalesHandoverController::class, 'rejectPayment'])

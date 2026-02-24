@@ -25,6 +25,7 @@ use App\Models\Role;
 use App\Models\WarehouseTransfer;
 use App\Models\WarehouseTransferItem;
 use App\Models\WarehouseTransferLog;
+use App\Models\SalesHandover;
 
 
 
@@ -251,6 +252,35 @@ class OperationSeeder extends Seeder
                 }
             }
 
+            // buat simpan ID handover yang nanti dipakai buat relasi sales return
+                        $handover = null;
+
+            if ($salesUser && $wh && $this->tableExists(SalesHandover::class)) {
+
+                $handover = SalesHandover::firstOrCreate(
+                    [
+                        'code' => 'HDO-SEED-' . Carbon::now()->format('Ymd'),
+                    ],
+                    [
+                        'warehouse_id' => $wh->id,
+                        'sales_id'     => $salesUser->id,
+                        'issued_by'    => $whUser?->id ?? $admin->id,  // 🔥 WAJIB ADA
+                        'closed_by'    => $whUser?->id ?? $admin->id,
+                        'handover_date'=> now(),
+                        'status'       => 'closed',
+
+                        'total_dispatched_amount' => 0,
+                        'total_sold_amount'       => 0,
+                        'cash_amount'             => 0,
+                        'transfer_amount'         => 0,
+                        'discount_total'          => 0,
+                        'grand_total'             => 0,
+
+                        'evening_otp_verified_at' => now(),
+                    ]
+                );
+            }
+
             /*
             |----------------------------------------------------------------------
             | 7) SALES REPORT + SALES RETURN (harian)
@@ -291,6 +321,7 @@ class OperationSeeder extends Seeder
                     [
                         'sales_id'     => $salesUser->id,
                         'warehouse_id' => $wh->id,
+                        'handover_id'  => $handover->id,
                         'product_id'   => $prodVoucher->id,
                         'quantity'     => 1,
                     ],

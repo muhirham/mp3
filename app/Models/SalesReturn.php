@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class SalesReturn extends Model
 {
     protected $fillable = [
-        'sales_id', 'warehouse_id', 'product_id',
+        'sales_id', 'warehouse_id','handover_id', 'product_id',
         'quantity', 'condition', 'reason',
         'status', 'approved_by', 'approved_at'
     ];
@@ -27,8 +27,13 @@ class SalesReturn extends Model
         return $this->belongsTo(Product::class);
     }
 
-    public function approver()
+    public function approvedByUser()
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function handover()
+    {
+        return $this->belongsTo(SalesHandover::class, 'handover_id');
     }
 }
