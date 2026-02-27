@@ -70,7 +70,8 @@
                                 <option value="">-- Select HDO --</option>
                                 @foreach ($handovers as $h)
                                     <option value="{{ $h->id }}">
-                                        {{ $h->code }} - {{ \Carbon\Carbon::parse($h->handover_date)->format('d M Y') }}
+                                        {{ $h->code }} -
+                                        {{ \Carbon\Carbon::parse($h->handover_date)->format('d M Y') }}
                                     </option>
                                 @endforeach
                             </select>
@@ -155,7 +156,7 @@
 
 
                 {{-- MOBILE CARD VERSION --}}
-                <div class="d-block d-md-none">
+                <div class="d-block d-md-none" id="mobileReturnContainer">
 
                     @forelse($groupedReturns as $handoverId => $items)
                         @php
@@ -525,9 +526,13 @@
                 .then(data => {
 
                     const tbody = document.getElementById('returnTableBody');
+                    const mobileContainer = document.getElementById('mobileReturnContainer');
+
                     tbody.innerHTML = '';
+                    mobileContainer.innerHTML = '';
 
                     if (!data.length) {
+
                         tbody.innerHTML = `
                     <tr>
                         <td colspan="5" class="text-center text-muted">
@@ -535,6 +540,13 @@
                         </td>
                     </tr>
                 `;
+
+                        mobileContainer.innerHTML = `
+                    <div class="text-center text-muted py-3">
+                        No return history found.
+                    </div>
+                `;
+
                         return;
                     }
 
@@ -551,32 +563,60 @@
                         }
 
                         let actionButtons = `
-                            <button class="btn btn-sm btn-outline-primary w-100"
-                                onclick="viewHdoDetails(${item.handover_id})">
-                                View
-                            </button>
-                        `;
+                    <button class="btn btn-sm btn-outline-primary w-100"
+                        onclick="viewHdoDetails(${item.handover_id})">
+                        View
+                    </button>
+                `;
 
                         if (item.status === 'rejected') {
                             actionButtons += `
-                                <button class="btn btn-sm btn-outline-danger w-100 mt-1"
+                        <button class="btn btn-sm btn-outline-danger w-100 mt-1"
+                            onclick="viewHdoDetails(${item.handover_id}, true)">
+                            Resubmit
+                        </button>
+                    `;
+                        }
+
+                        // ================= DESKTOP =================
+                        tbody.innerHTML += `
+                    <tr>
+                        <td><strong>${item.handover_code}</strong></td>
+                        <td>${item.total_items} items</td>
+                        <td>${badge}</td>
+                        <td>${item.date}</td>
+                        <td>${actionButtons}</td>
+                    </tr>
+                `;
+
+                        // ================= MOBILE =================
+                        mobileContainer.innerHTML += `
+                    <div class="border rounded-3 p-3 mb-3 bg-light">
+
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <strong>${item.handover_code}</strong>
+                            ${badge}
+                        </div>
+
+                        <div class="small text-muted mb-2">
+                            ${item.total_items} items • ${item.date}
+                        </div>
+
+                        <button class="btn btn-primary btn-sm w-100 mb-2"
+                            onclick="viewHdoDetails(${item.handover_id})">
+                            View Details
+                        </button>
+
+                        ${item.status === 'rejected' ? `
+                                <button class="btn btn-danger btn-sm w-100"
                                     onclick="viewHdoDetails(${item.handover_id}, true)">
                                     Resubmit
                                 </button>
-                            `;
-                        }
+                            ` : ''}
 
-                        tbody.innerHTML += `
-                            <tr>
-                                <td><strong>${item.handover_code}</strong></td>
-                                <td>${item.total_items} items</td>
-                                <td>${badge}</td>
-                                <td>${item.date}</td>
-                                <td>${actionButtons}</td>
-                            </tr>
-                        `;
+                    </div>
+                `;
                     });
-
                 });
         }
     </script>
@@ -614,15 +654,15 @@
             });
         }
     </script>
-@if(session('success'))
-<script>
-    Swal.fire({
-        icon: 'success',
-        title: 'Success',
-        text: '{{ session('success') }}',
-        timer: 1500,
-        showConfirmButton: false
-    });
-</script>
-@endif
+    @if (session('success'))
+        <script>
+            Swal.fire({
+                icon: 'success',
+                title: 'Success',
+                text: '{{ session('success') }}',
+                timer: 1500,
+                showConfirmButton: false
+            });
+        </script>
+    @endif
 @endpush

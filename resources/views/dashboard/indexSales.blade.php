@@ -45,7 +45,7 @@
 
     .table-responsive table tbody td {
         display: flex;
-        justify-content: space-between;
+        justify-content: flex-start;
         align-items: center;
         border: none !important;
         padding: 6px 0;

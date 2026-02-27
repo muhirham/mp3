@@ -6,7 +6,7 @@
    MOBILE FRIENDLY IMPROVEMENT
 ================================ */
 
-/* Filter biar lebih rapih di mobile */
+/* Filter more responsive on mobile */
 @media (max-width: 768px) {
   #filterForm .col-md-3 {
     flex: 0 0 100%;
@@ -64,9 +64,9 @@
 
   <div class="card mb-4">
     <div class="card-header d-flex flex-column flex-md-row justify-content-between align-items-md-center align-items-start">
-      <h5 class="mb-2 mb-md-0 fw-bold">Daftar OTP Handover</h5>
+      <h5 class="mb-2 mb-md-0 fw-bold">OTP Handover List</h5>
       <small class="text-muted">
-        Halaman ini menampilkan OTP <b>pagi</b> untuk handover milik Anda.
+        This page displays the <b>morning</b> OTP for your handovers.
       </small>
     </div>
 
@@ -75,12 +75,12 @@
       {{-- Filter --}}
       <form id="filterForm" class="row g-2 mb-3">
         <div class="col-md-3">
-          <label class="form-label">Dari Tanggal</label>
+          <label class="form-label">From Date</label>
           <input type="date" name="date_from" id="dateFrom" value="{{ $dateFrom }}" class="form-control">
         </div>
 
         <div class="col-md-3">
-          <label class="form-label">Sampai Tanggal</label>
+          <label class="form-label">To Date</label>
           <input type="date" name="date_to" id="dateTo" value="{{ $dateTo }}" class="form-control">
         </div>
 
@@ -100,11 +100,11 @@
           <thead>
             <tr>
               <th style="width: 6%">#</th>
-              <th style="width: 12%">Tanggal</th>
-              <th style="width: 20%">Kode Handover</th>
+              <th style="width: 12%">Date</th>
+              <th style="width: 20%">Handover Code</th>
               <th>Warehouse</th>
               <th style="width: 14%">Status</th>
-              <th style="width: 14%">OTP Pagi</th>
+              <th style="width: 14%">Morning OTP</th>
             </tr>
           </thead>
 
@@ -125,11 +125,11 @@
               <tr>
                 <td>{{ $idx + 1 }}</td>
 
-                <td data-label="Tanggal">
+                <td data-label="Date">
                   {{ optional($h->handover_date)->format('Y-m-d') }}
                 </td>
 
-                <td class="fw-semibold" data-label="Kode">
+                <td class="fw-semibold" data-label="Code">
                   {{ $h->code }}
                 </td>
 
@@ -145,16 +145,16 @@
                   </span>
                 </td>
 
-                <td data-label="OTP Pagi">
+                <td data-label="Morning OTP">
                   @if($h->morning_otp_plain)
                     <span class="badge bg-label-primary fs-6">
                       {{ $h->morning_otp_plain }}
                     </span>
                     <div class="small text-muted">
-                      Kirim: {{ optional($h->morning_otp_sent_at)->format('H:i') }}
+                      Sent: {{ optional($h->morning_otp_sent_at)->format('H:i') }}
                     </div>
                   @else
-                    <span class="text-muted small">Belum ada</span>
+                    <span class="text-muted small">Not available</span>
                   @endif
                 </td>
               </tr>
@@ -162,7 +162,7 @@
             @empty
               <tr>
                 <td colspan="6" class="text-center text-muted">
-                  Tidak ada handover pada periode ini.
+                  No handovers found for this period.
                 </td>
               </tr>
             @endforelse
@@ -173,8 +173,8 @@
 
       <div class="form-text mt-2">
         <ul class="mb-0">
-          <li>OTP tetap dikirim ke email, namun bisa dicek ulang di halaman ini.</li>
-          <li>Jika OTP tidak muncul, pastikan handover sudah dibuat oleh admin gudang.</li>
+          <li>The OTP is still sent to your email, but can also be reviewed on this page.</li>
+          <li>If the OTP does not appear, make sure the handover has been created by the warehouse admin.</li>
         </ul>
       </div>
 
@@ -236,15 +236,15 @@
             html += `
                 <tr>
                     <td>${r.no}</td>
-                    <td data-label="Tanggal">${r.date || '-'}</td>
-                    <td class="fw-semibold" data-label="Kode">${r.code}</td>
+                    <td data-label="Date">${r.date || '-'}</td>
+                    <td class="fw-semibold" data-label="Handover Code">${r.code}</td>
                     <td data-label="Warehouse">${r.warehouse || '-'}</td>
                     <td data-label="Status">
                         <span class="badge ${r.status_badge_class}">
                             ${r.status}
                         </span>
                     </td>
-                    <td data-label="OTP Pagi">${morningOtp}</td>
+                    <td data-label="Morning OTP">${morningOtp}</td>
                 </tr>
             `;
         });
