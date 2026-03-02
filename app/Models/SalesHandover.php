@@ -119,5 +119,9 @@ class SalesHandover extends Model
         return $this->extractPlainOtp($this->evening_otp_hash);
     }
 
+    public function salesReturns()
+    {
+        return $this->hasMany(SalesReturn::class, 'handover_id');
+    }
 
 }

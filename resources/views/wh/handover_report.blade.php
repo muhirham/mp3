@@ -3,35 +3,87 @@
 @section('content')
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <style>
-        .swal2-container {
-            z-index: 2005 !important;
-        }
+<style>
+/* ================= DESKTOP BASE ================= */
 
-        .table {
-            font-size: 12px;
-        }
+.swal2-container { z-index: 2005 !important; }
 
-        .table thead th {
-            font-size: 11px;
-            white-space: nowrap;
-        }
+.table { font-size: 12px; }
+.table thead th { font-size: 11px; white-space: nowrap; }
+.table tbody td { padding-top: 4px; padding-bottom: 4px; }
+.badge { font-size: 10px; padding: 3px 6px; }
+.table td, .table th { white-space: nowrap; }
 
-        .table tbody td {
-            padding-top: 4px;
-            padding-bottom: 4px;
-        }
+/* ================= MOBILE RESPONSIVE UPGRADE ================= */
 
-        .badge {
-            font-size: 10px;
-            padding: 3px 6px;
-        }
+@media (max-width: 768px) {
 
-        .table td,
-        .table th {
-            white-space: nowrap;
-        }
-    </style>
+    /* FILTER STACK */
+    #reportFilterForm .col-md-3 {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+
+    /* SUMMARY STACK */
+    .row.text-center > .col-md-6 {
+        flex: 0 0 100%;
+        max-width: 100%;
+        margin-bottom: 15px;
+    }
+
+    /* TABLE TO CARD */
+    .table-responsive {
+        overflow: visible;
+    }
+
+    .table-responsive table thead {
+        display: none;
+    }
+
+    .table-responsive table tbody tr {
+        display: block;
+        background: #ffffff;
+        border-radius: 14px;
+        padding: 14px;
+        margin-bottom: 14px;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+    }
+
+    .table-responsive table tbody td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border: none !important;
+        padding: 6px 0;
+        font-size: 13px;
+        white-space: normal !important;
+    }
+
+    .table-responsive table tbody td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        font-size: 11px;
+        text-transform: uppercase;
+        color: #6c757d;
+        margin-right: 10px;
+    }
+
+    /* BUTTON FULL WIDTH */
+    .btn {
+        width: 100%;
+    }
+
+    /* MODAL RESPONSIVE */
+    .modal-dialog {
+        margin: 10px;
+    }
+
+    .modal-content {
+        border-radius: 16px;
+    }
+
+}
+</style>
 
     @php
         $me = $me ?? auth()->user();
@@ -321,22 +373,16 @@
                                 @else
                                     <tr>
                                         <td>{{ $r['no'] }}</td>
-                                        <td>{{ $r['date'] }}</td>
-                                        <td class="fw-semibold">{{ $r['code'] }}</td>
-                                        <td>{{ $r['warehouse'] }}</td>
-                                        <td>{{ $r['sales'] }}</td>
-                                        <td><span
-                                                class="badge {{ $r['status_badge_class'] }}">{{ $r['status_label'] }}</span>
+                                        <td data-label="Tanggal">{{ $r['date'] }}</td>
+                                        <td data-label="Kode" class="fw-semibold">{{ $r['code'] }}</td>
+                                        <td data-label="Warehouse">{{ $r['warehouse'] }}</td>
+                                        <td data-label="Sales">{{ $r['sales'] }}</td>
+                                        <td data-label="Status">
+                                        <span class="badge {{ $r['status_badge_class'] }}">{{ $r['status_label'] }}</span>
                                         </td>
-                                        <td class="text-end">{{ $r['amount_dispatched'] }}</td>
-                                        <td class="text-end fw-bold">{{ $r['amount_sold'] }}</td>
-
-                                        @if ($canSeeMargin)
-                                            <td class="text-end text-muted">{{ $r['amount_original'] }}</td>
-                                            <td class="text-end text-danger">-{{ $r['amount_discount'] }}</td>
-                                        @endif
-
-                                        <td class="text-end">{{ $r['amount_diff'] }}</td>
+                                        <td data-label="Nilai Dibawa" class="text-end">{{ $r['amount_dispatched'] }}</td>
+                                        <td data-label="Terjual" class="text-end fw-bold">{{ $r['amount_sold'] }}</td>
+                                        <td data-label="Selisih" class="text-end">{{ $r['amount_diff'] }}</td>
 
                                         <td class="text-end">
                                             <button type="button" class="btn btn-sm btn-outline-primary btn-detail"

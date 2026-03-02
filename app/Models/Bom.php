@@ -24,12 +24,6 @@ class Bom extends Model
         'is_active'  => 'boolean',
     ];
 
-    /*
-    |--------------------------------------------------------------------------
-    | RELATIONS
-    |--------------------------------------------------------------------------
-    */
-
     // Finished product
     public function product()
     {
@@ -47,4 +41,14 @@ class Bom extends Model
     {
         return $this->hasMany(BomTransaction::class);
     }
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function updater()
+    {
+        return $this->belongsTo(User::class, 'updated_by');
+    }
+
 }

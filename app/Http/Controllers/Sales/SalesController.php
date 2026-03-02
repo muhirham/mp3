@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Warehouse;
+namespace App\Http\Controllers\sales;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -15,7 +15,6 @@ use App\Models\SalesHandoverItem;
 // Model lama kalau masih dipakai di menu lain
 use App\Models\SalesReport;
 use App\Models\SalesReturn;
-use App\Models\StockLevel;
 
 class SalesController extends Controller
 {

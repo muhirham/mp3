@@ -284,9 +284,8 @@ class WarehouseTransferController extends Controller
             'items.*.good' => 'required|integer|min:0',
             'items.*.damaged' => 'required|integer|min:0',
             'items.*.note' => 'nullable|string',
-
-            'photos_good.*' => 'nullable|image|max:4096',
-            'photos_damaged.*' => 'nullable|image|max:4096',
+            'photos_good.*' => 'nullable|mimes:jpg,jpeg,png|max:2048',
+            'photos_damaged.*' => 'nullable|mimes:jpg,jpeg,png|max:2048',
             'note' => 'nullable|string',
         ]);
 
