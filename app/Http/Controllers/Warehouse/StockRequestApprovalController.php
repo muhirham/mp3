@@ -111,7 +111,9 @@ class StockRequestApprovalController extends Controller
 
             if ($request->handover_id) {
                 $handover = SalesHandover::lockForUpdate()
-                    ->find($request->handover_id);
+                    ->where('id', $request->handover_id)
+                    ->where('status', 'draft')
+                    ->first();
             }
 
             $today = now()->format('ymd');
@@ -147,7 +149,7 @@ class StockRequestApprovalController extends Controller
                         'warehouse_id'  => $stockRequest->warehouse_id,
                         'sales_id'      => $stockRequest->user_id,
                         'handover_date' => today(),
-                        'status'        => 'waiting_morning_otp',
+                        'status' => 'draft',
                         'issued_by'     => auth()->id(),
                     ]);
                 }

@@ -556,6 +556,9 @@ Route::post('/warehouse/stock-requests/{id}/reject', [StockRequestApprovalContro
 
     Route::get('/reports/sales/export', [SalesHandoverController::class,'exportSalesExcel'])
         ->name('sales.report.export');
+    
+    Route::get('/sales/{id}/draft-handover', [SalesHandoverController::class, 'draftBySales'])
+        ->name('sales.handover.draft');
 
     // key: sales_otp
     Route::get('/sales/otp-items', [HandoverOtpItemsController::class, 'index'])

@@ -19,6 +19,9 @@
 
             <form id="formIssue" method="POST" action="{{ route('sales.handover.morning.store') }}">
             @csrf
+            @if($selectedHandover)
+                <input type="hidden" name="handover_id" value="{{ $selectedHandover->id }}">
+            @endif
             <div class="card-body">
                 <div class="row g-3">
                 <div class="col-md-3">
@@ -51,7 +54,8 @@
                     <select name="sales_id" class="form-select" required>
                     <option value="">— Pilih Sales —</option>
                     @foreach(($salesUsers ?? []) as $u)
-                        <option value="{{ $u->id }}" @selected(old('sales_id') == $u->id)>
+                        <option value="{{ $u->id }}"
+                        @selected(($selectedHandover?->sales_id ?? old('sales_id')) == $u->id)>
                         {{ $u->name ?? ('User #'.$u->id) }}
                         @if($u->email) — {{ $u->email }} @endif
                         </option>
@@ -81,33 +85,41 @@
                     </tr>
                     </thead>
                     <tbody>
+                        @php
+                            $draftItems = $selectedHandover?->items ?? collect([null]);
+                        @endphp
+
+                        @foreach($draftItems as $i => $draft)
                     <tr>
                     <td>
-                        <select class="form-select sel-product" name="items[0][product_id]" required>
+                        <select class="form-select sel-product" name="items[{{ $i }}][product_id]" required>
                         <option value="">— Pilih Produk —</option>
                         @foreach(($products ?? []) as $p)
                             <option value="{{ $p->id }}"
                                     data-price="{{ (int) $p->selling_price }}"
-                                    @selected(optional(old('items.0'))['product_id'] == $p->id)>
+                                    @selected($draft?->product_id == $p->id)>
                             {{ $p->name }} ({{ $p->product_code }})
                             </option>
                         @endforeach
                         </select>
                     </td>
                     <td>
-                        <input type="number" name="items[0][qty]"
+                        <input type="number"
+                            name="items[{{ $i }}][qty]"
                             class="form-control inp-qty"
-                            min="1" value="{{ old('items.0.qty', 1) }}" required>
+                            min="1"
+                            value="{{ $draft?->qty_start ?? 1 }}"
+                            required>
                     </td>
                     <td>
                         <input type="text" class="form-control inp-price" readonly>
                     </td>
                     <td>
                         <input type="number"
-                        class="form-control inp-discount"
-                            name="items[0][discount_per_unit]"
+                            class="form-control inp-discount"
+                            name="items[{{ $i }}][discount_per_unit]"
                             min="0"
-                            value="{{ old('items.0.discount_per_unit', 0) }}">
+                            value="{{ $draft?->discount_per_unit ?? 0 }}">
                     </td>
                     <td>
                         <input type="text" class="form-control inp-total" readonly>
@@ -118,6 +130,7 @@
                         </button>
                     </td>
                     </tr>
+                    @endforeach
                     </tbody>
                 </table>
                 </div>
@@ -129,7 +142,9 @@
 
             <div class="card-footer d-flex justify-content-end gap-2">
                 <button type="reset" class="btn btn-light">Reset</button>
-                <button class="btn btn-primary">Simpan Draft &amp; Kirim OTP Pagi</button>
+                <button class="btn btn-primary">
+                    {{ $selectedHandover ? 'Update Draft & Kirim OTP Pagi' : 'Simpan Draft & Kirim OTP Pagi' }}
+                </button>
             </div>
             </form>
         </div>
@@ -147,7 +162,8 @@
                 <select name="handover_id" class="form-select" required>
                     <option value="">— Pilih —</option>
                     @foreach(($waitingMorning ?? []) as $h)
-                    <option value="{{ $h->id }}">
+                    <option value="{{ $h->id }}"
+                    @selected(($selectedHandoverId ?? null) == $h->id)>
                         {{ $h->code }} — {{ $h->sales->name ?? 'Sales #'.$h->sales_id }}
                         ({{ \Carbon\Carbon::parse($h->handover_date)->format('Y-m-d') }})
                     </option>
@@ -180,10 +196,19 @@
         const infoLabel   = document.getElementById('handoverInfo');
 
         salesSelect?.addEventListener('change', async function(){
+            
             const salesId = this.value;
+            
             infoLabel.textContent = '';
 
             if(!salesId) return;
+            const draftRes = await fetch(`/sales/${salesId}/draft-handover`);
+            const dataDraft = await draftRes.json();
+
+            if(dataDraft.handover_id){
+                window.location.href = `/sales/handover/morning?handover_id=${dataDraft.handover_id}`;
+                return;
+            }
 
             try{
                 const res = await fetch(`/sales/${salesId}/active-handover-count`, {
