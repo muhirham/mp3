@@ -17,12 +17,32 @@
                 <div class="row mb-3 g-2">
                     <div class="col-md-3">
                         <label>From Date</label>
-                        <input type="date" id="dateFrom" class="form-control" value="{{ now()->toDateString() }}">
+                        <input type="date" id="dateFrom" class="form-control" value="{{ request('date_from', now()->toDateString()) }}">
                     </div>
 
                     <div class="col-md-3">
                         <label>To Date</label>
-                        <input type="date" id="dateTo" class="form-control" value="{{ now()->toDateString() }}">
+                        <input type="date" id="dateTo" class="form-control" value="{{ request('date_to', now()->toDateString()) }}">
+                    </div>
+
+                    <div class="col-md-3">
+                        <label>Warehouse</label>
+
+                        @if(auth()->user()->hasRole(['admin','superadmin']))
+                            <select id="warehouseFilter" class="form-control">
+                                <option value="">All Warehouse</option>
+                                @foreach($warehouses as $w)
+                                    <option value="{{ $w->id }}"
+                                        @selected(request('warehouse_id') == $w->id)>
+                                        {{ $w->warehouse_name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        @else
+                            <input type="text" class="form-control"
+                                value="{{ auth()->user()->warehouse->warehouse_name }}"
+                                disabled>
+                        @endif
                     </div>
                 </div>
 
@@ -374,5 +394,28 @@
 
             }, 200);
         };
+
+        document.getElementById('warehouseFilter')?.addEventListener('change', function() {
+            const params = new URLSearchParams(window.location.search);
+
+            const dateFrom = document.getElementById('dateFrom')?.value;
+            const dateTo   = document.getElementById('dateTo')?.value;
+
+            if (this.value !== '') {
+                params.set('warehouse_id', this.value);
+            } else {
+                params.delete('warehouse_id');
+            }
+
+            if (dateFrom) {
+                params.set('date_from', dateFrom);
+            }
+
+            if (dateTo) {
+                params.set('date_to', dateTo);
+            }
+
+            window.location.href = `${window.location.pathname}?${params.toString()}`;
+        });
     </script>
 @endpush

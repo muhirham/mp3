@@ -7,6 +7,7 @@ use App\Models\StockRequest;
 use App\Models\SalesHandover;
 use App\Models\SalesHandoverItem;
 use App\Models\StockLevel;
+use App\Models\Warehouse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 
@@ -14,15 +15,25 @@ class StockRequestApprovalController extends Controller
 {
     public function index(Request $request)
     {
-        $query = StockRequest::with('product','warehouse','user')
-            ->whereIn('status', ['pending','approved','rejected']);
+            $me = auth()->user();
 
-        if ($request->date_from && $request->date_to) {
-            $query->whereBetween('created_at', [
-                $request->date_from . ' 00:00:00',
-                $request->date_to . ' 23:59:59'
-            ]);
-        }
+            $query = StockRequest::with('product','warehouse','user')
+                ->whereIn('status', ['pending','approved','rejected']);
+
+            if (!$me->hasRole(['admin', 'superadmin'])) {
+                $query->where('warehouse_id', $me->warehouse_id);
+            }
+
+            if ($me->hasRole(['admin','superadmin']) && filled($request->warehouse_id)) {
+                $query->where('warehouse_id', $request->warehouse_id);
+            }
+
+            if ($request->date_from && $request->date_to) {
+                $query->whereBetween('created_at', [
+                    $request->date_from . ' 00:00:00',
+                    $request->date_to . ' 23:59:59'
+                ]);
+            }
 
         if ($request->search) {
 
@@ -56,11 +67,14 @@ class StockRequestApprovalController extends Controller
                     'count' => $group->count(),
                     'items' => $group->values()
                 ];
-            })->values()
-        );
-    }
+                })->values()
+            );
+        }
+        $warehouses = $me->hasRole(['admin','superadmin'])
+            ? Warehouse::orderBy('warehouse_name')->get()
+            : collect();
 
-        return view('wh.approval_stock_requests', compact('requests'));
+        return view('wh.approval_stock_requests', compact('requests','warehouses','me'));
     }
 
     public function approve(Request $request, $id)
@@ -241,9 +255,13 @@ class StockRequestApprovalController extends Controller
         $items = StockRequest::with('product')
             ->where('user_id', $userId)
             ->where('warehouse_id', $warehouseId)
-            ->whereRaw("DATE_FORMAT(created_at,'%Y-%m-%d %H:%i') = ?", [$time])
-            ->orderBy('id')
-            ->get();
+            ->whereRaw("DATE_FORMAT(created_at,'%Y-%m-%d %H:%i') = ?", [$time]);
+
+        if (!auth()->user()->hasRole(['admin','superadmin'])) {
+            $items->where('warehouse_id', auth()->user()->warehouse_id);
+        }
+
+        $items = $items->orderBy('id')->get();
 
         return response()->json($items);
     }
