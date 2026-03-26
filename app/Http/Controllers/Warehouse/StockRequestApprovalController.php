@@ -7,7 +7,6 @@ use App\Models\StockRequest;
 use App\Models\SalesHandover;
 use App\Models\SalesHandoverItem;
 use App\Models\StockLevel;
-use App\Models\StockMovement;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 
@@ -64,9 +63,9 @@ class StockRequestApprovalController extends Controller
         return view('wh.approval_stock_requests', compact('requests'));
     }
 
-    public function approve($id)
+    public function approve(Request $request, $id)
     {
-        $handover = DB::transaction(function () use ($id) {
+        $handover = DB::transaction(function () use ($id, $request) {
 
             $stockRequest = StockRequest::with('product', 'user')
                 ->lockForUpdate()
@@ -77,14 +76,15 @@ class StockRequestApprovalController extends Controller
             }
 
             // =========================
-            // CEK HDO AKTIF SALES
+            // LIMIT HDO AKTIF MAX 3
             // =========================
             $activeCount = SalesHandover::where('sales_id', $stockRequest->user_id)
                 ->whereIn('status', [
                     'waiting_morning_otp',
-                    'active',
-                    'waiting_return'
+                    'on_sales',
+                    'waiting_evening_otp'
                 ])
+                ->lockForUpdate()
                 ->count();
 
             if ($activeCount >= 3) {
@@ -105,12 +105,20 @@ class StockRequestApprovalController extends Controller
             }
 
             // =========================
-            // BUAT HDO BARU
+            // SELALU BUAT HDO BARU
             // =========================
+            $handover = null;
+
+            if ($request->handover_id) {
+                $handover = SalesHandover::lockForUpdate()
+                    ->find($request->handover_id);
+            }
+
             $today = now()->format('ymd');
 
             $last = SalesHandover::whereDate('handover_date', today())
-                ->latest()
+                ->lockForUpdate()
+                ->latest('id')
                 ->first();
 
             $next = $last
@@ -119,14 +127,30 @@ class StockRequestApprovalController extends Controller
 
             $code = 'HDO-' . $today . '-' . str_pad($next, 4, '0', STR_PAD_LEFT);
 
-            $handover = SalesHandover::create([
-                'code'          => $code,
-                'warehouse_id'  => $stockRequest->warehouse_id,
-                'sales_id'      => $stockRequest->user_id,
-                'handover_date' => today(),
-                'status'        => 'waiting_morning_otp',
-                'issued_by'     => auth()->id(),
-            ]);
+                if (!$handover) {
+
+                    $today = now()->format('ymd');
+
+                    $last = SalesHandover::whereDate('handover_date', today())
+                        ->lockForUpdate()
+                        ->latest('id')
+                        ->first();
+
+                    $next = $last
+                        ? ((int) substr($last->code, -4)) + 1
+                        : 1;
+
+                    $code = 'HDO-' . $today . '-' . str_pad($next, 4, '0', STR_PAD_LEFT);
+
+                    $handover = SalesHandover::create([
+                        'code'          => $code,
+                        'warehouse_id'  => $stockRequest->warehouse_id,
+                        'sales_id'      => $stockRequest->user_id,
+                        'handover_date' => today(),
+                        'status'        => 'waiting_morning_otp',
+                        'issued_by'     => auth()->id(),
+                    ]);
+                }
 
             // =========================
             // ITEM MASUK HDO
@@ -134,7 +158,14 @@ class StockRequestApprovalController extends Controller
             $price = $stockRequest->product->selling_price ?? 0;
             $qty   = $stockRequest->quantity_requested;
 
-            SalesHandoverItem::create([
+            $existing = SalesHandoverItem::where('handover_id',$handover->id)
+                ->where('product_id',$stockRequest->product_id)
+                ->first();
+
+            if($existing){
+                $existing->increment('qty_start',$qty);
+            } else {
+                SalesHandoverItem::create([
                 'handover_id'               => $handover->id,
                 'product_id'                => $stockRequest->product_id,
                 'qty_start'                 => $qty,
@@ -147,22 +178,9 @@ class StockRequestApprovalController extends Controller
                 'discount_total'            => 0,
                 'line_total_after_discount' => $price * $qty,
                 'line_total_sold'           => 0,
-            ]);
-
-            // =========================
-            // STOCK MOVEMENT
-            // =========================
-            $stock->decrement('quantity', $qty);
-
-            StockMovement::create([
-                'product_id'     => $stockRequest->product_id,
-                'warehouse_id'   => $stockRequest->warehouse_id,
-                'quantity'       => -$qty,
-                'movement_type'  => 'sales_request',
-                'reference_id'   => $handover->id,
-                'reference_type' => 'sales_handover'
-            ]);
-
+                ]);
+            }
+                
             // =========================
             // UPDATE REQUEST
             // =========================
@@ -222,6 +240,7 @@ class StockRequestApprovalController extends Controller
             ->where('user_id', $userId)
             ->where('warehouse_id', $warehouseId)
             ->whereRaw("DATE_FORMAT(created_at,'%Y-%m-%d %H:%i') = ?", [$time])
+            ->orderBy('id')
             ->get();
 
         return response()->json($items);

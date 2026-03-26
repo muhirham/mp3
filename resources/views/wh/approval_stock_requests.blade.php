@@ -272,9 +272,12 @@
             });
         }
 
-        document.getElementById('approveAllBtn').onclick = function() {
+        document.getElementById('approveAllBtn').onclick = async function () {
 
-            const remain = selectedItems.filter(x => x.status !== 'rejected' && x.status !== 'approved');
+            const remain = selectedItems.filter(x =>
+                x.status !== 'rejected' &&
+                x.status !== 'approved'
+            );
 
             if (remain.length === 0) {
                 Swal.fire({
@@ -286,9 +289,9 @@
 
             detailModal.hide();
 
-            setTimeout(() => {
+            setTimeout(async () => {
 
-                Swal.fire({
+                const confirm = await Swal.fire({
                     title: 'Approve semua item?',
                     icon: 'warning',
                     showCancelButton: true,
@@ -298,74 +301,76 @@
                     didOpen: () => {
                         document.querySelector('.swal2-container').style.zIndex = '30000';
                     }
+                });
 
-                }).then(res => {
+                if (!confirm.isConfirmed) {
+                    detailModal.show();
+                    return;
+                }
 
-                    if (!res.isConfirmed) {
-                        detailModal.show();
-                        return;
-                    }
+                let handoverId = null;
 
-                    Promise.all(
-                            remain.map(item =>
-                                fetch(`/warehouse/stock-requests/${item.id}/approve`, {
-                                    method: 'POST',
-                                    headers: {
-                                        'X-CSRF-TOKEN': csrfToken,
-                                        'Accept': 'application/json'
-                                    }
-                                })
-                                .then(async response => {
+                try {
 
-                                    const data = await response.json();
+                    for (const item of remain) {
 
-                                    if (!response.ok) {
-                                        throw data;
-                                    }
-
-                                    const target = selectedItems.find(x => x.id == item.id);
-
-                                    if (target) {
-                                        target.status = 'approved';
-                                    }
-
-                                    if (data.handover_id) {
-                                        window.open(
-                                            `/sales/handover/morning?handover_id=${data.handover_id}`,
-                                            '_blank'
-                                        );
-                                    }
-
-                                })
-                            )
-                        )
-                        .then(() => {
-
-                            renderItems();
-
-                            detailModal.show();
-
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'Approve selesai',
-                                timer: 1200,
-                                showConfirmButton: false
-                            });
-
-                        })
-                        .catch(err => {
-
-                            detailModal.show();
-
-                            Swal.fire({
-                                icon: 'warning',
-                                title: 'Tidak bisa approve',
-                                text: err.message || 'Sales sudah punya 3 HDO aktif'
-                            });
-
+                        const response = await fetch(`/warehouse/stock-requests/${item.id}/approve`, {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRF-TOKEN': csrfToken,
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                handover_id: handoverId
+                            })
                         });
 
-                });
+                        const data = await response.json();
+
+                        if (!response.ok) {
+                            throw data;
+                        }
+
+                        if (!handoverId) {
+                            handoverId = data.handover_id;
+                        }
+
+                        const target = selectedItems.find(x => x.id == item.id);
+
+                        if (target) {
+                            target.status = 'approved';
+                        }
+                    }
+
+                    renderItems();
+
+                    detailModal.show();
+
+                    if (handoverId) {
+                        window.open(
+                            `/sales/handover/morning?handover_id=${handoverId}`,
+                            '_blank'
+                        );
+                    }
+
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Approve selesai',
+                        timer: 1200,
+                        showConfirmButton: false
+                    });
+
+                } catch (err) {
+
+                    detailModal.show();
+
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Tidak bisa approve',
+                        text: err.message || 'Sales sudah punya 3 HDO aktif'
+                    });
+                }
 
             }, 200);
         };
