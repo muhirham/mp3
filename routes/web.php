@@ -1,38 +1,32 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-
-use App\Http\Controllers\Auth\LoginController;
-
-// ADMIN
 use App\Http\Controllers\Admin\AdminController;
-use App\Http\Controllers\Admin\WarehouseController;
 use App\Http\Controllers\Admin\CategoryController;
-use App\Http\Controllers\Admin\SupplierController;
-use App\Http\Controllers\Admin\ProductController;
+use App\Http\Controllers\Admin\CompanyController;
+use App\Http\Controllers\Admin\GoodReceivedController;
 use App\Http\Controllers\Admin\PackageController;
-use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\PreOController;
+use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\RestockApprovalController;
 use App\Http\Controllers\Admin\RoleController;
-use App\Http\Controllers\Admin\GoodReceivedController;
 use App\Http\Controllers\Admin\StockAdjustmentController;
-use App\Http\Controllers\Admin\CompanyController;
-
-use App\Http\Controllers\Warehouse\WarehouseDashboardController;
-use App\Http\Controllers\Warehouse\StockWhController;
-use App\Http\Controllers\Warehouse\WarehouseTransferController;
-
-// SALES
-use App\Http\Controllers\Warehouse\SalesHandoverController;
+use App\Http\Controllers\Admin\SupplierController;
+use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\WarehouseController;
+use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\BomController;
 use App\Http\Controllers\Sales\HandoverOtpItemsController;
 use App\Http\Controllers\Sales\SalesController;
 use App\Http\Controllers\Sales\SalesReturnController;
-
-// OTHERS
+use App\Http\Controllers\Sales\StockRequestController;
 use App\Http\Controllers\StockLevelController;
-use App\Http\Controllers\BomController;
+use App\Http\Controllers\Warehouse\SalesHandoverController;
+use App\Http\Controllers\Warehouse\StockRequestApprovalController;
+use App\Http\Controllers\Warehouse\StockWhController;
+use App\Http\Controllers\Warehouse\WarehouseDashboardController;
+use App\Http\Controllers\Warehouse\WarehouseTransferController;
 use App\Models\Warehouse;
+use Illuminate\Support\Facades\Route;
 
 
 /* ===== Auth ===== */
@@ -444,6 +438,18 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->name('warehouse-transfer.export')
         ->middleware('menu:wh_transfers');
 
+    Route::get('/warehouse/stock-requests', [StockRequestApprovalController::class, 'indexWarehouse'])
+    ->name('warehouse.stock-requests.index')
+    ->middleware('menu:sales_request_approval');
+
+Route::post('/warehouse/stock-requests/{id}/approve', [StockRequestApprovalController::class, 'approve'])
+    ->name('warehouse.stock-requests.approve')
+    ->middleware('menu:sales_request_approval');
+
+Route::post('/warehouse/stock-requests/{id}/reject', [StockRequestApprovalController::class, 'reject'])
+    ->name('warehouse.stock-requests.reject')
+    ->middleware('menu:sales_request_approval');
+
     //SALES RETURN
     Route::get('/sales/returns', [SalesReturnController::class,'index'])
         ->name('sales.returns.index')
@@ -504,6 +510,29 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->name('sales.returns.by_warehouse')
         ->middleware('menu:sales_return');
 
+    // SALES REQUEST
+    Route::get('/sales/stock-requests', [StockRequestController::class, 'index'])
+        ->name('sales-request.index')
+        ->middleware('menu:sales_request');
+
+    Route::post('/sales/stock-requests', [StockRequestController::class, 'store'])
+        ->name('sales-requests.store')
+        ->middleware('menu:sales_request');
+
+    Route::get('/warehouse/stock-requests', [StockRequestApprovalController::class, 'index'])
+        ->name('warehouse.stock-requests.index')
+        ->middleware('menu:sales_request_approval');
+
+    Route::post('/warehouse/stock-requests/{id}/approve', [StockRequestApprovalController::class, 'approve'])
+        ->name('warehouse.stock-requests.approve')
+        ->middleware('menu:sales_request_approval');
+
+    Route::post('/warehouse/stock-requests/{id}/reject', [StockRequestApprovalController::class, 'reject'])
+        ->name('warehouse.stock-requests.reject')
+        ->middleware('menu:sales_request_approval');
+    
+    Route::get('/warehouse/stock-requests/detail', [StockRequestApprovalController::class, 'detail'])
+        ->name('warehouse.stock-requests.detail');
 
     // === Sales pages (SALES & WAREHOUSE) ===
     Route::get('/sales/{sales}/active-handover-count', [SalesHandoverController::class, 'getActiveCount']);
