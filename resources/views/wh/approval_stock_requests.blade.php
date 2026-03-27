@@ -17,12 +17,12 @@
                 <div class="row mb-3 g-2">
                     <div class="col-md-3">
                         <label>From Date</label>
-                        <input type="date" id="dateFrom" class="form-control" value="{{ request('date_from', now()->toDateString()) }}">
+                        <input type="date" id="dateFrom" class="form-control" value="{{ $dateFrom }}">
                     </div>
 
                     <div class="col-md-3">
                         <label>To Date</label>
-                        <input type="date" id="dateTo" class="form-control" value="{{ request('date_to', now()->toDateString()) }}">
+                        <input type="date" id="dateTo" class="form-control" value="{{ $dateTo }}">
                     </div>
 
                     <div class="col-md-3">
@@ -416,6 +416,25 @@
             }
 
             window.location.href = `${window.location.pathname}?${params.toString()}`;
+        });
+
+        ['dateFrom','dateTo'].forEach(id => {
+            document.getElementById(id)?.addEventListener('change', function() {
+                const params = new URLSearchParams(window.location.search);
+
+                const warehouse = document.getElementById('warehouseFilter')?.value;
+
+                params.set('date_from', document.getElementById('dateFrom').value);
+                params.set('date_to', document.getElementById('dateTo').value);
+
+                if (warehouse) {
+                    params.set('warehouse_id', warehouse);
+                } else {
+                    params.delete('warehouse_id');
+                }
+
+                window.location.href = `${window.location.pathname}?${params.toString()}`;
+            });
         });
     </script>
 @endpush

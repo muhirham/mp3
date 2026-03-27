@@ -17,6 +17,9 @@ class StockRequestApprovalController extends Controller
     {
             $me = auth()->user();
 
+            $dateFrom = $request->date_from ?? now()->toDateString();
+            $dateTo   = $request->date_to ?? now()->toDateString();
+
             $query = StockRequest::with('product','warehouse','user')
                 ->whereIn('status', ['pending','approved','rejected']);
 
@@ -28,12 +31,10 @@ class StockRequestApprovalController extends Controller
                 $query->where('warehouse_id', $request->warehouse_id);
             }
 
-            if ($request->date_from && $request->date_to) {
-                $query->whereBetween('created_at', [
-                    $request->date_from . ' 00:00:00',
-                    $request->date_to . ' 23:59:59'
-                ]);
-            }
+            $query->whereBetween('created_at', [
+                $dateFrom . ' 00:00:00',
+                $dateTo . ' 23:59:59'
+            ]);
 
         if ($request->search) {
 
@@ -74,7 +75,12 @@ class StockRequestApprovalController extends Controller
             ? Warehouse::orderBy('warehouse_name')->get()
             : collect();
 
-        return view('wh.approval_stock_requests', compact('requests','warehouses','me'));
+        return view('wh.approval_stock_requests', compact(
+                'requests',
+                'warehouses',
+                'me',
+                'dateFrom',
+                'dateTo'));
     }
 
     public function approve(Request $request, $id)
