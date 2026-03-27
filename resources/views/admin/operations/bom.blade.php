@@ -446,21 +446,34 @@
                             production_qty: $('#previewBatch').val()
                         }, function(res2) {
 
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'Saved & Produced'
-                            });
-
+                            if (res2.warnings && res2.warnings.length) {
+                                    Swal.fire({
+                                        icon: 'warning',
+                                        title: res2.warnings.join('<br>')
+                                    });
+                                } else {
+                                    Swal.fire({
+                                        icon: 'success',
+                                        title: 'Saved & Produced'
+                                    });
+                                }
                             $('#mdlBom').modal('hide');
                             table.ajax.reload(null, false);
                             goToStep(1);
                             resetForm();
                         });
                     },
-                    error: function() {
+                    error: function(xhr) {
+
+                        let msg = 'Terjadi kesalahan';
+
+                        if (xhr.responseJSON?.errors) {
+                            msg = Object.values(xhr.responseJSON.errors)[0][0];
+                        }
+
                         Swal.fire({
                             icon: 'error',
-                            title: 'Terjadi kesalahan'
+                            title: msg
                         });
                     }
                 });
@@ -537,16 +550,41 @@
 
                 let id = $('#produce_bom_id').val();
 
-                $.post('/bom/' + id + '/produce', {
-                    production_qty: $('#production_qty').val()
-                }, function(res) {
+                $.ajax({
+                    url: '/bom/' + id + '/produce',
+                    type: 'POST',
+                    data: {
+                        production_qty: $('#production_qty').val()
+                    },
+                    success: function(res) {
 
-                    Swal.fire({
-                        icon: 'success',
-                        title: res.success
-                    });
+                        if (res.warnings && res.warnings.length) {
+                            Swal.fire({
+                                icon: 'warning',
+                                title: res.warnings.join('<br>')
+                            });
+                        } else {
+                            Swal.fire({
+                                icon: 'success',
+                                title: res.success
+                            });
+                        }
 
-                    $('#mdlProduce').modal('hide');
+                        $('#mdlProduce').modal('hide');
+                    },
+                    error: function(xhr) {
+
+                        let msg = 'Produksi gagal';
+
+                        if (xhr.responseJSON?.errors) {
+                            msg = Object.values(xhr.responseJSON.errors)[0][0];
+                        }
+
+                        Swal.fire({
+                            icon: 'error',
+                            title: msg
+                        });
+                    }
                 });
             });
 
