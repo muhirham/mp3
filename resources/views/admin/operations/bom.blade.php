@@ -1,6 +1,12 @@
 @extends('layouts.home')
 
 @section('content')
+
+<style>
+.swal-on-top{
+    z-index: 20000 !important;
+}
+</style>
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css" />
@@ -446,18 +452,23 @@
                             production_qty: $('#previewBatch').val()
                         }, function(res2) {
 
-                            if (res2.warnings && res2.warnings.length) {
-                                    Swal.fire({
-                                        icon: 'warning',
-                                        title: res2.warnings.join('<br>')
-                                    });
-                                } else {
-                                    Swal.fire({
-                                        icon: 'success',
-                                        title: 'Saved & Produced'
-                                    });
-                                }
-                            $('#mdlBom').modal('hide');
+                                $('#mdlBom').modal('hide');
+
+                                setTimeout(() => {
+
+                                    if (res2.warnings && res2.warnings.length) {
+                                        Swal.fire({
+                                            icon: 'warning',
+                                            title: res.warnings.join('<br>')
+                                        });
+                                    } else {
+                                        Swal.fire({
+                                            icon: 'success',
+                                            title: 'Saved & Produced'
+                                        });
+                                    }
+
+                                }, 300);
                             table.ajax.reload(null, false);
                             goToStep(1);
                             resetForm();
@@ -471,10 +482,15 @@
                             msg = Object.values(xhr.responseJSON.errors)[0][0];
                         }
 
-                        Swal.fire({
-                            icon: 'error',
-                            title: msg
-                        });
+                        $('#mdlBom').modal('hide');
+
+                        setTimeout(() => {
+                            Swal.fire({
+                                icon: 'error',
+                                title: msg,
+                                target: document.body
+                            });
+                        }, 300);
                     }
                 });
 
@@ -558,19 +574,23 @@
                     },
                     success: function(res) {
 
-                        if (res.warnings && res.warnings.length) {
-                            Swal.fire({
-                                icon: 'warning',
-                                title: res.warnings.join('<br>')
-                            });
-                        } else {
-                            Swal.fire({
-                                icon: 'success',
-                                title: res.success
-                            });
-                        }
-
                         $('#mdlProduce').modal('hide');
+
+                        setTimeout(() => {
+
+                            if (res.warnings && res.warnings.length) {
+                                Swal.fire({
+                                    icon: 'warning',
+                                    title: res.warnings.join('<br>')
+                                });
+                            } else {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'Saved & Produced'
+                                });
+                            }
+
+                        }, 300);
                     },
                     error: function(xhr) {
 
@@ -580,10 +600,14 @@
                             msg = Object.values(xhr.responseJSON.errors)[0][0];
                         }
 
-                        Swal.fire({
-                            icon: 'error',
-                            title: msg
-                        });
+                        $('#mdlProduce').modal('hide');
+
+                        setTimeout(() => {
+                            Swal.fire({
+                                icon: 'error',
+                                title: msg
+                            });
+                        }, 300);
                     }
                 });
             });
