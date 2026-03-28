@@ -125,9 +125,6 @@
               data-url-partner="{{ route('po.pdf', ['po' => $po->id, 'tpl' => 'partner']) }}">
         <i class="bx bx-printer me-1"></i> Print / PDF
       </button>
-
-      {{-- Excel --}}
-      <a href="{{ route('po.excel',$po->id) }}" class="btn btn-outline-secondary btn-sm">Excel</a>
     </div>
   </div>
 
@@ -141,8 +138,9 @@
         <div class="col-md-4">
           <label class="form-label">Informasi Supplier</label>
           <input type="text"
-                 class="form-control"
-                 value="{{ $po->supplier->supplier_name ?? $po->supplier->name ?? $po->supplier_id }}"
+                 id="poHeaderSupplier"
+                 class="form-control text-truncate"
+                 value="-"
                  disabled>
         </div>
         <div class="col-md-8">
@@ -508,6 +506,19 @@
     document.getElementById('ftSubtotal').innerText = subtotal.toLocaleString('id-ID');
     document.getElementById('ftDiscount').innerText = discount.toLocaleString('id-ID');
     document.getElementById('ftGrand').innerText    = (subtotal - discount).toLocaleString('id-ID');
+    
+    // Update Header Supplier dynamically
+    const supCol = new Set();
+    document.querySelectorAll('#tblItems tbody tr').forEach(tr => {
+      const supLabel = tr.querySelector('.js-supplier-label');
+      if (supLabel && supLabel.textContent.trim() !== '-' && supLabel.textContent.trim() !== '') {
+        supCol.add(supLabel.textContent.trim());
+      }
+    });
+    const supHeader = document.getElementById('poHeaderSupplier');
+    if (supHeader) {
+      supHeader.value = supCol.size > 0 ? Array.from(supCol).join(', ') : '-';
+    }
   }
 
   function attachProductAutoPrice(tr) {

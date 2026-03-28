@@ -1259,7 +1259,7 @@ class PreOController extends Controller
             'po'        => $po,
             'company'   => $company,
             'isDraft'   => $isDraft,
-            'autoPrint' => true,   // flag buat auto window.print()
+            'autoPrint' => $request->query('autoprint', 1) == 1,   // flag buat auto window.print()
         ]);
     }
 
