@@ -446,9 +446,10 @@ $(function(){
   let rowIndex = 0;
   let isSubmitting = false;
 
-  async function ensureProductsLoaded(){
-    if(productsCache.length) return;
-    const res = await fetch(productsUrl, { headers:{'Accept':'application/json'} });
+  async function loadProductsCache(){
+    const whId = warehouseSel.value || '';
+    const params = new URLSearchParams({ warehouse_id: whId });
+    const res = await fetch(productsUrl + '?' + params.toString(), { headers:{'Accept':'application/json'} });
     const json = await res.json();
     if(!res.ok || json.status !== 'ok') throw new Error('Failed to load products');
     productsCache = json.items || [];
@@ -457,7 +458,13 @@ $(function(){
   function productOptionsHtml(){
     let html = `<option value="">— Select Product —</option>`;
     for(const p of productsCache){
-      html += `<option value="${p.id}">${p.product_code} — ${p.name}</option>`;
+      const stockInfo = (p.qty_before !== undefined) ? ` [Stock: ${p.qty_before}]` : '';
+      html += `<option value="${p.id}" 
+                data-stock="${p.qty_before}" 
+                data-purchasing="${p.purchasing_price}" 
+                data-selling="${p.selling_price}">
+                ${p.product_code} — ${p.name}${stockInfo}
+              </option>`;
     }
     return html;
   }
@@ -492,13 +499,13 @@ $(function(){
         </select>
       </td>
       <td class="td-stock">
-        <input type="number" name="items[${idx}][qty_after]" class="form-control" min="0">
+        <input type="number" name="items[${idx}][qty_after]" class="form-control" min="0" placeholder="Stock">
       </td>
       <td class="td-price-beli">
-        <input type="number" name="items[${idx}][purchasing_price]" class="form-control" min="0">
+        <input type="number" name="items[${idx}][purchasing_price]" class="form-control" min="0" placeholder="Price">
       </td>
       <td class="td-price-jual">
-        <input type="number" name="items[${idx}][selling_price]" class="form-control" min="0">
+        <input type="number" name="items[${idx}][selling_price]" class="form-control" min="0" placeholder="Price">
       </td>
       <td>
         <input type="text" name="items[${idx}][notes]" class="form-control" placeholder="Notes">
@@ -521,13 +528,13 @@ $(function(){
         <div class="fw-semibold">${item.product_code} — ${item.name}</div>
       </td>
       <td class="td-stock">
-        <input type="number" name="items[${idx}][qty_after]" class="form-control" min="0" value="${item.qty_before}">
+        <input type="number" name="items[${idx}][qty_after]" class="form-control" min="0" placeholder="Current: ${item.qty_before}">
       </td>
       <td class="td-price-beli">
-        <input type="number" name="items[${idx}][purchasing_price]" class="form-control" min="0">
+        <input type="number" name="items[${idx}][purchasing_price]" class="form-control" min="0" placeholder="Prev: ${item.purchasing_price}">
       </td>
       <td class="td-price-jual">
-        <input type="number" name="items[${idx}][selling_price]" class="form-control" min="0">
+        <input type="number" name="items[${idx}][selling_price]" class="form-control" min="0" placeholder="Prev: ${item.selling_price}">
       </td>
       <td>
         <input type="text" name="items[${idx}][notes]" class="form-control" placeholder="Notes">
@@ -580,7 +587,7 @@ $(function(){
 
   createModalEl.addEventListener('shown.bs.modal', async function(){
     try{
-      await ensureProductsLoaded();
+      await loadProductsCache();
       resetForm();
     }catch(err){
       console.error(err);
@@ -606,12 +613,64 @@ $(function(){
     }
   });
 
+  // Listener input produk untuk update placeholder
+  tbody.addEventListener('change', function(e){
+    if(e.target.classList.contains('item-product')){
+      const opt = e.target.selectedOptions[0];
+      const tr = e.target.closest('tr');
+      if(!opt || !tr) return;
+
+      const stock = opt.dataset.stock || '0';
+      const buy   = opt.dataset.purchasing || '0';
+      const sell  = opt.dataset.selling || '0';
+
+      const inStock = tr.querySelector('input[name$="[qty_after]"]');
+      const inBuy   = tr.querySelector('input[name$="[purchasing_price]"]');
+      const inSell  = tr.querySelector('input[name$="[selling_price]"]');
+
+      if(inStock) inStock.placeholder = `Current: ${stock}`;
+      if(inBuy)   inBuy.placeholder   = `Prev: ${buy}`;
+      if(inSell)  inSell.placeholder  = `Prev: ${sell}`;
+    }
+  });
+
   warehouseSel.addEventListener('change', async function(){
     if(stockScope.value === 'all'){
       try{ await loadAllProducts(); }
       catch(err){
         console.error(err);
         Swal.fire({ icon:'error', title:'Failed', text: err.message || 'Failed to load products.' });
+      }
+    } else {
+      // Reload cache produk untuk Gudang ini
+      try {
+        await loadProductsCache();
+        // Update all existing dropdowns placeholder (optional context)
+        tbody.querySelectorAll('tr').forEach(tr => {
+            const sel = tr.querySelector('select.item-product');
+            if(sel){
+                const val = sel.value;
+                sel.innerHTML = productOptionsHtml();
+                sel.value = val;
+                // update placeholder inputnya
+                const opt = sel.selectedOptions[0];
+                if(opt){
+                    const stock = opt.dataset.stock || '0';
+                    const buy   = opt.dataset.purchasing || '0';
+                    const sell  = opt.dataset.selling || '0';
+
+                    const inStock = tr.querySelector('input[name$="[qty_after]"]');
+                    const inBuy   = tr.querySelector('input[name$="[purchasing_price]"]');
+                    const inSell  = tr.querySelector('input[name$="[selling_price]"]');
+
+                    if(inStock) inStock.placeholder = `Current: ${stock}`;
+                    if(inBuy)   inBuy.placeholder   = `Prev: ${buy}`;
+                    if(inSell)  inSell.placeholder  = `Prev: ${sell}`;
+                }
+            }
+        });
+      } catch(err) {
+        console.error(err);
       }
     }
   });

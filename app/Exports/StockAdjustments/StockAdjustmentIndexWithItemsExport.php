@@ -123,6 +123,11 @@ class StockAdjustmentIndexWithItemsExport implements FromArray, WithEvents, Shou
             $creator    = (string)($adj->creator?->name ?? '-');
             $jamInput   = $this->safeTime($adj->created_at ?? null);
 
+            // Cek mode update untuk penentuan kolom Harga/Stok
+            $hasStock    = in_array($modeUpdate, ['stock', 'stock_purchase_selling'], true);
+            $hasPurchase = in_array($modeUpdate, ['purchase', 'purchase_selling', 'stock_purchase_selling'], true);
+            $hasSelling  = in_array($modeUpdate, ['selling', 'purchase_selling', 'stock_purchase_selling'], true);
+
             // GROUP ROW (merge)
             $groupRow = $push([
                 "ADJ: {$code} | Date: {$date} | WH: {$wh} | Scope: {$modeStok} | Update: {$modeUpdate} | By: {$creator} | Jam: {$jamInput}"
@@ -141,15 +146,17 @@ class StockAdjustmentIndexWithItemsExport implements FromArray, WithEvents, Shou
             if ($items->isEmpty()) {
                 $push([
                     $code, $date, $wh, $modeStok, $modeUpdate, $creator, $jamInput,
-                    '-', '-', 0, 0, 0, null, null, null, null, null
+                    '-', '-', '-', '-', '-', '-', '-', '-', '-', '-'
                 ]);
             } else {
                 $docQtyB = 0;
                 $docQtyA = 0;
                 $docDiff = 0;
+                $lineCount = 0;
 
                 foreach ($items as $it) {
                     $sumLines++;
+                    $lineCount++;
 
                     $pCode = (string)($it->product?->product_code ?? '');
                     $pName = (string)($it->product?->name ?? '-');
@@ -159,44 +166,50 @@ class StockAdjustmentIndexWithItemsExport implements FromArray, WithEvents, Shou
                     $df = $it->qty_diff;
                     $df = ($df === null) ? ($qa - $qb) : (int)$df;
 
-                    $pb = $it->purchase_price_before; // boleh null
-                    $pa = $it->purchase_price_after;
-                    $sb = $it->selling_price_before;
-                    $sa = $it->selling_price_after;
+                    // Logika Dinamis (jika doc tidak update domain tsb, isi '-')
+                    $valQB = $hasStock ? $qb : '-';
+                    $valQA = $hasStock ? $qa : '-';
+                    $valDF = $hasStock ? $df : '-';
+
+                    $pb = $hasPurchase ? $it->purchase_price_before : '-';
+                    $pa = $hasPurchase ? $it->purchase_price_after  : '-';
+                    $sb = $hasSelling  ? $it->selling_price_before  : '-';
+                    $sa = $hasSelling  ? $it->selling_price_after   : '-';
 
                     $itemNote = (string)($it->notes ?? '');
 
-                    $docQtyB += $qb;
-                    $docQtyA += $qa;
-                    $docDiff += $df;
+                    if ($hasStock) {
+                        $docQtyB += $qb;
+                        $docQtyA += $qa;
+                        $docDiff += $df;
+                    }
 
                     $push([
                         $code, $date, $wh, $modeStok, $modeUpdate, $creator, $jamInput,
                         $pCode,
                         $pName,
-                        $qb,
-                        $qa,
-                        $df,
-                        is_null($pb) ? null : (float)$pb,
-                        is_null($pa) ? null : (float)$pa,
-                        is_null($sb) ? null : (float)$sb,
-                        is_null($sa) ? null : (float)$sa,
+                        $valQB,
+                        $valQA,
+                        $valDF,
+                        $pb, $pa, $sb, $sa,
                         $itemNote,
                     ]);
                 }
 
-                $sumQtyB    += $docQtyB;
-                $sumQtyA    += $docQtyA;
-                $sumDiffNet += $docDiff;
+                if ($hasStock) {
+                    $sumQtyB    += $docQtyB;
+                    $sumQtyA    += $docQtyA;
+                    $sumDiffNet += $docDiff;
+                }
 
-                // TOTAL DOC
+                // TOTAL DOC (Hapus penjumlah stok absolut, ganti info jumlah item)
                 $totalRow = $push([
                     null,null,null,null,null,null,null,
                     null,
-                    'TOTAL DOC',
-                    $docQtyB,
-                    $docQtyA,
-                    $docDiff,
+                    "{$lineCount} Item(s)",
+                    '-', // Qty Before (dihapus penjumlahannya)
+                    '-', // Qty After  (dihapus penjumlahannya)
+                    $hasStock ? $docDiff : '-', // Cuma Diff yang boleh ditotal (net impact)
                     null,null,null,null,
                     null
                 ]);
@@ -207,13 +220,13 @@ class StockAdjustmentIndexWithItemsExport implements FromArray, WithEvents, Shou
         }
 
         $push([]);
-        // GRAND SUMMARY
+        // GRAND SUMMARY (Filter stok saja yang dijumlah)
         $grandRow = $push([
             'EXPORT SUMMARY', null,null,null,null,null,null,
             null,
-            'GRAND TOTAL',
-            $sumQtyB,
-            $sumQtyA,
+            'TOTAL NET DIFF',
+            '-',
+            '-',
             $sumDiffNet,
             null,null,null,null,
             null
@@ -222,8 +235,8 @@ class StockAdjustmentIndexWithItemsExport implements FromArray, WithEvents, Shou
 
         // info tambahan (biar jelas)
         $push([]);
-        $push(['Total Dokumen', $sumDocs]);
-        $push(['Total Line Item', $sumLines]);
+        $push(['Total Documents', $sumDocs]);
+        $push(['Total Line Items', $sumLines]);
 
         return $rows;
     }
