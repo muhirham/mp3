@@ -16,7 +16,7 @@
         <div class="ms-auto d-flex gap-2">
             @if(auth()->user()->hasPermission('stock_adjustments.create'))
               <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#mdlCreateAdj">
-                  <i class="bx bx-plus"></i> Buat Adjustment
+                   <i class="bx bx-plus"></i> Create Adjustment
               </button>
             @endif
             @if(auth()->user()->hasPermission('stock_adjustments.export'))
@@ -34,20 +34,20 @@
         <div class="row g-2 align-items-end">
 
             <div class="col-6 col-md-2">
-            <label class="form-label mb-1">Dari Tgl (dokumen)</label>
+            <label class="form-label mb-1">From Date (document)</label>
             <input id="fltFrom" type="date" class="form-control">
             </div>
 
             <div class="col-6 col-md-2">
-            <label class="form-label mb-1">Sampai</label>
+            <label class="form-label mb-1">Until</label>
             <input id="fltTo" type="date" class="form-control">
             </div>
 
             <div class="col-12 col-md-4">
             <label class="form-label mb-1">Warehouse</label>
             <select id="fltWarehouse" class="form-select">
-                <option value="">— Semua —</option>
-                <option value="central">Stock Central</option>
+                <option value="">— All —</option>
+                <option value="central">Central Stock</option>
                 @foreach($warehouses as $w)
                 <option value="{{ $w->id }}">{{ $w->warehouse_name }}</option>
                 @endforeach
@@ -61,13 +61,13 @@
             <thead class="table-light">
             <tr>
                 <th style="width:70px">ID</th>
-                <th>Kode</th>
-                <th>Tgl Adjustment</th>
+                <th>Code</th>
+                <th>Adjustment Date</th>
                 <th>Warehouse</th>
-                <th class="text-center" style="width:120px">Jumlah Item</th>
-                <th>Dibuat Oleh</th>
-                <th>Jam Input</th>
-                <th class="text-end" style="width:130px">Aksi</th>
+                <th class="text-center" style="width:120px">Item Count</th>
+                <th>Created By</th>
+                <th>Input Time</th>
+                <th class="text-end" style="width:130px">Actions</th>
             </tr>
             </thead>
             <tbody></tbody>
@@ -76,7 +76,7 @@
 
         <div class="card-body pt-3">
         <small class="text-muted">
-            * “Tgl Adjustment” = tanggal dokumen (effective date). “Created At” = waktu input di sistem. Dua-duanya beda fungsi.
+            * “Adjustment Date” = document date (effective date). “Created At” = system input time. Both have different functions.
         </small>
         </div>
     </div>
@@ -89,8 +89,8 @@
         <div class="modal-content">
         <div class="modal-header">
             <div>
-            <h5 class="modal-title fw-bold">Buat Stock Adjustment</h5>
-            <small class="text-muted">Gunakan <code>Alt+N</code> tambah baris, <code>Alt+S</code> simpan (di dalam modal)</small>
+            <h5 class="modal-title fw-bold">Create Stock Adjustment</h5>
+            <small class="text-muted">Use <code>Alt+N</code> to add row, <code>Alt+S</code> to save (inside modal)</small>
             </div>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
@@ -101,7 +101,7 @@
             <div class="modal-body">
             <div class="row g-2 mb-3">
                 <div class="col-md-3">
-                <label class="form-label">Tanggal (dokumen)</label>
+                <label class="form-label">Date (document)</label>
                 <input type="date" name="adj_date" id="adj_date" class="form-control"
                         value="{{ now()->toDateString() }}">
                 </div>
@@ -110,9 +110,9 @@
                 <label class="form-label">Warehouse</label>
                 <select name="warehouse_id" id="warehouse_id" class="form-select">
                     @if($canAdjustPusat)
-                    <option value="">Stock Central</option>
+                    <option value="">Central Stock</option>
                     @else
-                    <option value="">— Pilih —</option>
+                    <option value="">— Select —</option>
                     @endif
 
                     @foreach($warehouses as $w)
@@ -129,27 +129,27 @@
 
             <div class="row g-2 mb-3">
                 <div class="col-md-4">
-                <label class="form-label">Mode Stok</label>
+                <label class="form-label">Stock Mode</label>
                 <select name="stock_scope_mode" id="stock_scope_mode" class="form-select">
                     <option value="single" selected>Item (manual)</option>
-                    <option value="all">All Produk </option>
+                    <option value="all">All Products</option>
                 </select>
                 <small class="text-muted d-block">
-                    Mode “All Produk” akan memuat semua item sesuai warehouse/central.
+                    “All Products” mode will load all items according to warehouse/central.
                 </small>
                 </div>
 
                 <div class="col-md-4">
-                <label class="form-label">Mode Update</label>
+                <label class="form-label">Update Mode</label>
                 <select name="price_update_mode" id="price_update_mode" class="form-select">
-                    <option value="stock" selected>Update Stok Fisik</option>
-                    <option value="purchase">Update Harga Beli</option>
-                    <option value="selling">Update Harga Jual</option>
-                    <option value="purchase_selling">Update Harga Beli & Jual</option>
-                    <option value="stock_purchase_selling">Update Stok + Harga Beli & Jual</option>
+                    <option value="stock" selected>Update Physical Stock</option>
+                    <option value="purchase">Update Purchase Price</option>
+                    <option value="selling">Update Selling Price</option>
+                    <option value="purchase_selling">Update Purchase & Selling Price</option>
+                    <option value="stock_purchase_selling">Update Stock + Purchase & Selling Price</option>
                 </select>
                 <small class="text-muted d-block">
-                    Kolom tabel menyesuaikan mode.
+                    Table columns adapt to the mode.
                 </small>
                 </div>
             </div>
@@ -158,12 +158,12 @@
                 <table class="table table-bordered align-middle mb-2" id="tblItems">
                 <thead class="table-light">
                     <tr class="text-center">
-                    <th style="width:30%">Produk</th>
-                    <th class="col-stock" style="width:12%">Stok Fisik</th>
-                    <th class="col-price-beli" style="width:14%">Harga Beli</th>
-                    <th class="col-price-jual" style="width:14%">Harga Jual</th>
-                    <th style="width:22%">Catatan Item</th>
-                    <th style="width:8%">Aksi</th>
+                    <th style="width:30%">Product</th>
+                    <th class="col-stock" style="width:12%">Physical Stock</th>
+                    <th class="col-price-beli" style="width:14%">Purchase Price</th>
+                    <th class="col-price-jual" style="width:14%">Selling Price</th>
+                    <th style="width:22%">Item Notes</th>
+                    <th style="width:8%">Actions</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -172,11 +172,11 @@
 
             <div class="d-flex justify-content-between">
                 <button type="button" id="btnAddRow" class="btn btn-outline-secondary">
-                <i class="bx bx-plus"></i> Tambah Baris (Alt+N)
+                <i class="bx bx-plus"></i> Add Row (Alt+N)
                 </button>
 
                 <button type="submit" id="btnSave" class="btn btn-primary">
-                <i class="bx bx-save"></i> Simpan (Alt+S)
+                <i class="bx bx-save"></i> Save (Alt+S)
                 </button>
             </div>
             </div>
@@ -191,8 +191,8 @@
         <div class="modal-content">
         <div class="modal-header">
             <div>
-            <h5 class="modal-title fw-bold">FORM STOCK ADJUSTMENT</h5>
-            <small class="text-muted">Detail dokumen penyesuaian stok</small>
+            <h5 class="modal-title fw-bold">STOCK ADJUSTMENT FORM</h5>
+            <small class="text-muted">Stock adjustment document detail</small>
             </div>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
@@ -201,18 +201,18 @@
             <div class="border rounded p-3 mb-3">
             <div class="row">
                 <div class="col-md-6">
-                <div><strong>No. Dokumen</strong> : <span id="d_adj_code">-</span></div>
-                <div><strong>Tanggal</strong> : <span id="d_adj_date">-</span></div>
+                <div><strong>Document No.</strong> : <span id="d_adj_code">-</span></div>
+                <div><strong>Date</strong> : <span id="d_adj_date">-</span></div>
                 <div><strong>Warehouse</strong> : <span id="d_wh">-</span></div>
                 </div>
                 <div class="col-md-6">
-                <div><strong>Dibuat oleh</strong> : <span id="d_creator">-</span></div>
-                <div><strong>Dibuat pada</strong> : <span id="d_created_at">-</span></div>
-                <div><strong>Jumlah item</strong> : <span id="d_items_count">-</span></div>
+                <div><strong>Created by</strong> : <span id="d_creator">-</span></div>
+                <div><strong>Created at</strong> : <span id="d_created_at">-</span></div>
+                <div><strong>Item count</strong> : <span id="d_items_count">-</span></div>
                 </div>
             </div>
             <div class="mt-2">
-                <strong>Catatan Global</strong><br>
+                <strong>Global Notes</strong><br>
                 <span class="text-muted" id="d_notes">-</span>
             </div>
             </div>
@@ -222,13 +222,13 @@
                 <thead class="table-light">
                 <tr class="text-center">
                     <th style="width:40px">No.</th>
-                    <th>Produk</th>
-                    <th class="text-end" style="width:110px">Stok Sebelum</th>
-                    <th class="text-end" style="width:110px">Stok Sesudah</th>
-                    <th class="text-end" style="width:110px">Selisih</th>
-                    <th class="text-end" style="width:160px">Harga Beli (Sblm → Ssdh)</th>
-                    <th class="text-end" style="width:160px">Harga Jual (Sblm → Ssdh)</th>
-                    <th style="width:220px">Catatan Item</th>
+                    <th>Product</th>
+                    <th class="text-end" style="width:110px">Stock Before</th>
+                    <th class="text-end" style="width:110px">Stock After</th>
+                    <th class="text-end" style="width:110px">Difference</th>
+                    <th class="text-end" style="width:160px">Purchase Price (Before → After)</th>
+                    <th class="text-end" style="width:160px">Selling Price (Before → After)</th>
+                    <th style="width:220px">Item Notes</th>
                 </tr>
                 </thead>
                 <tbody id="d_items_body"></tbody>
@@ -385,7 +385,7 @@ $(function(){
     try{
       const res = await fetch(url, { headers:{'Accept':'application/json'} });
       const json = await res.json();
-      if(!res.ok || json.status !== 'ok') throw new Error(json.message || 'Gagal ambil detail');
+      if(!res.ok || json.status !== 'ok') throw new Error(json.message || 'Failed to fetch detail');
 
       $('#d_adj_code').text(json.header.adj_code || '-');
       $('#d_adj_date').text(json.header.adj_date || '-');
@@ -427,7 +427,7 @@ $(function(){
       new bootstrap.Modal(document.getElementById('mdlAdjDetail')).show();
     }catch(err){
       console.error(err);
-      Swal.fire({ icon:'error', title:'Gagal', text: err.message || 'Gagal memuat detail.' });
+      Swal.fire({ icon:'error', title:'Failed', text: err.message || 'Failed to load detail.' });
     }
   });
 
@@ -450,12 +450,12 @@ $(function(){
     if(productsCache.length) return;
     const res = await fetch(productsUrl, { headers:{'Accept':'application/json'} });
     const json = await res.json();
-    if(!res.ok || json.status !== 'ok') throw new Error('Gagal load products');
+    if(!res.ok || json.status !== 'ok') throw new Error('Failed to load products');
     productsCache = json.items || [];
   }
 
   function productOptionsHtml(){
-    let html = `<option value="">— Pilih Produk —</option>`;
+    let html = `<option value="">— Select Product —</option>`;
     for(const p of productsCache){
       html += `<option value="${p.id}">${p.product_code} — ${p.name}</option>`;
     }
@@ -501,7 +501,7 @@ $(function(){
         <input type="number" name="items[${idx}][selling_price]" class="form-control" min="0">
       </td>
       <td>
-        <input type="text" name="items[${idx}][notes]" class="form-control">
+        <input type="text" name="items[${idx}][notes]" class="form-control" placeholder="Notes">
       </td>
       <td class="text-center">
         <button type="button" class="btn btn-sm btn-outline-danger btnRemoveRow">
@@ -530,7 +530,7 @@ $(function(){
         <input type="number" name="items[${idx}][selling_price]" class="form-control" min="0">
       </td>
       <td>
-        <input type="text" name="items[${idx}][notes]" class="form-control">
+        <input type="text" name="items[${idx}][notes]" class="form-control" placeholder="Notes">
       </td>
       <td class="text-center">
         <button type="button" class="btn btn-sm btn-outline-danger btnRemoveRow">
@@ -584,7 +584,7 @@ $(function(){
       resetForm();
     }catch(err){
       console.error(err);
-      Swal.fire({ icon:'error', title:'Gagal', text:'Gagal memuat master produk.' });
+      Swal.fire({ icon:'error', title:'Failed', text:'Failed to load master products.' });
     }
   });
 
@@ -596,7 +596,7 @@ $(function(){
       try{ await loadAllProducts(); }
       catch(err){
         console.error(err);
-        Swal.fire({ icon:'error', title:'Gagal', text: err.message || 'Gagal memuat produk.' });
+        Swal.fire({ icon:'error', title:'Failed', text: err.message || 'Failed to load products.' });
       }
     }else{
       btnAddRow.disabled = false;
@@ -611,7 +611,7 @@ $(function(){
       try{ await loadAllProducts(); }
       catch(err){
         console.error(err);
-        Swal.fire({ icon:'error', title:'Gagal', text: err.message || 'Gagal memuat produk.' });
+        Swal.fire({ icon:'error', title:'Failed', text: err.message || 'Failed to load products.' });
       }
     }
   });
@@ -667,23 +667,23 @@ $(function(){
       if(res.status === 422){
         const errs = json.errors || {};
         const list = Object.values(errs).flat().join('<br>');
-        Swal.fire({ icon:'error', title:'Validasi gagal', html: list || 'Periksa input.' });
+        Swal.fire({ icon:'error', title:'Validation failed', html: list || 'Check your input.' });
         isSubmitting = false;
         btnSave.disabled = false;
         return;
       }
 
       if(!res.ok || json.status !== 'ok'){
-        throw new Error(json.message || 'Gagal menyimpan.');
+        throw new Error(json.message || 'Failed to save.');
       }
 
-      Swal.fire({ icon:'success', title:'Berhasil', text: json.message || 'Tersimpan.' });
+      Swal.fire({ icon:'success', title:'Success', text: json.message || 'Saved.' });
 
       bootstrap.Modal.getInstance(createModalEl).hide();
       table.ajax.reload(null, false);
     }catch(err){
       console.error(err);
-      Swal.fire({ icon:'error', title:'Gagal', text: err.message || 'Gagal menyimpan.' });
+      Swal.fire({ icon:'error', title:'Failed', text: err.message || 'Failed to save.' });
       isSubmitting = false;
       btnSave.disabled = false;
     }
@@ -724,11 +724,11 @@ $(function(){
     if (noFilter) {
       Swal.fire({
         icon: 'warning',
-        title: 'Filter masih kosong',
-        text: 'Kamu belum milih filter apa pun. Export semua data bisa berat. Lanjut export ALL?',
+        title: 'Filter is empty',
+        text: 'You haven\'t selected any filters. Exporting all data can be slow. Proceed to export ALL?',
         showCancelButton: true,
-        confirmButtonText: 'Ya, export ALL',
-        cancelButtonText: 'Batal'
+        confirmButtonText: 'Yes, export ALL',
+        cancelButtonText: 'Cancel'
       }).then((r)=>{
         if (r.isConfirmed) {
           window.location.href = buildExportUrl();

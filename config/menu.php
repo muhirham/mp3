@@ -15,7 +15,7 @@ return [
         ],
         [
             'key'   => 'packages',
-            'label' => 'UOM',
+            'label' => 'Uom',
             'route' => 'packages.index',
             'group' => 'inventory',
             'icon'  => 'bx bx-package',

@@ -118,8 +118,8 @@
 
               if ($totalLines > 1) {
                   $productSummary = $firstProduct
-                      ? $firstProduct . ' + ' . ($totalLines - 1) . ' item'
-                      : $totalLines . ' item';
+                      ? $firstProduct . ' + ' . ($totalLines - 1) . ' items'
+                      : $totalLines . ' items';
               } else {
                   $productSummary = $firstProduct ?? '-';
               }
@@ -156,7 +156,7 @@
               } elseif ($supplierNames->count() === 1) {
                   $supplierLabel = $supplierNames->first();
               } else {
-                  $supplierLabel = $supplierNames->first() . ' + ' . ($supplierNames->count() - 1) . ' supplier';
+                  $supplierLabel = $supplierNames->first() . ' + ' . ($supplierNames->count() - 1) . ' suppliers';
               }
 
               // WAREHOUSE LABEL
@@ -182,9 +182,9 @@
                   $otherCount = $warehouseNames->count() - 1;
 
                   if ($hasCentral) {
-                      $warehouseLabel = 'Central Stock + ' . $otherCount . ' wh';
+                      $warehouseLabel = 'Central Stock + ' . $otherCount . ' warehouses';
                   } else {
-                      $warehouseLabel = $warehouseNames->first() . ' + ' . $otherCount . ' wh';
+                      $warehouseLabel = $warehouseNames->first() . ' + ' . $otherCount . ' warehouses';
                   }
               }
             @endphp

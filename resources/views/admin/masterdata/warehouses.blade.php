@@ -363,7 +363,7 @@
             <input id="sw_addr" class="form-control mb-2" placeholder="Address">
             <input id="sw_note" class="form-control" placeholder="Note">
             <small class="text-muted d-block mt-2">
-                Kosongkan kolom <b>Code</b> jika ingin auto-generate.
+                Leave the <b>Code</b> field blank for auto-generate.
             </small>
             `,
             showCancelButton:true,

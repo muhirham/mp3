@@ -526,7 +526,7 @@
                                                             <td style="width:180px">
                                                                 <input type="text" class="form-control form-control-sm"
                                                                     name="receives[{{ $key }}][notes]"
-                                                                    placeholder="Catatan (opsional)">
+                                                                    placeholder="Notes (optional)">
                                                                 <small class="text-danger small js-row-msg"></small>
                                                             </td>
                                                         </tr>

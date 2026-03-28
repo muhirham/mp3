@@ -228,7 +228,7 @@
                 const qty = Number(r.quantity_requested || 0);
                 const total = Number(r.total_cost || 0);
 
-                // hanya pending yang bisa di-reject
+                // only pending can be rejected
                 const actions = (r.status === 'pending') ?
                     `<button class="btn btn-sm btn-outline-danger btn-reject" data-id="${r.id}">Reject</button>` :
                     '';

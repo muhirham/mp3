@@ -20,7 +20,7 @@
       // ✅ EDIT PO HANYA SUPERADMIN
       $poLocked = $baseLocked || $approvalLocked || ! $isSuperadmin;
 
-      // ✅ notes lock: kalau sudah ada log reject (1) 2) dst) → kunci permanen
+      // ✅ notes lock: if reject log already exists (1, 2, etc.) → permanent lock
       $hasRejectLog = preg_match('/^\d+\)\s/m', trim((string)($po->notes ?? '')));
       $notesLocked  = $poLocked || $hasRejectLog;
 

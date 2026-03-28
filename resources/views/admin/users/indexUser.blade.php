@@ -213,7 +213,7 @@
                 @if ($errors->any() && !session('edit_open_id'))
                     <div class="px-4">
                         <div class="alert alert-danger mb-0">
-                            <div class="fw-semibold mb-1">Gagal menyimpan:</div>
+                            <div class="fw-semibold mb-1">Failed to save:</div>
                             <ul class="mb-0 ps-3">
                                 @foreach ($errors->all() as $err)
                                     <li>{{ $err }}</li>
@@ -376,7 +376,7 @@
                     <div class="mb-3">
                         <label class="form-label">Signature (optional)</label>
                         <input type="file" name="signature" class="form-control bg-transparent border-secondary">
-                        <small class=-50">Kosongkan bila tidak ingin mengubah tanda tangan.</small>
+                        <small class="text-muted">Leave empty to keep current signature.</small>
                     </div>
 
                     <div class="row g-2">
@@ -675,12 +675,12 @@
                 const id = this.dataset.id;
                 const name = this.dataset.name || 'user';
                 Swal.fire({
-                    title: 'Hapus user?',
-                    html: `<div class="text-muted">Data <b>${name}</b> akan dihapus permanen.</div>`,
+                    title: 'Delete user?',
+                    html: `<div class="text-muted">Data <b>${name}</b> will be permanently deleted.</div>`,
                     icon: 'warning',
                     showCancelButton: true,
-                    confirmButtonText: 'Ya, hapus!',
-                    cancelButtonText: 'Batal',
+                    confirmButtonText: 'Yes, delete!',
+                    cancelButtonText: 'Cancel',
                     confirmButtonColor: '#d33'
                 }).then(res => {
                     if (!res.isConfirmed) return;
@@ -693,10 +693,10 @@
                     }).then(async r => {
                         if (!r.ok) {
                             const tx = await r.text();
-                            throw new Error(tx || 'Gagal menghapus.');
+                            throw new Error(tx || 'Failed to delete.');
                         }
                         location.reload();
-                    }).catch(err => Swal.fire('Error', err.message || 'Gagal menghapus.',
+                    }).catch(err => Swal.fire('Error', err.message || 'Failed to delete.',
                         'error'));
                 });
             });
@@ -705,13 +705,13 @@
             $('#btnBulkDelete').on('click', function(e) {
                 e.preventDefault();
                 const ids = getCheckedIds();
-                if (!ids.length) return Swal.fire('Info', 'Pilih minimal satu baris.', 'info');
+                if (!ids.length) return Swal.fire('Info', 'Please select at least one row.', 'info');
                 Swal.fire({
-                    title: 'Hapus data terpilih?',
-                    html: `Total <b>${ids.length}</b> user`,
+                    title: 'Delete selected data?',
+                    html: `Total <b>${ids.length}</b> users`,
                     icon: 'warning',
                     showCancelButton: true,
-                    confirmButtonText: 'Ya, hapus!',
+                    confirmButtonText: 'Yes, delete!',
                     confirmButtonColor: '#d33'
                 }).then(res => {
                     if (!res.isConfirmed) return;
@@ -726,10 +726,10 @@
                         })
                     }).then(async r => {
                         if (!r.ok) {
-                            throw new Error(await r.text() || 'Gagal bulk delete.');
+                            throw new Error(await r.text() || 'Failed to bulk delete.');
                         }
                         location.reload();
-                    }).catch(err => Swal.fire('Error', err.message || 'Gagal bulk delete.',
+                    }).catch(err => Swal.fire('Error', err.message || 'Failed to bulk delete.',
                         'error'));
                 });
             });

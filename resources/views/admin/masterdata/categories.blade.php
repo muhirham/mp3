@@ -34,7 +34,7 @@
 
         <div class="col-12 col-md-auto ms-md-auto d-flex justify-content-md-end">
           <div class="small text-muted d-none d-md-flex align-items-center">
-            Search pakai input navbar atas
+            Search using the top navigation bar
           </div>
         </div>
       </div>
@@ -78,7 +78,7 @@
           <input name="category_code" class="form-control form-control-sm"
                  value="{{ $nextCode }}"
                  placeholder="Empty = auto (e.g. CAT-001)">
-          <small class="text-muted">Bisa diedit. Kosongkan kalau mau auto generate.</small>
+          <small class="text-muted">Editable. Leave empty for auto-generate.</small>
         </div>
 
         <div class="col-6">
@@ -206,7 +206,7 @@
   });
 
   $('#dtCategories').on('error.dt', function(){
-    Swal.fire({ icon:'error', title:'Server error', text:'Cek storage/logs/laravel.log' });
+    Swal.fire({ icon:'error', title:'Server error', text:'Check system logs' });
   });
 
   // ✅ page length
@@ -340,11 +340,11 @@
   window.delCategory = async function(id){
   const ask = await Swal.fire({
     icon:'warning',
-    title:'Yakin hapus?',
-    text:'Tindakan ini tidak bisa dibatalkan.',
+    title:'Confirm delete?',
+    text:'This action cannot be undone.',
     showCancelButton:true,
-    confirmButtonText:'Ya, hapus',
-    cancelButtonText:'Batal'
+    confirmButtonText:'Yes, delete',
+    cancelButtonText:'Cancel'
   });
 
   if (!ask.isConfirmed) return;
