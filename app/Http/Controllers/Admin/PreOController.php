@@ -605,6 +605,22 @@ class PreOController extends Controller
                 $po->status          = 'ordered';
                 $po->ordered_at      = now();
                 $po->notes = $this->clearRejectLogKeepUserNote($po->notes);
+
+                // sync request_restocks status
+                $requestIds = $po->items()
+                    ->whereNotNull('request_id')
+                    ->pluck('request_id')
+                    ->unique()
+                    ->all();
+
+                if (!empty($requestIds)) {
+                    DB::table('request_restocks')
+                        ->whereIn('id', $requestIds)
+                        ->update([
+                            'status'     => 'ordered',
+                            'updated_at' => now(),
+                        ]);
+                }
             }
 
             $po->save();
@@ -665,6 +681,22 @@ class PreOController extends Controller
             $po->notes = $this->clearRejectLogKeepUserNote($po->notes);
             $po->status          = 'ordered';
             $po->ordered_at      = now();
+
+            // sync request_restocks status
+            $requestIds = $po->items()
+                ->whereNotNull('request_id')
+                ->pluck('request_id')
+                ->unique()
+                ->all();
+
+            if (!empty($requestIds)) {
+                DB::table('request_restocks')
+                    ->whereIn('id', $requestIds)
+                    ->update([
+                        'status'     => 'ordered',
+                        'updated_at' => now(),
+                    ]);
+            }
 
             $po->save();
 

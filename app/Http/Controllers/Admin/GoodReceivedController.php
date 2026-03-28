@@ -338,7 +338,7 @@ class GoodReceivedController extends Controller
 
                 $payload = [
                     'purchase_order_id' => $po->id,
-                    'request_id'        => null,
+                    'request_id'        => $item->request_id,
                     'product_id'        => $item->product_id,
                     'warehouse_id'      => $warehouseId,
                     'supplier_id'       => $po->supplier_id,
@@ -369,10 +369,13 @@ class GoodReceivedController extends Controller
                         'updated_at'   => $now,
                     ]);
 
-                // update stok (central)
+                // update stok (warehouse atau central)
                 if (Schema::hasTable('stock_levels')) {
-                    // lu udah punya function ini
-                    $this->adjustCentralStock($item->product_id, $good);
+                    if ($item->request_id && $warehouseId) {
+                        $this->adjustWarehouseStock($warehouseId, $item->product_id, $good);
+                    } else {
+                        $this->adjustCentralStock($item->product_id, $good);
+                    }
                 }
             }
 
@@ -618,13 +621,12 @@ class GoodReceivedController extends Controller
                     }
 
                     if ($requestId) {
-                        // GR dari Restock: pusat -> warehouse
+                        // GR dari Restock: langsung ke warehouse (tanpa mampir pusat)
                         if ($warehouseId) {
                             $this->adjustWarehouseStock($warehouseId, $productId, -$qtyGood);
                         }
-                        $this->adjustCentralStock($productId, +$qtyGood);
                     } else {
-                        // GR dari Supplier: supplier -> pusat
+                        // GR dari Supplier: masuk ke pusat
                         $this->adjustCentralStock($productId, -$qtyGood);
                     }
                 }
@@ -916,10 +918,12 @@ class GoodReceivedController extends Controller
                 $status     = 'received';
                 $receivedAt = $receivedAt ?: now();
             } elseif ($sumAll === 0) {
-                $status     = 'approved';
+                // Jika belum ada yang diterima, tetap status ordered (karena sudah di-PO)
+                $status     = 'ordered';
                 $receivedAt = null;
             } else {
-                $status     = 'approved';
+                // Partially received, tetap status ordered agar tombol GR tetap muncul
+                $status     = 'ordered';
                 $receivedAt = null;
             }
         }

@@ -228,7 +228,7 @@ public function datatable(Request $r)
 
         $codeSafe = e($row->code ?? ('RR-'.$row->id));
 
-        $canReceive = ((int)$row->qty_rcv < (int)$row->qty_req);
+        $canReceive = ((int)$row->qty_rcv < (int)$row->qty_req) && ($statusRaw === 'ordered');
 
 $actions = '<div class="d-flex gap-1 justify-content-center">
     <button type="button"
