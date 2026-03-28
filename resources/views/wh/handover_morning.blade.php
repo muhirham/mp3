@@ -192,8 +192,58 @@
 
         @push('scripts')
     <script>
-        const salesSelect = document.querySelector('select[name="sales_id"]');
-        const infoLabel   = document.getElementById('handoverInfo');
+        const warehouseSelect = document.querySelector('select[name="warehouse_id"]');
+        const salesSelect     = document.querySelector('select[name="sales_id"]');
+        const infoLabel       = document.getElementById('handoverInfo');
+
+        let productsContext   = @json($products ?? []);
+
+        // Fungsi Helper buat update Produk di semua baris
+        function updateAllProductSelects(){
+            const selects = document.querySelectorAll('.sel-product');
+            selects.forEach(sel => {
+                const currentVal = sel.value;
+                let html = `<option value="">— Select Product —</option>`;
+                productsContext.forEach(p => {
+                    const stock = parseInt(p.warehouse_stock || 0);
+                    const stockFmt = new Intl.NumberFormat('id-ID').format(stock);
+                    html += `<option value="${p.id}" data-price="${p.selling_price}" ${currentVal == p.id ? 'selected' : ''}>
+                        ${p.name} (${p.product_code}) | Stok WH: ${stockFmt}
+                    </option>`;
+                });
+                sel.innerHTML = html;
+            });
+        }
+
+        async function refreshWarehouseContext(whId){
+            if(!whId) return;
+
+            try {
+                // 1. Fetch Sales
+                const resSales = await fetch(`{{ route('sales.handover.ajax-sales') }}?warehouse_id=${whId}`);
+                const dataSales = await resSales.json();
+                
+                let salesHtml = `<option value="">— Select Sales —</option>`;
+                (dataSales.items || []).forEach(u => {
+                    salesHtml += `<option value="${u.id}">${u.name} — ${u.email}</option>`;
+                });
+                salesSelect.innerHTML = salesHtml;
+
+                // 2. Fetch Products (untuk update STOK per WH)
+                const resProds = await fetch(`{{ route('sales.handover.ajax-products') }}?warehouse_id=${whId}`);
+                const dataProds = await resProds.json();
+                productsContext = dataProds.items || [];
+
+                updateAllProductSelects();
+
+            } catch(e) {
+                console.error('Failed to sync warehouse context', e);
+            }
+        }
+
+        warehouseSelect?.addEventListener('change', function(){
+            refreshWarehouseContext(this.value);
+        });
 
         salesSelect?.addEventListener('change', async function(){
             
@@ -327,12 +377,14 @@
         <td>
             <select class="form-select sel-product"
                     name="items[${newIndex}][product_id]" required>
-            <option value="">— Pilih Produk —</option>
-            @foreach(($products ?? []) as $p)
-                <option value="{{ $p->id }}" data-price="{{ (int) $p->selling_price }}">
-                {{ $p->name }} ({{ $p->product_code }}) | Stok WH: {{ number_format((int) ($p->warehouse_stock ?? 0), 0, ',', '.') }}
-                </option>
-            @endforeach
+            <option value="">— Select Product —</option>
+            ${productsContext.map(p => {
+                 const stock = parseInt(p.warehouse_stock || 0);
+                 const stockFmt = new Intl.NumberFormat('id-ID').format(stock);
+                 return `<option value="${p.id}" data-price="${p.selling_price}">
+                    ${p.name} (${p.product_code}) | Stok WH: ${stockFmt}
+                 </option>`;
+            }).join('')}
             </select>
         </td>
         <td>

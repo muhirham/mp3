@@ -40,6 +40,45 @@ class SalesHandoverController extends Controller
         ]);
     }
 
+    public function ajaxSalesByWarehouse(Request $request)
+    {
+        $whId = $request->warehouse_id;
+        if(!$whId) return response()->json(['items' => []]);
+
+        $sales = User::whereHas('roles', fn ($q) => $q->where('slug', 'sales'))
+            ->where('warehouse_id', $whId)
+            ->orderBy('name')
+            ->get(['id', 'name', 'email']);
+
+        return response()->json(['items' => $sales]);
+    }
+
+    public function ajaxProductsByWarehouse(Request $request)
+    {
+        $whId = $request->warehouse_id;
+        if(!$whId) return response()->json(['items' => []]);
+
+        $stockMap = DB::table('stock_levels')
+            ->where('owner_type', 'warehouse')
+            ->where('owner_id', $whId)
+            ->pluck('quantity', 'product_id')
+            ->toArray();
+
+        $products = Product::orderBy('name')
+            ->get(['id', 'name', 'product_code', 'selling_price'])
+            ->map(function($p) use ($stockMap) {
+                return [
+                    'id'              => $p->id,
+                    'name'            => $p->name,
+                    'product_code'    => $p->product_code,
+                    'selling_price'   => (int) $p->selling_price,
+                    'warehouse_stock' => (int) ($stockMap[$p->id] ?? 0),
+                ];
+            });
+
+        return response()->json(['items' => $products]);
+    }
+
     public function morningForm(Request $request)
     {
         $me = auth()->user();
@@ -56,8 +95,11 @@ class SalesHandoverController extends Controller
 
         // Warehouses
         $whQuery = Warehouse::query();
+        $targetWhId = $request->warehouse_id;
+
         if ($me->warehouse_id) {
-            $whQuery->where('id', $me->warehouse_id);
+            $targetWhId = $me->warehouse_id;
+            $whQuery->where('id', $targetWhId);
         }
 
         if (Schema::hasColumn('warehouses', 'warehouse_name')) {
@@ -74,7 +116,7 @@ class SalesHandoverController extends Controller
 
         // Sales list
         $salesUsers = User::whereHas('roles', fn ($q) => $q->where('slug', 'sales'))
-            ->when($me->warehouse_id, fn ($q) => $q->where('warehouse_id', $me->warehouse_id))
+            ->when($targetWhId, fn ($q) => $q->where('warehouse_id', $targetWhId))
             ->orderBy('name')
             ->get(['id', 'name', 'email', 'warehouse_id']);
 
@@ -82,7 +124,7 @@ class SalesHandoverController extends Controller
         $warehouseStockSub = DB::table('stock_levels')
             ->select('product_id', DB::raw('SUM(quantity) as warehouse_stock'))
             ->where('owner_type', 'warehouse')
-            ->when($me->warehouse_id, fn ($q) => $q->where('owner_id', $me->warehouse_id))
+            ->when($targetWhId, fn ($q) => $q->where('owner_id', $targetWhId))
             ->groupBy('product_id');
 
         $products = Product::query()
@@ -102,7 +144,7 @@ class SalesHandoverController extends Controller
         // Handovers menunggu OTP pagi
         $waitingMorning = SalesHandover::with('sales:id,name')
             ->whereIn('status', ['draft','waiting_morning_otp'])
-            ->when($me->warehouse_id, fn ($q) => $q->where('warehouse_id', $me->warehouse_id))
+            ->when($targetWhId, fn ($q) => $q->where('warehouse_id', $targetWhId))
             ->orderBy('handover_date', 'desc')
             ->orderBy('code')
             ->get();
