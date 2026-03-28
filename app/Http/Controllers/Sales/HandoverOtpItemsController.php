@@ -62,13 +62,21 @@ class HandoverOtpItemsController extends Controller
             ->orderByDesc('id')
             ->get();
 
-            $activeHandoverId = $request->session()->get('sales_active_handover_id');
-        // default: handover TERBARU
-            $handover = $handovers->first();
-            
-            if ($activeHandoverId) {
-                    $handover = $handovers->firstWhere('id', $activeHandoverId) ?? $handover;
-                }
+        $requestedHandoverId = $request->integer('handover_id');
+        $activeHandoverId    = $request->session()->get('sales_active_handover_id');
+
+        // default: handover terbaru
+        $handover = $handovers->first();
+
+        if ($requestedHandoverId) {
+            $handover = $handovers->firstWhere('id', $requestedHandoverId) ?? $handover;
+        } elseif ($activeHandoverId) {
+            $handover = $handovers->firstWhere('id', $activeHandoverId) ?? $handover;
+        }
+
+        if ($handover) {
+            $request->session()->put('sales_active_handover_id', $handover->id);
+        }
 
             $isOtpVerified  = false;
             $items          = collect();
@@ -114,6 +122,7 @@ class HandoverOtpItemsController extends Controller
 
         return view('sales.handover_otp', [
             'me'             => $me,
+            'handovers'      => $handovers,
             'handover'       => $handover,
             'items'          => $items,
             'isOtpVerified'  => $isOtpVerified,

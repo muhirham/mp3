@@ -2,6 +2,11 @@
 
 @section('content')
 
+@php
+    $canCreateBom = auth()->user()->hasPermission('bom.create');
+    $canProduceBom = auth()->user()->hasPermission('bom.produce');
+@endphp
+
 <style>
 .swal-on-top{
     z-index: 20000 !important;
@@ -18,9 +23,11 @@
                 <h4 class="mb-1">BOM & Production</h4>
                 <p class="text-muted mb-0">Kelola Bill of Material dan produksi</p>
             </div>
-            <button class="btn btn-primary ms-auto" data-bs-toggle="modal" data-bs-target="#mdlBom">
-                <i class="bx bx-plus"></i> Create BOM
-            </button>
+            @if($canCreateBom)
+                <button class="btn btn-primary ms-auto" data-bs-toggle="modal" data-bs-target="#mdlBom">
+                    <i class="bx bx-plus"></i> Create BOM
+                </button>
+            @endif
         </div>
 
         <div class="card">
@@ -202,7 +209,7 @@
                             </button>
 
                             <button type="button" class="btn btn-success" id="btnSaveProduce">
-                                Save & Produce
+                                {{ $canProduceBom ? 'Save & Produce' : 'Save BOM' }}
                             </button>
                         </div>
 
@@ -284,7 +291,10 @@
 
             const dtUrl = @json(route('bom.datatable'));
             const storeUrl = @json(route('bom.store'));
+            const nextCodeUrl = @json(route('bom.next_code'));
+            const canProduceBom = @json($canProduceBom);
             const csrf = $('meta[name="csrf-token"]').attr('content');
+            let isSavingBom = false;
 
             $.ajaxSetup({
                 headers: {
@@ -433,6 +443,11 @@
             ========================================================= */
 
             $('#btnSaveProduce').on('click', function() {
+                if (isSavingBom) return;
+
+                isSavingBom = true;
+                const $btn = $(this);
+                $btn.prop('disabled', true).text('Processing...');
 
                 let id = $('#bom_id').val();
                 let method = $('#formMethod').val();
@@ -448,9 +463,31 @@
 
                         let bomId = method === 'PUT' ? id : res.id;
 
-                        $.post('/bom/' + bomId + '/produce', {
-                            production_qty: $('#previewBatch').val()
-                        }, function(res2) {
+                        if (!canProduceBom) {
+                            $('#mdlBom').modal('hide');
+
+                            setTimeout(() => {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'BOM saved successfully'
+                                });
+                            }, 300);
+
+                            table.ajax.reload(null, false);
+                            goToStep(1);
+                            resetForm();
+                            isSavingBom = false;
+                            $btn.prop('disabled', false).html(canProduceBom ? 'Save & Produce' : 'Save BOM');
+                            return;
+                        }
+
+                        $.ajax({
+                            url: '/bom/' + bomId + '/produce',
+                            type: 'POST',
+                            data: {
+                                production_qty: $('#previewBatch').val()
+                            },
+                            success: function(res2) {
 
                                 $('#mdlBom').modal('hide');
 
@@ -459,7 +496,7 @@
                                     if (res2.warnings && res2.warnings.length) {
                                         Swal.fire({
                                             icon: 'warning',
-                                            title: res.warnings.join('<br>')
+                                            title: res2.warnings.join('<br>')
                                         });
                                     } else {
                                         Swal.fire({
@@ -469,9 +506,37 @@
                                     }
 
                                 }, 300);
-                            table.ajax.reload(null, false);
-                            goToStep(1);
-                            resetForm();
+                                table.ajax.reload(null, false);
+                                goToStep(1);
+                                resetForm();
+                                isSavingBom = false;
+                                $btn.prop('disabled', false).html(canProduceBom ? 'Save & Produce' : 'Save BOM');
+                            },
+                            error: function(xhr2) {
+                                let msg2 = 'Produksi gagal setelah BOM tersimpan';
+
+                                if (xhr2.responseJSON?.errors) {
+                                    msg2 = Object.values(xhr2.responseJSON.errors)[0][0];
+                                } else if (xhr2.responseJSON?.message) {
+                                    msg2 = xhr2.responseJSON.message;
+                                }
+
+                                $('#mdlBom').modal('hide');
+
+                                setTimeout(() => {
+                                    Swal.fire({
+                                        icon: 'warning',
+                                        title: msg2,
+                                        text: 'BOM sudah tersimpan, tapi proses produksi gagal.'
+                                    });
+                                }, 300);
+
+                                table.ajax.reload(null, false);
+                                goToStep(1);
+                                resetForm();
+                                isSavingBom = false;
+                                $btn.prop('disabled', false).html(canProduceBom ? 'Save & Produce' : 'Save BOM');
+                            }
                         });
                     },
                     error: function(xhr) {
@@ -491,6 +556,9 @@
                                 target: document.body
                             });
                         }, 300);
+
+                        isSavingBom = false;
+                        $btn.prop('disabled', false).html(canProduceBom ? 'Save & Produce' : 'Save BOM');
                     }
                 });
 
@@ -631,6 +699,8 @@
 
             $('#mdlBom').on('hidden.bs.modal', function() {
                 goToStep(1);
+                isSavingBom = false;
+                $('#btnSaveProduce').prop('disabled', false).html(canProduceBom ? 'Save & Produce' : 'Save BOM');
             });
 
 
@@ -644,6 +714,15 @@
                 $('#formMethod').val('POST');
                 $('#tblItems tbody').empty();
                 $('.modal-title').text('Create BOM');
+                fetchNextCode();
+            }
+
+            function fetchNextCode() {
+                $.get(nextCodeUrl, function(res) {
+                    if (res?.next_code) {
+                        $('#bom_code').val(res.next_code);
+                    }
+                });
             }
 
             function generatePreview() {

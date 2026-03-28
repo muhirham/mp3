@@ -382,9 +382,13 @@
                                         </td>
                                         <td data-label="Nilai Dibawa" class="text-end">{{ $r['amount_dispatched'] }}</td>
                                         <td data-label="Terjual" class="text-end fw-bold">{{ $r['amount_sold'] }}</td>
+                                        @if ($canSeeMargin)
+                                            <td data-label="Harga Asli" class="text-end text-muted">{{ $r['amount_original'] }}</td>
+                                            <td data-label="Diskon" class="text-end text-danger">-{{ $r['amount_discount'] }}</td>
+                                        @endif
                                         <td data-label="Selisih" class="text-end">{{ $r['amount_diff'] }}</td>
 
-                                        <td class="text-end">
+                                        <td data-label="Action" class="text-end">
                                             <button type="button" class="btn btn-sm btn-outline-primary btn-detail"
                                                 data-id="{{ $r['id'] }}">
                                                 Detail
@@ -394,7 +398,7 @@
                                 @endif
                             @empty
                                 <tr>
-                                    <td colspan="10" class="text-center text-muted">Belum ada data pada periode ini.
+                                    <td colspan="{{ $view === 'handover' ? ($canSeeMargin ? 11 : 9) : ($view === 'sales' ? 8 : 7) }}" class="text-center text-muted">Belum ada data pada periode ini.
                                     </td>
                                 </tr>
                             @endforelse
@@ -782,7 +786,7 @@
           </div>
         `;
 
-                        if (canOpenApproval && approvalButton && approvalUrlTemplate) {
+                        if (canOpenApproval && approvalButton && approvalUrlTemplate && h.can_open_approval) {
                             approvalButton.classList.remove('d-none');
                         }
 

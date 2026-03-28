@@ -10,13 +10,26 @@ use Illuminate\Support\Facades\Log;
 
 class PackageController extends Controller
 {
+    protected function ensureUomPermission(string $permission = 'uom.view'): void
+    {
+        $me = auth()->user();
+
+        if (! $me || ! $me->hasPermission($permission)) {
+            abort(403, 'Anda tidak punya izin untuk mengakses modul UOM.');
+        }
+    }
+
     public function index()
     {
+        $this->ensureUomPermission('uom.view');
+
         return view('admin.masterdata.packages');
     }
 
     public function datatable(Request $r)
     {
+        $this->ensureUomPermission('uom.view');
+
         try {
             $draw        = (int) $r->input('draw', 1);
             $start       = (int) $r->input('start', 0);
@@ -93,6 +106,8 @@ class PackageController extends Controller
 
     public function store(Request $r)
     {
+        $this->ensureUomPermission('uom.create');
+
         $data = $r->validate([
             'package_name' => ['required','max:150','unique:packages,package_name'],
         ]);
@@ -102,6 +117,8 @@ class PackageController extends Controller
 
     public function update(Request $r, Package $package)
     {
+        $this->ensureUomPermission('uom.update');
+
         $data = $r->validate([
             'package_name' => ['required','max:150', Rule::unique('packages','package_name')->ignore($package->id)],
         ]);
@@ -111,6 +128,8 @@ class PackageController extends Controller
 
     public function destroy(Package $package)
     {
+        $this->ensureUomPermission('uom.delete');
+
         $package->delete();
         return response()->json(['success' => 'Satuan dihapus.']);
     }

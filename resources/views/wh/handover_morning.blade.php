@@ -98,7 +98,7 @@
                             <option value="{{ $p->id }}"
                                     data-price="{{ (int) $p->selling_price }}"
                                     @selected($draft?->product_id == $p->id)>
-                            {{ $p->name }} ({{ $p->product_code }})
+                            {{ $p->name }} ({{ $p->product_code }}) | Stok WH: {{ number_format((int) ($p->warehouse_stock ?? 0), 0, ',', '.') }}
                             </option>
                         @endforeach
                         </select>
@@ -330,7 +330,7 @@
             <option value="">— Pilih Produk —</option>
             @foreach(($products ?? []) as $p)
                 <option value="{{ $p->id }}" data-price="{{ (int) $p->selling_price }}">
-                {{ $p->name }} ({{ $p->product_code }})
+                {{ $p->name }} ({{ $p->product_code }}) | Stok WH: {{ number_format((int) ($p->warehouse_stock ?? 0), 0, ',', '.') }}
                 </option>
             @endforeach
             </select>

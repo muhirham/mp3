@@ -3,6 +3,27 @@
 @section('content')
 <div class="container-xxl container-p-y">
 
+    @if(session('success'))
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            {{ session('success') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    @endif
+
+    @if(session('error'))
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            {{ session('error') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    @endif
+
+    @if($errors->any())
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            {{ collect($errors->all())->implode(' | ') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    @endif
+
     {{-- HEADER --}}
     <div class="d-flex align-items-center mb-4">
         <a href="{{ route('bom.index') }}" class="btn btn-sm btn-outline-secondary me-3">
@@ -34,11 +55,13 @@
                 Overview
             </button>
         </li>
-        <li class="nav-item">
-            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabProduction">
-                Production
-            </button>
-        </li>
+        @if(auth()->user()->hasPermission('bom.produce'))
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabProduction">
+                    Production
+                </button>
+            </li>
+        @endif
         <li class="nav-item">
             <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabHistory">
                 History
@@ -93,43 +116,45 @@
         {{-- ================= PRODUCTION ================= --}}
         <div class="tab-pane fade" id="tabProduction">
 
-            <div class="card">
-                <div class="card-header">
-                    <strong>Execute Production</strong>
-                </div>
-                <div class="card-body">
+            @if(auth()->user()->hasPermission('bom.produce'))
+                <div class="card">
+                    <div class="card-header">
+                        <strong>Execute Production</strong>
+                    </div>
+                    <div class="card-body">
 
-                    <form method="POST" action="{{ route('bom.produce', $bom) }}">
-                        @csrf
+                        <form method="POST" action="{{ route('bom.produce', $bom) }}">
+                            @csrf
 
-                        <div class="row">
-                            <div class="col-md-4">
-                                <label>Batch Qty</label>
-                                <input type="number"
-                                       name="production_qty"
-                                       class="form-control"
-                                       min="1"
-                                       required>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <label>Batch Qty</label>
+                                    <input type="number"
+                                           name="production_qty"
+                                           class="form-control"
+                                           min="1"
+                                           required>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <label>Estimated Output</label>
+                                    <input type="text"
+                                           class="form-control"
+                                           value="Auto calculated"
+                                           disabled>
+                                </div>
                             </div>
 
-                            <div class="col-md-4">
-                                <label>Estimated Output</label>
-                                <input type="text"
-                                       class="form-control"
-                                       value="Auto calculated"
-                                       disabled>
+                            <div class="mt-3">
+                                <button class="btn btn-success">
+                                    Produce
+                                </button>
                             </div>
-                        </div>
+                        </form>
 
-                        <div class="mt-3">
-                            <button class="btn btn-success">
-                                Produce
-                            </button>
-                        </div>
-                    </form>
-
+                    </div>
                 </div>
-            </div>
+            @endif
 
         </div>
 

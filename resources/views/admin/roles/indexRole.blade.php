@@ -411,6 +411,46 @@
 
                                     </div>
                                 @endif
+                                @if($it['key'] === 'bom')
+                                    <div class="ms-4 mb-2">
+
+                                        <div class="form-check">
+                                            <input class="form-check-input add-permission" type="checkbox"
+                                                name="permissions[]"
+                                                value="bom.view">
+                                            <label class="form-check-label">View</label>
+                                        </div>
+
+                                        <div class="form-check">
+                                            <input class="form-check-input add-permission" type="checkbox"
+                                                name="permissions[]"
+                                                value="bom.create">
+                                            <label class="form-check-label">Create</label>
+                                        </div>
+
+                                        <div class="form-check">
+                                            <input class="form-check-input add-permission" type="checkbox"
+                                                name="permissions[]"
+                                                value="bom.update">
+                                            <label class="form-check-label">Update</label>
+                                        </div>
+
+                                        <div class="form-check">
+                                            <input class="form-check-input add-permission" type="checkbox"
+                                                name="permissions[]"
+                                                value="bom.delete">
+                                            <label class="form-check-label">Delete</label>
+                                        </div>
+
+                                        <div class="form-check">
+                                            <input class="form-check-input add-permission" type="checkbox"
+                                                name="permissions[]"
+                                                value="bom.produce">
+                                            <label class="form-check-label">Produce</label>
+                                        </div>
+
+                                    </div>
+                                @endif
                             @endforeach
                         </div>
                         {{-- WAREHOUSE --}}
@@ -858,6 +898,46 @@
 
                                     </div>
                                 @endif
+                                @if($it['key'] === 'bom')
+                                    <div class="ms-4 mb-2">
+
+                                        <div class="form-check">
+                                            <input class="form-check-input edit-permission" type="checkbox"
+                                                name="permissions[]"
+                                                value="bom.view">
+                                            <label class="form-check-label">View</label>
+                                        </div>
+
+                                        <div class="form-check">
+                                            <input class="form-check-input edit-permission" type="checkbox"
+                                                name="permissions[]"
+                                                value="bom.create">
+                                            <label class="form-check-label">Create</label>
+                                        </div>
+
+                                        <div class="form-check">
+                                            <input class="form-check-input edit-permission" type="checkbox"
+                                                name="permissions[]"
+                                                value="bom.update">
+                                            <label class="form-check-label">Update</label>
+                                        </div>
+
+                                        <div class="form-check">
+                                            <input class="form-check-input edit-permission" type="checkbox"
+                                                name="permissions[]"
+                                                value="bom.delete">
+                                            <label class="form-check-label">Delete</label>
+                                        </div>
+
+                                        <div class="form-check">
+                                            <input class="form-check-input edit-permission" type="checkbox"
+                                                name="permissions[]"
+                                                value="bom.produce">
+                                            <label class="form-check-label">Produce</label>
+                                        </div>
+
+                                    </div>
+                                @endif
                             @endforeach
                         </div>
 
@@ -942,6 +1022,116 @@
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    const permissionMenuMap = {
+        products: 'products',
+        uom: 'packages',
+        category: 'categories',
+        supplier: 'suppliers',
+        stock_adjustments: 'stock_adjustments',
+        company: 'company',
+        users: 'users',
+        roles: 'roles',
+        bom: 'bom',
+        warehouse: 'warehouses',
+    };
+
+    function getPermissionParts(value) {
+        const [module, action] = String(value || '').split('.');
+        return { module, action };
+    }
+
+    function getMenuCheckbox(modalEl, module) {
+        const menuKey = permissionMenuMap[module];
+        if (!menuKey) {
+            return null;
+        }
+
+        return modalEl.querySelector(`input[name="menu_keys[]"][value="${menuKey}"]`);
+    }
+
+    function getPermissionCheckbox(modalEl, module, action) {
+        return modalEl.querySelector(`input[name="permissions[]"][value="${module}.${action}"]`);
+    }
+
+    function getPermissionCheckboxes(modalEl, module) {
+        return Array.from(modalEl.querySelectorAll(`input[name="permissions[]"][value^="${module}."]`));
+    }
+
+    function syncFromMenuCheckbox(modalEl, menuCheckbox) {
+        const menuKey = menuCheckbox.value;
+        const module = Object.keys(permissionMenuMap).find((key) => permissionMenuMap[key] === menuKey);
+
+        if (!module) {
+            return;
+        }
+
+        const permissionCheckboxes = getPermissionCheckboxes(modalEl, module);
+        const viewCheckbox = getPermissionCheckbox(modalEl, module, 'view');
+
+        if (!permissionCheckboxes.length) {
+            return;
+        }
+
+        if (menuCheckbox.checked) {
+            if (viewCheckbox) {
+                viewCheckbox.checked = true;
+            }
+            return;
+        }
+
+        permissionCheckboxes.forEach((checkbox) => {
+            checkbox.checked = false;
+        });
+    }
+
+    function syncFromPermissionCheckbox(modalEl, permissionCheckbox) {
+        const { module, action } = getPermissionParts(permissionCheckbox.value);
+        const menuCheckbox = getMenuCheckbox(modalEl, module);
+        const viewCheckbox = getPermissionCheckbox(modalEl, module, 'view');
+
+        if (!menuCheckbox) {
+            return;
+        }
+
+        if (permissionCheckbox.checked) {
+            menuCheckbox.checked = true;
+
+            if (action !== 'view' && viewCheckbox) {
+                viewCheckbox.checked = true;
+            }
+
+            if (action === 'view' && viewCheckbox) {
+                viewCheckbox.checked = true;
+            }
+
+            return;
+        }
+
+        const hasOtherChecked = getPermissionCheckboxes(modalEl, module)
+            .some((checkbox) => checkbox.checked);
+
+        if (!hasOtherChecked) {
+            menuCheckbox.checked = false;
+        }
+    }
+
+    function bindPermissionSync(modalSelector) {
+        const modalEl = document.querySelector(modalSelector);
+        if (!modalEl) {
+            return;
+        }
+
+        modalEl.querySelectorAll('input[name="menu_keys[]"]').forEach((checkbox) => {
+            checkbox.addEventListener('change', () => syncFromMenuCheckbox(modalEl, checkbox));
+        });
+
+        modalEl.querySelectorAll('input[name="permissions[]"]').forEach((checkbox) => {
+            checkbox.addEventListener('change', () => syncFromPermissionCheckbox(modalEl, checkbox));
+        });
+    }
+
+    bindPermissionSync('#mdlAddRole');
+    bindPermissionSync('#mdlEditRole');
 
     const editModalEl = document.getElementById('mdlEditRole');
     const editModal   = new bootstrap.Modal(editModalEl);

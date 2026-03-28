@@ -65,6 +65,8 @@ class RoleSeeder extends Seeder
 
             'roles.view','roles.create','roles.update','roles.delete',
 
+            'bom.view','bom.create','bom.update','bom.delete','bom.produce',
+
             'warehouse.view','warehouse.create','warehouse.update','warehouse.delete',
         ];
 

@@ -14,8 +14,20 @@ use Illuminate\Validation\ValidationException;
 class BomController extends Controller
 {
     protected string $codePrefix = 'BOM-';
+
+    protected function ensureBomPermission(string $permission = 'bom.view'): void
+    {
+        $user = auth()->user();
+
+        if (! $user || ! $user->hasPermission($permission)) {
+            abort(403, 'Anda tidak punya izin untuk mengakses modul BOM & Production.');
+        }
+    }
+
     public function index()
     {
+        $this->ensureBomPermission('bom.view');
+
         // Subquery stock pusat
         $stockSub = DB::table('stock_levels')
             ->selectRaw('product_id, SUM(quantity) as total_stock')
@@ -55,6 +67,8 @@ class BomController extends Controller
 
     public function datatable(Request $r)
     {
+        $this->ensureBomPermission('bom.view');
+
         try {
 
             $draw   = (int)$r->input('draw',1);
@@ -95,7 +109,9 @@ class BomController extends Controller
                 ->take($length)
                 ->get();
 
-                $rows = $data->map(function($r,$i) use ($start){
+                $user = auth()->user();
+
+                $rows = $data->map(function($r,$i) use ($start, $user){
 
                     $createdBlock = '
                         <div>
@@ -111,6 +127,16 @@ class BomController extends Controller
                         </div>
                     ';
 
+                    $actions = '';
+
+                    if ($user?->hasPermission('bom.view')) {
+                        $actions .= '<button class="btn btn-sm btn-info js-detail" data-id="'.$r->id.'">Detail</button> ';
+                    }
+
+                    if ($user?->hasPermission('bom.delete')) {
+                        $actions .= '<button class="btn btn-sm btn-outline-danger js-del" data-id="'.$r->id.'">Delete</button>';
+                    }
+
                     return [
                         'rownum' => $start + $i + 1,
                         'bom_code' => e($r->bom_code),
@@ -121,10 +147,7 @@ class BomController extends Controller
                             : '<span class="badge bg-secondary">INACTIVE</span>',
                         'created_block' => $createdBlock,
                         'updated_block' => $updatedBlock,
-                        'actions' => '
-                            <button class="btn btn-sm btn-info js-detail" data-id="'.$r->id.'">Detail</button>
-                            <button class="btn btn-sm btn-outline-danger js-del" data-id="'.$r->id.'">Delete</button>
-                        '
+                        'actions' => trim($actions) ?: '-'
                     ];
                 });
 
@@ -150,6 +173,8 @@ class BomController extends Controller
 
     public function store(Request $r)
     {
+        $this->ensureBomPermission('bom.create');
+
         $user = auth()->user();
 
         if (!$user) {
@@ -219,16 +244,20 @@ class BomController extends Controller
         });
     }
 
-public function showPage(Bom $bom)
-{
-    $bom->load('items.material');
+    public function showPage(Bom $bom)
+    {
+        $this->ensureBomPermission('bom.view');
 
-    return view('admin.operations.bom-show', compact('bom'));
-}
+        $bom->load('items.material');
+
+        return view('admin.operations.bom-show', compact('bom'));
+    }
 
 
     public function edit(Bom $bom)
     {
+        $this->ensureBomPermission('bom.update');
+
         $bom->load('items');
 
         return response()->json([
@@ -244,6 +273,8 @@ public function showPage(Bom $bom)
 
     public function update(Request $r, Bom $bom)
     {
+        $this->ensureBomPermission('bom.update');
+
         $user = auth()->user();
 
         if (!$user) {
@@ -302,12 +333,16 @@ public function showPage(Bom $bom)
 
     public function destroy(Bom $bom)
     {
+        $this->ensureBomPermission('bom.delete');
+
         $bom->delete();
         return response()->json(['success'=>'BOM deleted']);
     }
 
     public function nextCode()
     {
+        $this->ensureBomPermission('bom.create');
+
         return response()->json([
             'next_code' => $this->generateNextCode()
         ]);
@@ -349,6 +384,8 @@ public function showPage(Bom $bom)
 
 public function produce(Request $r, Bom $bom)
 {
+    $this->ensureBomPermission('bom.produce');
+
     try {
 
         $user = auth()->user();
@@ -483,13 +520,30 @@ public function produce(Request $r, Bom $bom)
                 'total_cost' => $totalCost
             ]);
 
-            return response()->json([
-                'success' => 'Production executed successfully',
-                'warnings' => $warnings
-            ]);
+            if ($r->expectsJson() || $r->ajax()) {
+                return response()->json([
+                    'success' => 'Production executed successfully',
+                    'warnings' => $warnings
+                ]);
+            }
+
+            $message = 'Production executed successfully';
+            if (!empty($warnings)) {
+                $message .= ' Warning: ' . implode(' | ', $warnings);
+            }
+
+            return redirect()
+                ->route('bom.show.page', $bom)
+                ->with('success', $message);
         });
 
     } catch (ValidationException $e) {
+
+        if (!($r->expectsJson() || $r->ajax())) {
+            return back()
+                ->withInput()
+                ->withErrors($e->errors());
+        }
 
         return response()->json([
             'message' => $e->getMessage(),
@@ -499,6 +553,10 @@ public function produce(Request $r, Bom $bom)
     } catch (\Throwable $e) {
 
         Log::error('Produce error: ' . $e->getMessage());
+
+        if (!($r->expectsJson() || $r->ajax())) {
+            return back()->withInput()->with('error', 'Terjadi kesalahan saat produksi');
+        }
 
         return response()->json([
             'message' => 'Terjadi kesalahan saat produksi'

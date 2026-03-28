@@ -18,8 +18,19 @@ class ProductController extends Controller
 {
     private string $codePrefix = 'PRD-';
 
+    protected function ensureProductPermission(string $permission = 'products.view'): void
+    {
+        $me = auth()->user();
+
+        if (! $me || ! $me->hasPermission($permission)) {
+            abort(403, 'Anda tidak punya izin untuk mengakses modul Products.');
+        }
+    }
+
     public function index()
     {
+        $this->ensureProductPermission('products.view');
+
         // data buat filter & form
         $categories = Category::select('id','category_name')
             ->orderBy('category_name')
@@ -48,6 +59,8 @@ class ProductController extends Controller
 
 public function datatable(Request $request)
 {
+    $this->ensureProductPermission('products.view');
+
     try {
         $draw        = (int) $request->input('draw', 1);
         $start       = (int) $request->input('start', 0);
@@ -271,6 +284,8 @@ public function datatable(Request $request)
 
     public function store(Request $request)
     {
+        $this->ensureProductPermission('products.create');
+
         $code = strtoupper(trim((string)$request->input('product_code','')));
         if ($code === '') $code = $this->generateNextCode();
         $request->merge(['product_code' => $code]);
@@ -298,6 +313,8 @@ public function datatable(Request $request)
 
     public function update(Request $request, Product $product)
     {
+        $this->ensureProductPermission('products.update');
+
         $code = strtoupper(trim((string)$request->input('product_code','')));
         if ($code === '') $code = $product->product_code;
         $request->merge(['product_code' => $code]);
@@ -337,12 +354,16 @@ public function datatable(Request $request)
 
     public function destroy(Product $product)
     {
+        $this->ensureProductPermission('products.delete');
+
         $product->delete();
         return response()->json(['success' => 'Product deleted successfully.']);
     }
 
     public function nextCode()
     {
+        $this->ensureProductPermission('products.create');
+
         return response()->json(['next_code' => $this->generateNextCode()]);
     }
 

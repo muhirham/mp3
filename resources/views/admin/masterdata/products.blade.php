@@ -147,9 +147,9 @@
                                 <th class="text-end" style="width: 70px">STOCK</th>
                                 <th class="text-end" style="width: 90px">MIN STOCK</th>
                                 <th style="width: 70px">STATUS</th>
-                                <th class="text-end" style="width: 100px">PURCHASING</th>
-                                <th class="text-end" style="width: 100px">HPP</th>
-                                <th class="text-end" style="width: 100px">SELLING</th>
+                                <th class="text-end" style="width: 100px">PURCHASE PRICE</th>
+                                <th class="text-end" style="width: 100px">COST PRICE</th>
+                                <th class="text-end" style="width: 100px">SELLING PRICE</th>
                                 <th style="width: 110px">ACTIONS</th>
                             </tr>
                         </thead>
@@ -241,13 +241,13 @@
                         </div>
 
                         <div class="col-md-4">
-                            <label class="form-label">Purchasing Price</label>
+                            <label class="form-label">Purchase Price</label>
                             <input type="number" name="purchasing_price" id="purchasing_price" class="form-control"
                                 value="0" min="0">
                         </div>
 
                         <div class="col-md-4">
-                            <label class="form-label">Standard Cost (HPP)</label>
+                            <label class="form-label">Cost Price</label>
                             <input type="number" name="standard_cost" id="standard_cost" class="form-control"
                                 min="0" step="0.01">
                         </div>

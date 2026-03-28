@@ -229,6 +229,39 @@
             $badgeClass = $badgeClassMap[$statusKey] ?? $badgeClassMap['default'];
         @endphp
 
+        @if (($handovers ?? collect())->count() > 1)
+            <div class="card mb-3">
+                <div class="card-body">
+                    <form method="GET" action="{{ route('sales.otp.items') }}" class="row g-2 align-items-end">
+                        <div class="col-md-10">
+                            <div class="small text-muted fw-semibold mb-1">Pilih Handover Aktif</div>
+                            <select name="handover_id" class="form-select" onchange="this.form.submit()">
+                                @foreach ($handovers as $handoverOption)
+                                    @php
+                                        $statusText =
+                                            $statusLabelMap[$handoverOption->status] ?? strtoupper($handoverOption->status);
+                                        $isVerifiedOption =
+                                            $handoverOption->status !== 'waiting_morning_otp' &&
+                                            (session('sales_handover_otp_verified_' . $handoverOption->id, false) ||
+                                                ($handoverOption->status === 'on_sales' &&
+                                                    !is_null($handoverOption->morning_otp_verified_at)));
+                                    @endphp
+                                    <option value="{{ $handoverOption->id }}" @selected(($handover?->id ?? null) === $handoverOption->id)>
+                                        {{ $handoverOption->code }} - {{ optional($handoverOption->handover_date)->format('Y-m-d') }}
+                                        - {{ $statusText }}
+                                        {{ $isVerifiedOption ? '- OTP OK' : '- OTP BELUM' }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-outline-primary w-100">Lihat</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        @endif
+
         {{-- INFO HANDOVER / NO DATA --}}
         <div class="card mb-3">
             <div class="card-body">
@@ -264,7 +297,7 @@
                         <div class="col-md-4 mb-2">
                             <div class="small text-muted fw-semibold">Morning OTP Verified</div>
                             <div id="otpStatusText">
-                                @if ($isOtpVerified)
+                                @if ($handover->status !== 'waiting_morning_otp' && $isOtpVerified)
                                     ✅ <span class="text-success">Verified in this menu</span>
                                 @else
                                     ❌ <span class="text-muted">Not yet verified</span>
@@ -272,7 +305,11 @@
                             </div>
                         </div>
                         <div class="col-md-4 mb-2">
-                            @if ($handover->status === 'on_sales')
+                            @if (
+                                in_array($handover->status, ['waiting_morning_otp', 'on_sales'], true) &&
+                                    !$isOtpVerified &&
+                                    $items->isEmpty()
+                            )
                                 <button type="button" class="btn btn-sm btn-warning" id="btnInputOtp">
                                     Enter OTP
                                 </button>

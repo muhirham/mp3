@@ -78,8 +78,24 @@ class SalesHandoverController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'email', 'warehouse_id']);
 
-        // Products with selling_price
-        $products = Product::select('id', 'name', 'product_code', 'selling_price')
+        // Products with selling_price + stok warehouse aktif
+        $warehouseStockSub = DB::table('stock_levels')
+            ->select('product_id', DB::raw('SUM(quantity) as warehouse_stock'))
+            ->where('owner_type', 'warehouse')
+            ->when($me->warehouse_id, fn ($q) => $q->where('owner_id', $me->warehouse_id))
+            ->groupBy('product_id');
+
+        $products = Product::query()
+            ->leftJoinSub($warehouseStockSub, 'warehouse_stocks', function ($join) {
+                $join->on('warehouse_stocks.product_id', '=', 'products.id');
+            })
+            ->select(
+                'products.id',
+                'products.name',
+                'products.product_code',
+                'products.selling_price',
+                DB::raw('COALESCE(warehouse_stocks.warehouse_stock, 0) as warehouse_stock')
+            )
             ->orderBy('name')
             ->get();
 
@@ -1139,6 +1155,7 @@ class SalesHandoverController extends Controller
                 'id' => $handover->id,
                 'code' => $handover->code,
                 'status' => $handover->status,
+                'can_open_approval' => $this->canWarehouseApprovePayment($handover),
                 'handover_date' => $handover->handover_date instanceof \Carbon\CarbonInterface
                     ? $handover->handover_date->toDateString()
                     : (string) $handover->handover_date,
@@ -1449,8 +1466,20 @@ class SalesHandoverController extends Controller
     {
         $me = $request->user();
 
+        if (! $this->canWarehouseApprovePayment($handover)) {
+            return redirect()
+                ->route('warehouse.sales.reports')
+                ->with('error', 'Handover belum bisa di-approval. Sales belum submit penjualan/payment.');
+        }
+
         $handoverList = SalesHandover::with(['sales', 'warehouse'])
-            ->whereIn('status', ['on_sales', 'waiting_evening_otp', 'closed'])
+            ->where(function ($q) {
+                $q->whereIn('status', ['waiting_evening_otp', 'closed'])
+                    ->orWhere(function ($sub) {
+                        $sub->where('status', 'on_sales')
+                            ->where('evening_filled_by_sales', true);
+                    });
+            })
             ->orderByDesc('handover_date')
             ->get();
 
@@ -1498,6 +1527,10 @@ class SalesHandoverController extends Controller
     public function paymentApprovalSave(Request $request, SalesHandover $handover)
     {
         $me = $request->user();
+
+        if (! $this->canWarehouseApprovePayment($handover)) {
+            return back()->with('error', 'Approval ditolak. Sales belum submit penjualan/payment.');
+        }
 
         $data = $request->validate([
             'decisions'              => ['required', 'array'],
@@ -1619,7 +1652,7 @@ class SalesHandoverController extends Controller
         return back()->with('success', 'Approval payment berhasil disimpan. Jika semua item terjual sudah APPROVED, handover otomatis CLOSED.');
     }
     
-        public function getActiveCount(User $sales)
+    public function getActiveCount(User $sales)
     {
         $count = SalesHandover::where('sales_id', $sales->id)
             ->whereNotIn('status', ['closed','cancelled'])
@@ -1630,6 +1663,27 @@ class SalesHandoverController extends Controller
             'next'   => $count + 1,
             'limit'  => 3
         ]);
+    }
+
+    private function canWarehouseApprovePayment(SalesHandover $handover): bool
+    {
+        if ($handover->status === 'closed') {
+            return true;
+        }
+
+        if (! in_array($handover->status, ['on_sales', 'waiting_evening_otp'], true)) {
+            return false;
+        }
+
+        $handover->loadMissing('items');
+
+        if ((bool) $handover->evening_filled_by_sales) {
+            return true;
+        }
+
+        return $handover->items->contains(function ($item) {
+            return ($item->payment_status ?? 'draft') !== 'draft';
+        });
     }
 
     
