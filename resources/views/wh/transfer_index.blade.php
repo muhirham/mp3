@@ -163,7 +163,7 @@
         $('#f_status,#f_from_wh,#f_to_wh').change(() => table.ajax.reload());
 
         // Connect global navbar search
-        $('#globalSearch').on('keyup', function () {
+        $('#globalSearch').on('keyup', function() {
             table.search(this.value).draw();
         });
 

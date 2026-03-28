@@ -70,10 +70,7 @@
           <label class="form-label">Date to</label>
           <input id="dateTo" type="date" class="form-control">
         </div>
-        <div class="col-md-3">
-          <label class="form-label">Search</label>
-          <input id="searchBox" class="form-control" placeholder="Product/Supplier/Warehouse...">
-        </div>
+
         <div class="col-md-2">
           <label class="form-label">Per page</label>
           <select id="perPage" class="form-select">
@@ -249,7 +246,7 @@ function applyFilters(){
   state.date_from   = $('#dateFrom').val();
   state.date_to     = $('#dateTo').val();
   state.per_page    = +($('#perPage').val() || 10);
-  state.search      = $('#searchBox').val().trim();
+  state.search      = $('#globalSearch').val().trim();
   load();
 }
 
@@ -257,7 +254,9 @@ function applyFilters(){
 $('#btnReload').on('click', load);
 $('#filterStatus,#filterSupplier,#filterWarehouse,#filterProduct,#dateFrom,#dateTo,#perPage')
   .on('change', applyFilters);
-$('#searchBox').on('keyup', e=>{ if(e.key==='Enter') applyFilters(); });
+// Connect global navbar search
+$('#globalSearch').on('keyup', e => { if (e.key === 'Enter') applyFilters(); });
+$('#globalSearch').on('input', () => applyFilters());
 
 // checkbox all
 $(document).on('change','#chkAll', function(){

@@ -11,12 +11,6 @@
             <h4 class="mb-0 fw-bold">Company</h4>
 
             <div class="ms-auto d-flex align-items-center gap-2">
-                <div class="input-group input-group-sm" style="width: 260px;">
-                    <span class="input-group-text">
-                        <i class="bx bx-search"></i>
-                    </span>
-                    <input type="text" id="company-search" class="form-control" placeholder="Search company...">
-                </div>
 
                 @if(auth()->user()->hasPermission('company.create'))
                     <button type="button" class="btn btn-primary" data-bs-toggle="modal"
@@ -511,21 +505,18 @@
                 });
             });
 
-            // === Global search (client-side filter) ===
-            const searchInput = document.getElementById('company-search');
+            // === Connect global navbar search (client-side filter) ===
             const table = document.getElementById('companies-table');
 
-            if (searchInput && table) {
-                searchInput.addEventListener('input', function() {
-                    const keyword = this.value.toLowerCase();
-                    const rows = table.querySelectorAll('tbody tr');
+            document.getElementById('globalSearch')?.addEventListener('input', function() {
+                const keyword = this.value.toLowerCase();
+                const rows = table.querySelectorAll('tbody tr');
 
-                    rows.forEach(function(row) {
-                        const text = row.innerText.toLowerCase();
-                        row.style.display = text.includes(keyword) ? '' : 'none';
-                    });
+                rows.forEach(function(row) {
+                    const text = row.innerText.toLowerCase();
+                    row.style.display = text.includes(keyword) ? '' : 'none';
                 });
-            }
+            });
         });
     </script>
 @endsection

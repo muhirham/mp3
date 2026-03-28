@@ -42,8 +42,6 @@
                     </div>
 
                     <div class="ms-auto d-flex flex-wrap align-items-center gap-2">
-                        <input id="searchUser" type="text" class="form-control" placeholder="Search user..."
-                            style="max-width:260px">
 
                         @if(auth()->user()->hasPermission('users.export'))
                             <div class="btn-group">
@@ -471,8 +469,7 @@
 
         #pageLength,
         #f_role,
-        #f_status,
-        #searchUser {
+        #f_status {
             font-size: 0.75rem;
             height: calc(1.5em + .5rem + 2px);
             padding: .25rem .5rem;
@@ -514,7 +511,8 @@
                 dom: 't<"d-flex justify-content-between align-items-center p-3 pt-2"ip>'
             });
 
-            $('#searchUser').on('keyup', function() {
+            // Connect global navbar search
+            $('#globalSearch').on('keyup', function() {
                 table.search(this.value).draw();
             });
             $('#pageLength').on('change', function() {

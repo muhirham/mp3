@@ -51,13 +51,6 @@
             <div class="card-body">
                 <div class="row g-2 align-items-end">
 
-                    {{-- Search global --}}
-                    <div class="col-12 col-md-4">
-                        <label class="form-label mb-1">Pencarian</label>
-                        <input id="searchBox" type="text" class="form-control"
-                            placeholder="Cari produk/kode/kategori/supplier…">
-                    </div>
-
                     {{-- page length --}}
                     <div class="col-6 col-md-2">
                         <label class="form-label mb-1">Show</label>
@@ -152,6 +145,8 @@
             const table = $('#tblStock').DataTable({
                 processing: true,
                 serverSide: true,
+                searching: true,
+                dom: 'tip',
                 pageLength: 25,
                 ajax: {
                     url: dtUrl,
@@ -220,7 +215,8 @@
                 });
             }
 
-            $('#searchBox').on('keyup change', function() {
+            // Connect global navbar search
+            $('#globalSearch').on('keyup', function() {
                 table.search(this.value).draw();
             });
 

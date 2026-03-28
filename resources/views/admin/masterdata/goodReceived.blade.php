@@ -25,14 +25,8 @@
   <div class="card mb-3">
     <div class="card-body">
       <form id="gr-filter-form" class="row g-2" method="GET" action="{{ route('goodreceived.index') }}">
-        <div class="col-lg-3 col-md-4">
-          <label class="form-label">Cari Kode GR / PO</label>
-          <input type="text"
-                 class="form-control"
-                 name="q"
-                 value="{{ $q }}"
-                 placeholder="GR- / PO-">
-        </div>
+        {{-- Hidden q input — filled by global navbar search --}}
+        <input type="hidden" name="q" id="gr_q_input" value="{{ $q }}">
 
         <div class="col-lg-3 col-md-4">
           <label class="form-label">Supplier</label>
@@ -309,12 +303,17 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const autoSubmit = debounce(() => formFilter.submit(), 400);
 
-    const qInput = formFilter.querySelector('input[name="q"]');
-    if (qInput) {
-      qInput.addEventListener('keyup', function (e) {
-        if (e.key === 'Enter') return;
-        autoSubmit();
-      });
+    // Connect global navbar search → auto-submit form
+    const globalSearch = document.getElementById('globalSearch');
+    if (globalSearch) {
+      // Pre-fill globalSearch with current active q value
+      globalSearch.value = @json($q ?? '');
+
+      globalSearch.addEventListener('keyup', debounce(function () {
+        const hidden = formFilter.querySelector('input[name="q"]');
+        if (hidden) hidden.value = globalSearch.value;
+        formFilter.submit();
+      }, 400));
     }
 
     formFilter.querySelectorAll('select,input[type="date"]').forEach(el => {
