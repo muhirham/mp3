@@ -162,8 +162,11 @@
 
     function cardHTML(w, no){
         const canEdit =
-        !window.IS_WAREHOUSE_USER ||
-        (window.IS_WAREHOUSE_USER && w.id === window.MY_WAREHOUSE_ID);
+        @json(auth()->user()->hasPermission('warehouse.update')) &&
+        (
+            !window.IS_WAREHOUSE_USER ||
+            (window.IS_WAREHOUSE_USER && w.id === window.MY_WAREHOUSE_ID)
+        );
         return `
         <div class="col-sm-6 col-lg-4">
             <div class="wh-card" data-id="${w.id}">
@@ -179,7 +182,7 @@
                                 ? `<button class="btn btn-outline-dark btn-sm js-edit">Edit</button>`
                                 : `<span class="badge bg-secondary">Read only</span>`
                         }
-                ${!window.IS_WAREHOUSE_USER
+                ${(!window.IS_WAREHOUSE_USER && @json(auth()->user()->hasPermission('warehouse.delete')))
                     ? `<button class="btn btn-outline-danger btn-sm js-del">Del</button>`
                     : ''
                 }
@@ -212,18 +215,18 @@
         slice.forEach((w,i)=> grid.append(cardHTML(w, start+i+1)));
 
         // Add-card
-        if (!window.IS_WAREHOUSE_USER) {
-        grid.append(`
-        <div class="col-sm-6 col-lg-4">
-            <div class="wh-card add-card" id="cardAdd">
-            <div class="wh-inner d-flex align-items-center justify-content-center">
-                <button class="btn-3d" title="Add warehouse">
-                <i class="bx bx-plus fs-3"></i>
-                </button>
+        if (!window.IS_WAREHOUSE_USER && @json(auth()->user()->hasPermission('warehouse.create')) ) {
+            grid.append(`
+            <div class="col-sm-6 col-lg-4">
+                <div class="wh-card add-card" id="cardAdd">
+                <div class="wh-inner d-flex align-items-center justify-content-center">
+                    <button class="btn-3d" title="Add warehouse">
+                    <i class="bx bx-plus fs-3"></i>
+                    </button>
+                </div>
+                </div>
             </div>
-            </div>
-        </div>
-        `);
+            `);
         }
 
         // pager

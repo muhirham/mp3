@@ -14,13 +14,16 @@
         <h4 class="mb-0 fw-bold">Stock Adjustment</h4>
 
         <div class="ms-auto d-flex gap-2">
-            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#mdlCreateAdj">
-                <i class="bx bx-plus"></i> Buat Adjustment
-            </button>
-
-            <button type="button" id="btnExportExcel" class="btn btn-success">
-                <i class="bx bx-download"></i> Export Excel
-            </button>
+            @if(auth()->user()->hasPermission('stock_adjustments.create'))
+              <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#mdlCreateAdj">
+                  <i class="bx bx-plus"></i> Buat Adjustment
+              </button>
+            @endif
+            @if(auth()->user()->hasPermission('stock_adjustments.export'))
+              <button type="button" id="btnExportExcel" class="btn btn-success">
+                  <i class="bx bx-download"></i> Export Excel
+              </button>
+            @endif
         </div>
     </div>
 

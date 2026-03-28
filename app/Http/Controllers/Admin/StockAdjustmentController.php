@@ -23,8 +23,8 @@ class StockAdjustmentController extends Controller
 {
     public function index()
     {
+        abort_unless(auth()->user()->hasPermission('stock_adjustments.view'), 403);
         $warehouses = Warehouse::orderBy('warehouse_name')->get(['id','warehouse_name']);
-
         return view('admin.operations.adjustments', compact('warehouses'));
     }
 
@@ -187,6 +187,7 @@ class StockAdjustmentController extends Controller
 
     public function store(Request $request)
     {
+        abort_unless(auth()->user()->hasPermission('stock_adjustments.create'), 403);
         $user           = auth()->user();
         $canAdjustPusat = empty($user->warehouse_id);
 
@@ -433,6 +434,7 @@ class StockAdjustmentController extends Controller
 
     public function exportIndexExcel(Request $request)
     {
+        abort_unless(auth()->user()->hasPermission('stock_adjustments.export'), 403);
         // ✅ range opsional (kalau kosong -> export ALL)
         [$from, $to, $key, $useDate] = $this->parseExportRangeOptional($request);
 

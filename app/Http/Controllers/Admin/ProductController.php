@@ -185,9 +185,9 @@ public function datatable(Request $request)
                 ? '<span class="text-danger fw-bold">' . number_format($qty, 0, ',', '.') . '</span>'
                 : number_format($qty, 0, ',', '.');
 
-            $actions = sprintf(
-                '<div class="d-flex gap-1">
-                    <button class="btn btn-sm btn-icon btn-outline-secondary js-edit"
+            $editBtn = auth()->user()->hasPermission('products.update')
+                ? sprintf(
+                    '<button class="btn btn-sm btn-icon btn-outline-secondary js-edit"
                         data-id="%1$d"
                         data-product_code="%2$s"
                         data-name="%3$s"
@@ -202,19 +202,33 @@ public function datatable(Request $request)
                         data-is_active="%12$s"
                         data-standard_cost="%13$s">
                         <i class="bx bx-edit-alt"></i>
-                    </button>
-                    <button class="btn btn-sm btn-icon btn-outline-danger js-del" data-id="%1$d">
-                        <i class="bx bx-trash"></i>
-                    </button>
-                </div>',
-                $p->id, e($p->product_code), e($p->name),
-                $p->category_id ?? '', $p->package_id ?? '', $p->supplier_id ?? '',
-                e($p->description ?? ''), (int)$p->purchasing_price, (int)$p->selling_price, e($p->stock_minimum ?? ''),
-                $p->product_type ?? 'normal',
-                $p->is_active ?? 1,
-                $p->standard_cost ?? '',
+                    </button>',
+                    $p->id,
+                    e($p->product_code),
+                    e($p->name),
+                    $p->category_id ?? '',
+                    $p->package_id ?? '',
+                    $p->supplier_id ?? '',
+                    e($p->description ?? ''),
+                    (int)$p->purchasing_price,
+                    (int)$p->selling_price,
+                    e($p->stock_minimum ?? ''),
+                    $p->product_type ?? 'normal',
+                    $p->is_active ?? 1,
+                    $p->standard_cost ?? ''
+                )
+                : '';
 
-            );
+            $deleteBtn = auth()->user()->hasPermission('products.delete')
+                ? sprintf(
+                    '<button class="btn btn-sm btn-icon btn-outline-danger js-del" data-id="%d">
+                        <i class="bx bx-trash"></i>
+                    </button>',
+                    $p->id
+                )
+                : '';
+
+            $actions = '<div class="d-flex gap-1">'.$editBtn.$deleteBtn.'</div>';
 
             return [
                 'rownum'           => $start + $i + 1,

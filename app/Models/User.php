@@ -44,6 +44,11 @@ class User extends Authenticatable
         return $this->belongsTo(Warehouse::class, 'warehouse_id');
     }
 
+    public function company()
+    {
+        return $this->belongsTo(Company::class);
+    }
+
     /* ================== HELPER ROLE ================== */
 
     public function primaryRole()
@@ -59,7 +64,7 @@ class User extends Authenticatable
         $need = is_array($slugs) ? $slugs : [$slugs];
 
         return $this->roles()->whereIn('slug', $need)->exists()
-            || in_array(($this->role ?? ''), $need, true); // fallback kolom lama
+            || in_array(($this->role ?? ''), $need, true);
     }
 
     /* ================== HELPER MENU ================== */
@@ -85,12 +90,22 @@ class User extends Authenticatable
         return $this->allMenuKeys();
     }
 
-    public function company()
+    /* ================== HELPER PERMISSION ================== */
+
+    public function hasPermission(string $permission): bool
     {
-        return $this->belongsTo(Company::class);
+        foreach ($this->roles as $role) {
+            if (in_array($permission, $role->permissions ?? [])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
-        public function getSignatureUrlAttribute()
+    /* ================== SIGNATURE ================== */
+
+    public function getSignatureUrlAttribute()
     {
         if (!$this->signature_path) {
             return null;
@@ -100,11 +115,10 @@ class User extends Authenticatable
             return asset($this->signature_path);
         }
 
-        if (file_exists(storage_path('app/public/'.$this->signature_path))) {
-            return asset('storage/'.$this->signature_path);
+        if (file_exists(storage_path('app/public/' . $this->signature_path))) {
+            return asset('storage/' . $this->signature_path);
         }
 
         return null;
     }
-
 }

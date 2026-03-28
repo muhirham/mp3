@@ -45,23 +45,29 @@
                         <input id="searchUser" type="text" class="form-control" placeholder="Search user..."
                             style="max-width:260px">
 
-                        <div class="btn-group">
-                            <button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
-                                <i class="bx bx-export me-1"></i> Export
+                        @if(auth()->user()->hasPermission('users.export'))
+                            <div class="btn-group">
+                                <button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                                    <i class="bx bx-export me-1"></i> Export
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li><a class="dropdown-item" href="" id="btnExportCSV">CSV</a></li>
+                                    <li><a class="dropdown-item" href="" id="btnExportPrint">Print</a></li>
+                                </ul>
+                            </div>
+                        @endif
+
+                        @if(auth()->user()->hasPermission('users.bulk_delete'))
+                            <button id="btnBulkDelete" class="btn btn-outline-danger">
+                                <i class="bx bx-trash me-1"></i> Delete Selected
                             </button>
-                            <ul class="dropdown-menu dropdown-menu-end">
-                                <li><a class="dropdown-item" href="" id="btnExportCSV">CSV</a></li>
-                                <li><a class="dropdown-item" href="" id="btnExportPrint">Print</a></li>
-                            </ul>
-                        </div>
+                        @endif
 
-                        <button id="btnBulkDelete" class="btn btn-outline-danger">
-                            <i class="bx bx-trash me-1"></i> Delete Selected
-                        </button>
-
-                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#glassAddUser">
-                            <i class="bx bx-plus"></i> Add User
-                        </button>
+                        @if(auth()->user()->hasPermission('users.create'))
+                            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#glassAddUser">
+                                <i class="bx bx-plus"></i> Add User
+                            </button>
+                        @endif
                     </div>
                 </div>
             </div>
@@ -107,7 +113,12 @@
                             @endphp
                             <tr>
                                 <td>
-                                    <input class="form-check-input row-check" type="checkbox"
+                                    @if(auth()->user()->hasPermission('users.bulk_delete'))
+                                        <input class="form-check-input row-check" type="checkbox"
+                                            @if(!$canManageRow) 
+                                                disabled 
+                                            @endif>
+                                    @endif
                                         @if (!$canManageRow) disabled @endif>
                                 </td>
                                 <td>{{ $u->id }}</td>
@@ -153,18 +164,26 @@
                                 <td>{{ $u->updated_at?->format('Y-m-d H:i') }}</td>
                                 <td>
                                     <div class="d-flex gap-1">
-                                        @if ($canManageRow)
+                                        @if(auth()->user()->hasPermission('users.update'))
                                             <a href="#" class="btn btn-sm btn-icon btn-outline-secondary js-edit"
-                                                title="Edit" data-id="{{ $u->id }}"
-                                                data-name="{{ $u->name }}" data-username="{{ $u->username }}"
-                                                data-email="{{ $u->email }}" data-phone="{{ $u->phone }}"
-                                                data-position="{{ $u->position }}" data-roles="{{ $rolesAttr }}"
+                                                title="Edit"
+                                                data-id="{{ $u->id }}"
+                                                data-name="{{ $u->name }}"
+                                                data-username="{{ $u->username }}"
+                                                data-email="{{ $u->email }}"
+                                                data-phone="{{ $u->phone }}"
+                                                data-position="{{ $u->position }}"
+                                                data-roles="{{ $rolesAttr }}"
                                                 data-status="{{ $u->status }}"
                                                 data-warehouse_id="{{ $u->warehouse_id ?? '' }}">
                                                 <i class="bx bx-edit-alt"></i>
                                             </a>
+                                        @endif
+
+                                        @if(auth()->user()->hasPermission('users.delete'))
                                             <a href="#" class="btn btn-sm btn-icon btn-outline-danger js-del"
-                                                title="Delete" data-id="{{ $u->id }}"
+                                                title="Delete"
+                                                data-id="{{ $u->id }}"
                                                 data-name="{{ $u->name }}">
                                                 <i class="bx bx-trash"></i>
                                             </a>

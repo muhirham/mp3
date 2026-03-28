@@ -18,10 +18,12 @@
                     <input type="text" id="company-search" class="form-control" placeholder="Search company...">
                 </div>
 
-                <button type="button" class="btn btn-primary" data-bs-toggle="modal"
-                    data-bs-target="#create-company-modal">
-                    + New Company
-                </button>
+                @if(auth()->user()->hasPermission('company.create'))
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal"
+                        data-bs-target="#create-company-modal">
+                        + New Company
+                    </button>
+                @endif
             </div>
         </div>
 
@@ -121,24 +123,33 @@
                                     </td>
                                     <td>
                                         <div class="d-flex gap-1">
-                                            <button type="button" class="btn btn-sm btn-outline-primary"
-                                                data-bs-toggle="modal" data-bs-target="#edit-company-{{ $company->id }}">
-                                                Edit
-                                            </button>
 
-                                            <form action="{{ route('companies.destroy', $company) }}" method="POST"
-                                                class="form-delete-company" data-company-name="{{ $company->name }}">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit" class="btn btn-sm btn-outline-danger">
-                                                    Del
+                                            @if(auth()->user()->hasPermission('company.update'))
+                                                <button type="button" class="btn btn-sm btn-outline-primary"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#edit-company-{{ $company->id }}">
+                                                    Edit
                                                 </button>
-                                            </form>
+                                            @endif
+
+                                            @if(auth()->user()->hasPermission('company.delete'))
+                                                <form action="{{ route('companies.destroy', $company) }}" method="POST"
+                                                    class="form-delete-company"
+                                                    data-company-name="{{ $company->name }}">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                        Del
+                                                    </button>
+                                                </form>
+                                            @endif
+
                                         </div>
                                     </td>
                                 </tr>
 
                                 {{-- Modal Edit Company --}}
+                                @if(auth()->user()->hasPermission('company.update'))
                                 <div class="modal fade" id="edit-company-{{ $company->id }}" tabindex="-1"
                                     aria-hidden="true">
                                     <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -294,6 +305,7 @@
                                         </div>
                                     </div>
                                 </div>
+                                @endif
                             @empty
                                 <tr>
                                     <td colspan="6" class="text-center py-3">

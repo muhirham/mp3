@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
@@ -10,13 +11,26 @@ class SupplierController extends Controller
 {
     public function index()
     {
+        abort_unless(auth()->user()->hasPermission('supplier.view'), 403);
+
         $nextSupplierCode = $this->generateNextCode();
+
         return view('admin.masterdata.suppliers', compact('nextSupplierCode'));
     }
 
     public function datatable(Request $request)
     {
-        $orderable = ['id','supplier_code','name','address','phone','note','bank_name','bank_account','updated_at'];
+        $orderable = [
+            'id',
+            'supplier_code',
+            'name',
+            'address',
+            'phone',
+            'note',
+            'bank_name',
+            'bank_account',
+            'updated_at'
+        ];
 
         $draw        = (int) $request->input('draw', 1);
         $start       = (int) $request->input('start', 0);
@@ -46,37 +60,34 @@ class SupplierController extends Controller
         $recordsFiltered = (clone $base)->count();
 
         $rows = $base->orderBy($orderCol, $orderDir)
-            ->skip($start)->take($length)->get()
+            ->skip($start)
+            ->take($length)
+            ->get()
             ->map(function ($s, $idx) use ($start) {
-                $actions = sprintf(
-                    '<div class="d-flex gap-1">
-                        <button class="btn btn-sm btn-icon btn-outline-secondary js-edit"
-                            data-id="%1$d"
-                            data-supplier_code="%2$s"
-                            data-name="%3$s"
-                            data-address="%4$s"
-                            data-phone="%5$s"
-                            data-note="%6$s"
-                            data-bank_name="%7$s"
-                            data-bank_account="%8$s">
-                            <i class="bx bx-edit-alt"></i>
-                        </button>
-                        <button class="btn btn-sm btn-icon btn-outline-danger js-del" data-id="%1$d">
-                            <i class="bx bx-trash"></i>
-                        </button>
-                    </div>',
-                    $s->id,
-                    e($s->supplier_code),
-                    e($s->name),
-                    e($s->address ?? ''),
-                    e($s->phone ?? ''),
-                    e($s->note ?? ''),
-                    e($s->bank_name ?? ''),
-                    e($s->bank_account ?? '')
-                );
+
+                $editBtn = auth()->user()->hasPermission('supplier.update')
+                    ? '<button class="btn btn-sm btn-icon btn-outline-secondary js-edit"
+                        data-id="'.$s->id.'"
+                        data-supplier_code="'.e($s->supplier_code).'"
+                        data-name="'.e($s->name).'"
+                        data-address="'.e($s->address ?? '').'"
+                        data-phone="'.e($s->phone ?? '').'"
+                        data-note="'.e($s->note ?? '').'"
+                        data-bank_name="'.e($s->bank_name ?? '').'"
+                        data-bank_account="'.e($s->bank_account ?? '').'">
+                        <i class="bx bx-edit-alt"></i>
+                    </button>'
+                    : '';
+
+                $deleteBtn = auth()->user()->hasPermission('supplier.delete')
+                    ? '<button class="btn btn-sm btn-icon btn-outline-danger js-del"
+                        data-id="'.$s->id.'">
+                        <i class="bx bx-trash"></i>
+                    </button>'
+                    : '';
 
                 return [
-                    'rownum'        => $start + $idx + 1, // NO (i++)
+                    'rownum'        => $start + $idx + 1,
                     'supplier_code' => e($s->supplier_code),
                     'name'          => e($s->name),
                     'address'       => e($s->address ?? '-'),
@@ -84,7 +95,7 @@ class SupplierController extends Controller
                     'note'          => e($s->note ?? '-'),
                     'bank_name'     => e($s->bank_name ?? '-'),
                     'bank_account'  => e($s->bank_account ?? '-'),
-                    'actions'       => $actions,
+                    'actions'       => '<div class="d-flex gap-1">'.$editBtn.$deleteBtn.'</div>',
                 ];
             });
 
@@ -98,8 +109,11 @@ class SupplierController extends Controller
 
     public function store(Request $request)
     {
+        abort_unless(auth()->user()->hasPermission('supplier.create'), 403);
+
         $code = strtoupper(trim((string) $request->input('supplier_code', '')));
         if ($code === '') $code = $this->generateNextCode();
+
         $request->merge(['supplier_code' => $code]);
 
         $request->validate([
@@ -113,22 +127,35 @@ class SupplierController extends Controller
         ]);
 
         Supplier::create($request->only([
-            'supplier_code','name','address','phone','note','bank_name','bank_account'
+            'supplier_code',
+            'name',
+            'address',
+            'phone',
+            'note',
+            'bank_name',
+            'bank_account'
         ]));
 
         return response()->json([
-            'success'   => 'Supplier created successfully.',
+            'success' => 'Supplier created successfully.'
         ]);
     }
 
     public function update(Request $request, Supplier $supplier)
     {
+        abort_unless(auth()->user()->hasPermission('supplier.update'), 403);
+
         $code = strtoupper(trim((string) $request->input('supplier_code', '')));
         if ($code === '') $code = $supplier->supplier_code;
+
         $request->merge(['supplier_code' => $code]);
 
         $request->validate([
-            'supplier_code' => ['required','max:50', Rule::unique('suppliers','supplier_code')->ignore($supplier->id)],
+            'supplier_code' => [
+                'required',
+                'max:50',
+                Rule::unique('suppliers','supplier_code')->ignore($supplier->id)
+            ],
             'name'          => ['required','max:150'],
             'address'       => ['nullable'],
             'phone'         => ['nullable','max:50'],
@@ -138,21 +165,36 @@ class SupplierController extends Controller
         ]);
 
         $supplier->update($request->only([
-            'supplier_code','name','address','phone','note','bank_name','bank_account'
+            'supplier_code',
+            'name',
+            'address',
+            'phone',
+            'note',
+            'bank_name',
+            'bank_account'
         ]));
 
-        return response()->json(['success' => 'Supplier updated successfully.']);
+        return response()->json([
+            'success' => 'Supplier updated successfully.'
+        ]);
     }
 
     public function destroy(Supplier $supplier)
     {
+        abort_unless(auth()->user()->hasPermission('supplier.delete'), 403);
+
         $supplier->delete();
-        return response()->json(['success' => 'Supplier deleted successfully.']);
+
+        return response()->json([
+            'success' => 'Supplier deleted successfully.'
+        ]);
     }
 
     public function nextCode()
     {
-        return response()->json(['next_code' => $this->generateNextCode()]);
+        return response()->json([
+            'next_code' => $this->generateNextCode()
+        ]);
     }
 
     private function generateNextCode(): string
@@ -162,9 +204,11 @@ class SupplierController extends Controller
             ->value('supplier_code');
 
         $num = 0;
+
         if ($latest && preg_match('/^SUP-(\d+)$/i', $latest, $m)) {
             $num = (int) $m[1];
         }
+
         return 'SUP-' . str_pad($num + 1, 3, '0', STR_PAD_LEFT);
     }
 }

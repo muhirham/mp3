@@ -26,11 +26,13 @@
             Gunakan search di navbar atas
           </div>
 
-          <button class="btn btn-sm btn-primary"
-                  data-bs-toggle="modal" data-bs-target="#mdlPkg"
-                  id="btnShowAdd">
-            <i class="bx bx-plus"></i> Tambah Satuan
-          </button>
+          @if(auth()->user()->hasPermission('uom.create'))
+            <button class="btn btn-sm btn-primary"
+                    data-bs-toggle="modal" data-bs-target="#mdlPkg"
+                    id="btnShowAdd">
+              <i class="bx bx-plus"></i> Tambah Satuan
+            </button>
+          @endif
         </div>
       </div>
     </div>

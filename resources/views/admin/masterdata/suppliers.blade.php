@@ -51,9 +51,11 @@
 
                 <div class="ms-auto d-flex flex-wrap align-items-center gap-2">
                     <div class="small text-muted d-none d-md-block">Search pakai input navbar atas</div>
-                    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#glassSupplier" id="btnShowAdd">
-                        <i class="bx bx-plus"></i> Add Supplier
-                    </button>
+                    @if(auth()->user()->hasPermission('supplier.create'))
+                        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#glassSupplier" id="btnShowAdd">
+                            <i class="bx bx-plus"></i> Add Supplier
+                        </button>
+                    @endif
                 </div>
             </div>
         </div>

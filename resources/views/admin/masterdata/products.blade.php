@@ -66,11 +66,15 @@
                 <p class="mb-0 text-muted">Kelola daftar produk, stok pusat, kategori, dan supplier.</p>
             </div>
             <div class="ms-auto">
-                <button class="btn btn-primary d-flex align-items-center gap-1" data-bs-toggle="modal"
-                    data-bs-target="#mdlProduct" id="btnShowAdd">
-                    <i class="bx bx-plus"></i>
-                    <span>Add Product</span>
-                </button>
+                @if(auth()->user()->hasPermission('products.create'))
+                    <button class="btn btn-primary d-flex align-items-center gap-1"
+                            data-bs-toggle="modal"
+                            data-bs-target="#mdlProduct"
+                            id="btnShowAdd">
+                        <i class="bx bx-plus"></i>
+                        <span>Add Product</span>
+                    </button>
+                @endif
             </div>
         </div>
 

@@ -11,6 +11,8 @@ class CategoryController extends Controller
 {
     public function index()
     {
+        abort_unless(auth()->user()->hasPermission('category.view'), 403);
+
         // kode awal buat prefll di form create
         $nextCode = Category::nextCode();
 
@@ -46,22 +48,28 @@ class CategoryController extends Controller
         $rows = $base->orderBy($orderCol, $orderDir)
             ->skip($start)->take($length)->get()
             ->map(function ($c) {
+
+                $editBtn = auth()->user()->hasPermission('category.update')
+                    ? '<button class="btn btn-sm btn-outline-secondary"
+                        onclick="openEdit('.$c->id.',\''.e($c->category_code).'\',\''.e($c->category_name).'\',\''.e($c->description ?? '').'\')">
+                        <i class="bx bx-edit"></i>
+                    </button>'
+                    : '';
+
+                $deleteBtn = auth()->user()->hasPermission('category.delete')
+                    ? '<button class="btn btn-sm btn-outline-danger"
+                        onclick="delCategory('.$c->id.')">
+                        <i class="bx bx-trash"></i>
+                    </button>'
+                    : '';
+
                 return [
                     'id'            => $c->id,
                     'category_code' => e($c->category_code),
                     'category_name' => e($c->category_name),
                     'description'   => e($c->description ?? '-'),
                     'updated_at'    => optional($c->updated_at)->format('Y-m-d H:i'),
-                    'actions'       => '
-                        <div class="text-end">
-                          <button class="btn btn-sm btn-outline-secondary"
-                            onclick="openEdit('.$c->id.',\''.e($c->category_code).'\',\''.e($c->category_name).'\',\''.e($c->description ?? '').'\')">
-                            <i class="bx bx-edit"></i>
-                          </button>
-                          <button class="btn btn-sm btn-outline-danger" onclick="delCategory('.$c->id.')">
-                            <i class="bx bx-trash"></i>
-                          </button>
-                        </div>',
+                    'actions'       => '<div class="text-end">'.$editBtn.' '.$deleteBtn.'</div>',
                 ];
             });
 
@@ -75,8 +83,9 @@ class CategoryController extends Controller
 
     public function store(Request $r)
     {
+        abort_unless(auth()->user()->hasPermission('category.create'), 403);
+
         $data = $r->validate([
-            // boleh kosong → auto generate di bawah
             'category_code' => ['nullable','max:30','alpha_dash', Rule::unique('categories','category_code')],
             'category_name' => ['required','max:150'],
             'description'   => ['nullable','max:255'],
@@ -87,11 +96,14 @@ class CategoryController extends Controller
         }
 
         Category::create($data);
+
         return response()->json(['success' => 'Category created']);
     }
 
     public function update(Request $r, Category $category)
     {
+        abort_unless(auth()->user()->hasPermission('category.update'), 403);
+
         $data = $r->validate([
             'category_code' => [
                 'required','max:30','alpha_dash',
@@ -102,12 +114,16 @@ class CategoryController extends Controller
         ]);
 
         $category->update($data);
+
         return response()->json(['success' => 'Category updated']);
     }
 
     public function destroy(Category $category)
     {
+        abort_unless(auth()->user()->hasPermission('category.delete'), 403);
+
         $category->delete();
+
         return response()->json(['success' => 'Category deleted']);
     }
 }

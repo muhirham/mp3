@@ -10,8 +10,21 @@ use Illuminate\Support\Facades\DB;
 
 class CompanyController extends Controller
 {
+    protected function ensureCompanyPermission(string $permission = 'company.view')
+    {
+        $me = auth()->user();
+
+        if (!$me || !$me->hasPermission($permission)) {
+            abort(403);
+        }
+
+        return $me;
+    }
+
     public function index()
     {
+        $this->ensureCompanyPermission('company.view');
+
         $companies = Company::orderByDesc('is_default')
             ->orderBy('name')
             ->get();
@@ -21,6 +34,8 @@ class CompanyController extends Controller
 
     public function store(Request $request)
     {
+        $this->ensureCompanyPermission('company.create');
+
         $data = $request->validate([
             'name'           => 'required|string|max:255',
             'legal_name'     => 'nullable|string|max:255',
@@ -40,7 +55,7 @@ class CompanyController extends Controller
         ]);
 
         DB::transaction(function () use ($request, $data) {
-            // handle logo
+
             if ($request->hasFile('logo')) {
                 $data['logo_path'] = replace_uploaded_file(
                     null,
@@ -56,7 +71,8 @@ class CompanyController extends Controller
                     'companies'
                 );
             }
-            $data['is_active']  = $request->boolean('is_active', true);
+
+            $data['is_active'] = $request->boolean('is_active', true);
             $isDefaultRequested = $request->boolean('is_default', false);
 
             if ($isDefaultRequested) {
@@ -76,6 +92,8 @@ class CompanyController extends Controller
 
     public function update(Request $request, Company $company)
     {
+        $this->ensureCompanyPermission('company.update');
+
         $data = $request->validate([
             'name'           => 'required|string|max:255',
             'legal_name'     => 'nullable|string|max:255',
@@ -95,7 +113,7 @@ class CompanyController extends Controller
         ]);
 
         DB::transaction(function () use ($request, $data, $company) {
-            // logo utama
+
             if ($request->hasFile('logo')) {
                 $data['logo_path'] = replace_uploaded_file(
                     $company->logo_path,
@@ -104,7 +122,6 @@ class CompanyController extends Controller
                 );
             }
 
-            // logo kecil
             if ($request->hasFile('logo_small')) {
                 $data['logo_small_path'] = replace_uploaded_file(
                     $company->logo_small_path,
@@ -113,14 +130,13 @@ class CompanyController extends Controller
                 );
             }
 
-            $data['is_active']  = $request->boolean('is_active', true);
+            $data['is_active'] = $request->boolean('is_active', true);
             $isDefaultRequested = $request->boolean('is_default', false);
 
             if ($isDefaultRequested) {
                 Company::where('id', '!=', $company->id)->update(['is_default' => false]);
                 $data['is_default'] = true;
             } else {
-                // kalau user uncheck dan sebelumnya default, ya jadi bukan default
                 if ($company->is_default && !$isDefaultRequested) {
                     $data['is_default'] = false;
                 }
@@ -136,9 +152,11 @@ class CompanyController extends Controller
 
     public function destroy(Company $company)
     {
+        $this->ensureCompanyPermission('company.delete');
+
         delete_file_if_exists($company->logo_path);
         delete_file_if_exists($company->logo_small_path);
-        // soft delete aja
+
         $company->delete();
 
         return redirect()

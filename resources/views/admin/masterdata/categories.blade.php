@@ -12,9 +12,11 @@
       <h5 class="mb-1 fw-bold">Categories</h5>
       <small class="text-muted">Manage your product categories here.</small>
     </div>
-    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalCreate">
-      <i class="bx bx-plus"></i> Add Category
-    </button>
+    @if(auth()->user()->hasPermission('category.create'))
+      <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalCreate">
+        <i class="bx bx-plus"></i> Add Category
+      </button>
+    @endif
   </div>
 
   {{-- FILTER BAR (show doang, search di navbar) --}}
@@ -336,24 +338,43 @@
 
   // DELETE
   window.delCategory = async function(id){
-    const ask = await Swal.fire({
-      icon:'warning',
-      title:'Yakin hapus?',
-      text:'Tindakan ini tidak bisa dibatalkan.',
-      showCancelButton:true,
-      confirmButtonText:'Ya, hapus',
-      cancelButtonText:'Batal'
-    });
-    if (!ask.isConfirmed) return;
+  const ask = await Swal.fire({
+    icon:'warning',
+    title:'Yakin hapus?',
+    text:'Tindakan ini tidak bisa dibatalkan.',
+    showCancelButton:true,
+    confirmButtonText:'Ya, hapus',
+    cancelButtonText:'Batal'
+  });
 
-    await fetch("{{ route('categories.destroy', ':id') }}".replace(':id', id), {
+  if (!ask.isConfirmed) return;
+
+  try {
+    const res = await fetch("{{ route('categories.destroy', ':id') }}".replace(':id', id), {
       method:'POST',
-      headers:{ 'X-HTTP-Method-Override':'DELETE' }
+      headers:{
+        'X-HTTP-Method-Override':'DELETE',
+        'X-CSRF-TOKEN': CSRF
+      }
     });
+
+    if (!res.ok) {
+      throw new Error('Delete gagal / permission ditolak');
+    }
 
     DT.ajax.reload(null,false);
     toast('Category deleted');
-  };
+
+  } catch(err) {
+    Swal.fire({
+      icon:'error',
+      title:'Error',
+      text: err.message
+    });
+  }
+};
 })();
+
+
 </script>
 @endpush

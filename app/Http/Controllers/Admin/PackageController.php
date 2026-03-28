@@ -42,25 +42,36 @@ class PackageController extends Controller
             $data = $q->offset($start)->limit($length)->get();
 
             $rows = $data->map(function($p, $i) use ($start){
-                $actions = sprintf(
-                    '<div class="d-flex gap-1">
-                        <button class="btn btn-sm btn-icon btn-outline-secondary js-edit"
-                          data-id="%1$d" data-name="%2$s">
-                          <i class="bx bx-edit-alt"></i>
-                        </button>
-                        <button class="btn btn-sm btn-icon btn-outline-danger js-del" data-id="%1$d">
-                          <i class="bx bx-trash"></i>
-                        </button>
-                    </div>',
-                    $p->id, e($p->package_name)
-                );
+            $editBtn = auth()->user()->hasPermission('uom.update')
+                ? sprintf(
+                    '<button class="btn btn-sm btn-icon btn-outline-secondary js-edit"
+                        data-id="%1$d"
+                        data-name="%2$s">
+                        <i class="bx bx-edit-alt"></i>
+                    </button>',
+                    $p->id,
+                    e($p->package_name)
+                )
+                : '';
 
-                return [
-                    'rownum'  => $start + $i + 1,
-                    'name'    => e($p->package_name),
-                    'actions' => $actions,
-                ];
-            });
+            $deleteBtn = auth()->user()->hasPermission('uom.delete')
+                ? sprintf(
+                    '<button class="btn btn-sm btn-icon btn-outline-danger js-del"
+                        data-id="%1$d">
+                        <i class="bx bx-trash"></i>
+                    </button>',
+                    $p->id
+                )
+                : '';
+
+            $actions = '<div class="d-flex gap-1">'.$editBtn.$deleteBtn.'</div>';
+
+            return [
+                'rownum'  => $start + $i + 1,
+                'name'    => e($p->package_name),
+                'actions' => $actions,
+            ];
+        });
 
             return response()->json([
                 'draw' => $draw,

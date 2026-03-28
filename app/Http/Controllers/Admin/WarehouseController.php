@@ -1,5 +1,5 @@
 <?php
-// app/Http/Controllers/WarehouseController.php
+
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
@@ -11,10 +11,10 @@ class WarehouseController extends Controller
 {
     public function index()
     {
-    
+        abort_unless(auth()->user()->hasPermission('warehouse.view'), 403);
+
         $warehouses = Warehouse::orderBy('id')->get();
 
-        // kirim juga kode berikutnya untuk dipakai default di modal
         $nextCode = Warehouse::nextCode();
 
         return view('admin.masterdata.warehouses', compact('warehouses', 'nextCode'));
@@ -22,10 +22,11 @@ class WarehouseController extends Controller
 
     public function store(Request $r)
     {
+        abort_unless(auth()->user()->hasPermission('warehouse.create'), 403);
 
         if (auth()->user()->hasRole('warehouse')) {
-        abort(403);
-    }
+            abort(403);
+        }
 
         $data = $r->validate([
             'warehouse_code' => ['nullable','string','max:50','unique:warehouses,warehouse_code'],
@@ -34,18 +35,21 @@ class WarehouseController extends Controller
             'note'           => ['nullable','string','max:255'],
         ]);
 
-        // kalau code kosong → auto-generate
         if (empty($data['warehouse_code'])) {
             $data['warehouse_code'] = Warehouse::nextCode();
         }
 
         $row = Warehouse::create($data);
 
-        return response()->json(['message' => 'created', 'row' => $row], 201);
+        return response()->json([
+            'message' => 'created',
+            'row' => $row
+        ], 201);
     }
 
     public function update(Request $r, Warehouse $warehouse)
     {
+        abort_unless(auth()->user()->hasPermission('warehouse.update'), 403);
 
         $me = auth()->user();
 
@@ -56,7 +60,9 @@ class WarehouseController extends Controller
 
         $data = $r->validate([
             'warehouse_code' => [
-                'required','string','max:50',
+                'required',
+                'string',
+                'max:50',
                 Rule::unique('warehouses','warehouse_code')->ignore($warehouse->id)
             ],
             'warehouse_name' => ['required','string','max:150'],
@@ -66,15 +72,22 @@ class WarehouseController extends Controller
 
         $warehouse->update($data);
 
-        return response()->json(['message' => 'updated', 'row' => $warehouse->fresh()]);
+        return response()->json([
+            'message' => 'updated',
+            'row' => $warehouse->fresh()
+        ]);
     }
 
     public function destroy(Warehouse $warehouse)
     {
+        abort_unless(auth()->user()->hasPermission('warehouse.delete'), 403);
+
         if (auth()->user()->hasRole('warehouse')) {
             abort(403);
         }
+
         $warehouse->delete();
-        return response()->noContent(); // 204
+
+        return response()->noContent();
     }
 }

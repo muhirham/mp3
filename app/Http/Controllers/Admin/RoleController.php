@@ -9,22 +9,32 @@ use Illuminate\Validation\Rule;
 
 class RoleController extends Controller
 {
+    protected function ensureRolePermission(string $permission = 'roles.view')
+    {
+        $me = auth()->user();
+
+        if (!$me || !$me->hasPermission($permission)) {
+            abort(403);
+        }
+
+        return $me;
+    }
+
     public function index()
     {
-        // Semua role, menu_keys sudah otomatis dicast ke array dari model
+        $this->ensureRolePermission('roles.view');
+
         $roles = Role::orderBy('id')->get();
 
-        // registry menu dari config
         $registry = collect(config('menu.items', []));
 
-        // group untuk render checkbox di view
         $groups = [
-            'admin'     => $registry->where('group', 'admin')->values(),
-            'inventory'     => $registry->where('group', 'inventory')->values(),
-            'procurement'     => $registry->where('group', 'procurement')->values(),
-            'master'     => $registry->where('group', 'master')->values(),
-            'warehouse' => $registry->where('group', 'warehouse')->values(),
-            'sales'     => $registry->where('group', 'sales')->values(),
+            'admin'       => $registry->where('group', 'admin')->values(),
+            'inventory'   => $registry->where('group', 'inventory')->values(),
+            'procurement' => $registry->where('group', 'procurement')->values(),
+            'master'      => $registry->where('group', 'master')->values(),
+            'warehouse'   => $registry->where('group', 'warehouse')->values(),
+            'sales'       => $registry->where('group', 'sales')->values(),
         ];
 
         $homeCandidates = config('menu.home_candidates', []);
@@ -34,7 +44,8 @@ class RoleController extends Controller
 
     public function store(Request $r)
     {
-        // siapkan daftar key & route yang valid dari config
+        $this->ensureRolePermission('roles.create');
+
         $registry      = collect(config('menu.items', []))->keyBy('key');
         $validKeys     = $registry->keys()->all();
         $menuRoutes    = $registry->pluck('route')->all();
@@ -42,25 +53,26 @@ class RoleController extends Controller
         $allowedRoutes = array_values(array_unique(array_merge($menuRoutes, $homeRoutes)));
 
         $data = $r->validate([
-            'slug'        => ['required','alpha_dash','max:60','unique:roles,slug'],
-            'name'        => ['required','string','max:120'],
-            'home_route'  => ['nullable','string', Rule::in($allowedRoutes)],
-            'menu_keys'   => ['required','array','min:1'],
-            'menu_keys.*' => ['string', Rule::in($validKeys)],
+            'slug'          => ['required','alpha_dash','max:60','unique:roles,slug'],
+            'name'          => ['required','string','max:120'],
+            'home_route'    => ['nullable','string', Rule::in($allowedRoutes)],
+            'menu_keys'     => ['required','array','min:1'],
+            'menu_keys.*'   => ['string', Rule::in($validKeys)],
+            'permissions'   => ['nullable','array'],
+            'permissions.*' => ['string'],
         ]);
 
-        // fallback home_route = route dari menu pertama yang dicentang
         if (empty($data['home_route'])) {
             $firstKey = $data['menu_keys'][0];
             $data['home_route'] = $registry[$firstKey]['route'] ?? null;
         }
 
-        // simpan langsung ke kolom menu_keys (JSON)
         Role::create([
-            'slug'       => $data['slug'],
-            'name'       => $data['name'],
-            'home_route' => $data['home_route'],
-            'menu_keys'  => $data['menu_keys'],
+            'slug'        => $data['slug'],
+            'name'        => $data['name'],
+            'home_route'  => $data['home_route'],
+            'menu_keys'   => $data['menu_keys'],
+            'permissions' => $data['permissions'] ?? [],
         ]);
 
         return back()->with('success', 'Role berhasil dibuat.');
@@ -68,6 +80,8 @@ class RoleController extends Controller
 
     public function update(Request $r, Role $role)
     {
+        $this->ensureRolePermission('roles.update');
+
         $registry      = collect(config('menu.items', []))->keyBy('key');
         $validKeys     = $registry->keys()->all();
         $menuRoutes    = $registry->pluck('route')->all();
@@ -75,11 +89,13 @@ class RoleController extends Controller
         $allowedRoutes = array_values(array_unique(array_merge($menuRoutes, $homeRoutes)));
 
         $data = $r->validate([
-            'slug'        => ['required','alpha_dash','max:60', Rule::unique('roles','slug')->ignore($role->id)],
-            'name'        => ['required','string','max:120'],
-            'home_route'  => ['nullable','string', Rule::in($allowedRoutes)],
-            'menu_keys'   => ['required','array','min:1'],
-            'menu_keys.*' => ['string', Rule::in($validKeys)],
+            'slug'          => ['required','alpha_dash','max:60', Rule::unique('roles','slug')->ignore($role->id)],
+            'name'          => ['required','string','max:120'],
+            'home_route'    => ['nullable','string', Rule::in($allowedRoutes)],
+            'menu_keys'     => ['required','array','min:1'],
+            'menu_keys.*'   => ['string', Rule::in($validKeys)],
+            'permissions'   => ['nullable','array'],
+            'permissions.*' => ['string'],
         ]);
 
         if (empty($data['home_route'])) {
@@ -88,10 +104,11 @@ class RoleController extends Controller
         }
 
         $role->update([
-            'slug'       => $data['slug'],
-            'name'       => $data['name'],
-            'home_route' => $data['home_route'],
-            'menu_keys'  => $data['menu_keys'],
+            'slug'        => $data['slug'],
+            'name'        => $data['name'],
+            'home_route'  => $data['home_route'],
+            'menu_keys'   => $data['menu_keys'],
+            'permissions' => $data['permissions'] ?? [],
         ]);
 
         return back()->with('success', 'Role berhasil diupdate.');
@@ -99,7 +116,10 @@ class RoleController extends Controller
 
     public function destroy(Role $role)
     {
+        $this->ensureRolePermission('roles.delete');
+
         $role->delete();
+
         return response()->json(['success' => true]);
     }
 }

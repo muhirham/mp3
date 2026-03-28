@@ -9,16 +9,15 @@ use App\Models\Warehouse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class UserController extends Controller
 {
-    protected function ensureCanManageUsers()
+    protected function ensureCanManageUsers(string $permission = 'users.view')
     {
         $me = auth()->user();
 
-        if (!$me || (!$me->hasRole('superadmin') && !$me->hasRole('warehouse'))) {
+        if (!$me || !$me->hasPermission($permission)) {
             abort(403);
         }
 
@@ -27,13 +26,11 @@ class UserController extends Controller
 
     public function index()
     {
-        /** @var \App\Models\User $me */
-        $me          = $this->ensureCanManageUsers();
+        $me = $this->ensureCanManageUsers('users.view');
         $isWarehouse = $me->hasRole('warehouse');
 
         $query = User::with(['warehouse', 'roles'])->orderBy('id');
 
-        // Admin warehouse: hanya lihat dirinya + sales di warehouse dia
         if ($isWarehouse) {
             $query->where(function ($q) use ($me) {
                 $q->where('id', $me->id)
@@ -46,12 +43,12 @@ class UserController extends Controller
             });
         }
 
-        $users      = $query->get();
-        $warehouses = Warehouse::select('id','warehouse_name')
-                        ->orderBy('warehouse_name')
-                        ->get();
+        $users = $query->get();
 
-        // Admin WH cuma boleh pilih role sales
+        $warehouses = Warehouse::select('id', 'warehouse_name')
+            ->orderBy('warehouse_name')
+            ->get();
+
         $allRoles = $isWarehouse
             ? Role::where('slug', 'sales')->get(['id','name','slug'])
             : Role::orderBy('name')->get(['id','name','slug']);
@@ -61,8 +58,7 @@ class UserController extends Controller
 
     public function store(Request $request)
     {
-        /** @var \App\Models\User $me */
-        $me          = $this->ensureCanManageUsers();
+        $me = $this->ensureCanManageUsers('users.create');
         $isWarehouse = $me->hasRole('warehouse');
 
         $data = $request->validate([
@@ -79,36 +75,36 @@ class UserController extends Controller
             'status'       => ['required', Rule::in(['active','inactive'])],
         ]);
 
-        // role slugs dari form
         $roleSlugs = collect($data['roles'] ?? []);
 
         if ($isWarehouse) {
-            // Admin WH: FORCE sales + warehouse dia sendiri
-            $roleSlugs           = collect(['sales']);
+            $roleSlugs = collect(['sales']);
             $data['warehouse_id'] = $me->warehouse_id;
         } else {
-            // Superadmin: kalau role butuh warehouse → wajib pilih
             $needsWarehouse = $roleSlugs->contains(fn ($s) => in_array($s, ['warehouse','sales'], true));
+
             if ($needsWarehouse) {
-                $request->validate(['warehouse_id' => ['required','exists:warehouses,id']]);
+                $request->validate([
+                    'warehouse_id' => ['required','exists:warehouses,id']
+                ]);
             } else {
                 $data['warehouse_id'] = null;
             }
         }
 
-        // slug → id
         $roleIds = Role::whereIn('slug', $roleSlugs)->pluck('id')->all();
 
-        // upload signature
-            $signaturePath = replace_uploaded_file( null,$request->file('signature') ?? null,'signatures','public');
-        if ($request->hasFile('signature')) {
-            $signaturePath = $request->file('signature')->store('signatures', 'public');
-        }
+        $signaturePath = replace_uploaded_file(
+            null,
+            $request->file('signature') ?? null,
+            'signatures',
+            'public'
+        );
 
-        // payload users
         $payload = collect($data)->only([
-            'name','username','email','phone','position','warehouse_id','status',
+            'name','username','email','phone','position','warehouse_id','status'
         ])->toArray();
+
         $payload['password'] = Hash::make($data['password']);
 
         if ($signaturePath) {
@@ -116,7 +112,6 @@ class UserController extends Controller
         }
 
         DB::transaction(function () use ($payload, $roleIds) {
-            /** @var \App\Models\User $user */
             $user = User::create($payload);
             $user->roles()->sync($roleIds);
         });
@@ -126,13 +121,12 @@ class UserController extends Controller
 
     public function update(Request $request, User $user)
     {
-        /** @var \App\Models\User $me */
-        $me          = $this->ensureCanManageUsers();
+        $me = $this->ensureCanManageUsers('users.update');
         $isWarehouse = $me->hasRole('warehouse');
 
-        // Admin WH hanya boleh edit SALES di warehouse dia
         if ($isWarehouse) {
             $canManage = $user->warehouse_id === $me->warehouse_id && $user->hasRole('sales');
+
             if (!$canManage) {
                 abort(403);
             }
@@ -152,17 +146,18 @@ class UserController extends Controller
             'status'       => ['required', Rule::in(['active','inactive'])],
         ]);
 
-        // fallback roles kalau form nggak kirim
         $roleSlugs = collect($data['roles'] ?? $user->roles->pluck('slug')->all());
 
         if ($isWarehouse) {
-            // Admin WH tetap dipaksa sales + warehouse dia
-            $roleSlugs            = collect(['sales']);
+            $roleSlugs = collect(['sales']);
             $data['warehouse_id'] = $me->warehouse_id;
         } else {
             $needsWarehouse = $roleSlugs->contains(fn ($s) => in_array($s, ['warehouse','sales'], true));
+
             if ($needsWarehouse) {
-                $request->validate(['warehouse_id' => ['required','exists:warehouses,id']]);
+                $request->validate([
+                    'warehouse_id' => ['required','exists:warehouses,id']
+                ]);
             } else {
                 $data['warehouse_id'] = null;
             }
@@ -170,17 +165,14 @@ class UserController extends Controller
 
         $roleIds = Role::whereIn('slug', $roleSlugs)->pluck('id')->all();
 
- // upload / ganti signature
         $signaturePath = replace_uploaded_file(
             $user->signature_path,
             $request->file('signature') ?? null,
             'signatures'
         );
 
-
-
         $payload = collect($data)->only([
-            'name','username','email','phone','position','warehouse_id','status',
+            'name','username','email','phone','position','warehouse_id','status'
         ])->toArray();
 
         if (!empty($data['password'])) {
@@ -199,24 +191,22 @@ class UserController extends Controller
 
     public function destroy(User $user)
     {
-        /** @var \App\Models\User $me */
-        $me          = $this->ensureCanManageUsers();
+        $me = $this->ensureCanManageUsers('users.delete');
         $isWarehouse = $me->hasRole('warehouse');
 
-        if ($me && $me->id === $user->id) {
+        if ($me->id === $user->id) {
             return response()->json(['error' => "You can't delete yourself."], 422);
         }
 
         if ($isWarehouse) {
-            // Admin WH hanya boleh delete SALES di warehouse dia
             $canManage = $user->warehouse_id === $me->warehouse_id && $user->hasRole('sales');
+
             if (!$canManage) {
                 return response()->json(['error' => "You are not allowed to delete this user."], 422);
             }
         }
 
         delete_file_if_exists($user->signature_path);
-
 
         $user->delete();
 
@@ -225,8 +215,7 @@ class UserController extends Controller
 
     public function bulkDestroy(Request $request)
     {
-        /** @var \App\Models\User $me */
-        $me          = $this->ensureCanManageUsers();
+        $me = $this->ensureCanManageUsers('users.bulk_delete');
         $isWarehouse = $me->hasRole('warehouse');
 
         $ids = $request->validate([
@@ -234,10 +223,8 @@ class UserController extends Controller
             'ids.*' => ['integer','distinct','exists:users,id'],
         ])['ids'];
 
-        // jangan sampai ngehapus dirinya sendiri
-        $ids = array_values(array_filter($ids, fn ($id) => $id !== ($me?->id)));
+        $ids = array_values(array_filter($ids, fn ($id) => $id !== $me->id));
 
-        // Admin WH: hanya boleh hapus SALES di warehouse dia
         if ($isWarehouse) {
             $ids = User::whereIn('id', $ids)
                 ->where('warehouse_id', $me->warehouse_id)
@@ -265,28 +252,28 @@ class UserController extends Controller
     }
 
     public function toggleStatus(Request $request, User $user)
-        {
-            /** @var \App\Models\User $me */
-            $me          = $this->ensureCanManageUsers();
-            $isWarehouse = $me->hasRole('warehouse');
+    {
+        $me = $this->ensureCanManageUsers('users.update');
+        $isWarehouse = $me->hasRole('warehouse');
 
-            // superadmin ga boleh nonaktifin diri sendiri (biar aman)
-            if ($me && $me->id === $user->id) {
-                return response()->json(['error' => "You can't change your own status."], 422);
-            }
-
-            // Admin WH hanya boleh manage SALES di warehouse dia
-            if ($isWarehouse) {
-                $canManage = $user->warehouse_id === $me->warehouse_id && $user->hasRole('sales');
-                if (!$canManage) {
-                    return response()->json(['error' => "You are not allowed to change this user's status."], 422);
-                }
-            }
-
-            $user->status = ($user->status === 'active') ? 'inactive' : 'active';
-            $user->save();
-
-            return response()->json(['success' => 'Status updated.', 'status' => $user->status]);
+        if ($me->id === $user->id) {
+            return response()->json(['error' => "You can't change your own status."], 422);
         }
 
+        if ($isWarehouse) {
+            $canManage = $user->warehouse_id === $me->warehouse_id && $user->hasRole('sales');
+
+            if (!$canManage) {
+                return response()->json(['error' => "You are not allowed to change this user's status."], 422);
+            }
+        }
+
+        $user->status = ($user->status === 'active') ? 'inactive' : 'active';
+        $user->save();
+
+        return response()->json([
+            'success' => 'Status updated.',
+            'status' => $user->status
+        ]);
+    }
 }
