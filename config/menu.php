@@ -66,14 +66,14 @@ return [
         ],
         [
             'key'   => 'wh_issue',
-            'label' => 'Issue ke Sales (Pagi)',
+            'label' => 'Issue to Sales (Morning)',
             'route' => 'sales.handover.morning',
             'group' => 'warehouse',
             'icon'  => 'bx bx-up-arrow-circle',
         ],
         [
             'key'   => 'wh_reconcile',
-            'label' => 'Reconcile + OTP (Sore)',
+            'label' => 'Reconcile + OTP (Evening)',
             'route' => 'sales.handover.evening',
             'group' => 'warehouse',
             'icon'  => 'bx bx-check-shield',
@@ -94,14 +94,14 @@ return [
         ],
         [
             'key'   => 'sales_return_approval',
-            'label' => 'Approval Sales Return',
+            'label' => 'Sales Return Approval',
             'route' => 'warehouse.returns.index',
             'group' => 'warehouse',
             'icon'  => 'bx bx-check-circle',
         ],
         [
             'key'   => 'sales_request_approval',
-            'label' => 'Approval Sales Request',
+            'label' => 'Sales Request Approval',
             'route' => 'warehouse.stock-requests.index',
             'group' => 'warehouse',
             'icon'  => 'bx bx-file-blank',
@@ -110,14 +110,14 @@ return [
         // ================== PROCUREMENT ==================
         [
             'key'   => 'wh_restock', // Request Restock Adm WH (view warehouse)
-            'label' => 'Request Restock Admin WH',
+            'label' => 'Warehouse Restock Request',
             'route' => 'restocks.index',
             'group' => 'procurement',
             'icon'  => 'bx bx-cart-add',
         ],
         [
             'key'   => 'restock_request_ap',
-            'label' => 'Approval Restock',
+            'label' => 'Restock Approval',
             'route' => 'stockRequest.index',
             'group' => 'procurement',
             'icon'  => 'bx bx-transfer-alt',
@@ -140,7 +140,7 @@ return [
         ],
         [
             'key'   => 'sales_otp',  // <=== KEY BARU
-            'label' => 'OTP Pagi & Barang Dibawa',
+            'label' => 'Morning OTP & Issued Items',
             'route' => 'sales.otp.items',
             'group' => 'sales',
             'icon'  => 'bx bx-key', // bebas mau ganti icon apa
@@ -183,7 +183,7 @@ return [
         ],
         [
             'key'   => 'roles',
-            'label' => 'Roles & Sidebar',
+            'label' => 'Roles & Permissions',
             'route' => 'roles.index',
             'group' => 'master',
             'icon'  => 'bx bx-shield-quarter',

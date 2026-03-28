@@ -26,7 +26,7 @@
 
                     {{-- DATE RANGE --}}
                     <div class="col-12 col-md-4">
-                        <label class="form-label mb-1 small text-uppercase fw-semibold text-muted">Tanggal</label>
+                        <label class="form-label mb-1 small text-uppercase fw-semibold text-muted">Date</label>
                         <div class="d-flex gap-2">
                             <input id="fromDate" type="date" class="form-control form-control-sm" />
                             <input id="toDate" type="date" class="form-control form-control-sm" />
@@ -37,7 +37,7 @@
                     <div class="col-6 col-md-2">
                         <label class="form-label mb-1 small text-uppercase fw-semibold text-muted">Status</label>
                         <select id="filterStatus" class="form-select form-select-sm">
-                            <option value="">— Semua —</option>
+                            <option value="">— All —</option>
                             <option value="pending">PENDING</option>
                             <option value="approved">REVIEW</option>
                             <option value="ordered">ORDERED</option>
@@ -49,10 +49,9 @@
                     {{-- WAREHOUSE --}}
                     <div class="col-12 col-md-3 ms-md-auto">
                         <label class="form-label mb-1 small text-uppercase fw-semibold text-muted">Warehouse</label>
-
                         @if ($canSwitchWarehouse)
                             <select id="filterWarehouse" class="form-select form-select-sm">
-                                <option value="">— Semua —</option>
+                                <option value="">— All —</option>
                                 @foreach ($warehouses as $w)
                                     <option value="{{ $w->id }}" @selected(($selectedWarehouseId ?? null) == $w->id)>
                                         {{ $w->warehouse_name }}
@@ -76,7 +75,7 @@
                         </button>
 
                         <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#mdlAdd">
-                            + Buat Request
+                            + Create Request
                         </button>
                     </div>
 
@@ -114,7 +113,7 @@
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header py-2">
-                    <h6 class="modal-title fw-bold mb-0">Buat Request Restock</h6>
+                    <h6 class="modal-title fw-bold mb-0">Create Restock Request</h6>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
 
@@ -126,7 +125,7 @@
                             <div class="mb-3">
                                 <label class="form-label small text-uppercase fw-semibold text-muted">Warehouse</label>
                                 <select name="warehouse_id" class="form-select form-select-sm" required>
-                                    <option value="">— Pilih —</option>
+                                    <option value="">— Select —</option>
                                     @foreach ($warehouses as $w)
                                         <option value="{{ $w->id }}">{{ $w->warehouse_name }}</option>
                                     @endforeach
@@ -140,8 +139,8 @@
                                     <tr>
                                         <th style="width:40px" class="text-center">#</th>
                                         <th>Product</th>
-                                        <th style="width:130px" class="text-end">Qty Request</th>
-                                        <th>Catatan</th>
+                                        <th style="width:130px" class="text-end">Requested Qty</th>
+                                        <th>Note</th>
                                         <th style="width:40px"></th>
                                     </tr>
                                 </thead>
@@ -151,7 +150,7 @@
                                         <td>
                                             <select name="items[0][product_id]" class="form-select form-select-sm"
                                                 required>
-                                                <option value="">— Pilih —</option>
+                                                <option value="">— Select —</option>
                                                 @foreach ($products as $p)
                                                     <option value="{{ $p->id }}">{{ $p->product_code }} —
                                                         {{ $p->name }}</option>
@@ -164,11 +163,11 @@
                                         </td>
                                         <td>
                                             <input type="text" name="items[0][note]"
-                                                class="form-control form-control-sm" placeholder="Catatan (opsional)">
+                                                class="form-control form-control-sm" placeholder="Note (optional)">
                                         </td>
                                         <td class="text-center">
                                             <button type="button" class="btn btn-sm btn-link text-danger p-0 btn-remove"
-                                                title="Hapus">&times;</button>
+                                                title="Remove">&times;</button>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -176,15 +175,15 @@
                         </div>
 
                         <button type="button" class="btn btn-sm btn-outline-primary" id="btnAddRfRow">
-                            <i class="bx bx-plus"></i> Tambah Item
+                            <i class="bx bx-plus"></i> Add Item
                         </button>
 
                     </div>
 
                     <div class="modal-footer">
                         <button type="button" class="btn btn-sm btn-outline-secondary"
-                            data-bs-dismiss="modal">Batal</button>
-                        <button type="submit" class="btn btn-sm btn-primary">Simpan</button>
+                            data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-sm btn-primary">Save</button>
                     </div>
                 </form>
             </div>
@@ -197,9 +196,9 @@
             <div class="modal-content">
                 <div class="modal-header border-0 pb-1">
                     <div>
-                        <h6 class="modal-title fw-bold mb-0">Tanda Terima Barang Restock (GR)</h6>
+                        <h6 class="modal-title fw-bold mb-0">Restock Goods Received (GR)</h6>
                         <div class="small text-muted">
-                            Kode Restock: <span id="rcvCode">-</span> ·
+                            Restock Code: <span id="rcvCode">-</span> ·
                             <span id="rcvWarehouse">-</span> ·
                             <span id="rcvRequester">-</span>
                         </div>
@@ -235,27 +234,27 @@
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label small text-uppercase fw-semibold text-muted">Upload Foto Barang Bagus
-                                (opsional)</label>
+                            <label class="form-label small text-uppercase fw-semibold text-muted">Upload Photo of Good Items
+                                (optional)</label>
                             <input type="file" name="photos_good[]" class="form-control form-control-sm" multiple
                                 accept="image/*">
-                            <div class="form-text">Maks 4MB per file.</div>
+                            <div class="form-text">Max 4MB per file.</div>
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label small text-uppercase fw-semibold text-muted">Upload Foto Barang Rusak
-                                (opsional)</label>
+                            <label class="form-label small text-uppercase fw-semibold text-muted">Upload Photo of Damaged Items
+                                (optional)</label>
                             <input type="file" name="photos_damaged[]" class="form-control form-control-sm" multiple
                                 accept="image/*">
-                            <div class="form-text">Jika ada kerusakan, lampirkan foto detail.</div>
+                            <div class="form-text">Attach detailed photos if there is damage.</div>
                         </div>
 
                     </div>
 
                     <div class="modal-footer border-0">
                         <button type="button" class="btn btn-sm btn-outline-secondary"
-                            data-bs-dismiss="modal">Batal</button>
-                        <button type="submit" class="btn btn-sm btn-primary">Simpan Goods Received</button>
+                            data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-sm btn-primary">Save Goods Received</button>
                     </div>
                 </form>
             </div>
@@ -268,8 +267,8 @@
             <div class="modal-content">
                 <div class="modal-header border-0 pb-1">
                     <div>
-                        <h6 class="modal-title fw-bold mb-0">Detail Request Restock</h6>
-                        <div class="small text-muted">No. Dokumen: <span id="detCode">-</span></div>
+                        <h6 class="modal-title fw-bold mb-0">Restock Request Detail</h6>
+                        <div class="small text-muted">Document No: <span id="detCode">-</span></div>
                     </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
@@ -280,12 +279,12 @@
                         <div class="row">
                             <div class="col-md-6">
                                 <div><strong>Warehouse</strong> : <span id="detWarehouse">-</span></div>
-                                <div><strong>Tanggal</strong> : <span id="detDate">-</span></div>
+                                <div><strong>Date</strong> : <span id="detDate">-</span></div>
                             </div>
                             <div class="col-md-6">
                                 <div><strong>Requester</strong> : <span id="detRequester">-</span></div>
                                 <div><strong>Status</strong> : <span id="detStatus">-</span></div>
-                                <div><strong>Jumlah Item</strong> : <span id="detTotalItems">0</span></div>
+                                <div><strong>Total Items</strong> : <span id="detTotalItems">0</span></div>
                             </div>
                         </div>
                     </div>
@@ -311,7 +310,7 @@
 
                 <div class="modal-footer border-0">
                     <button type="button" class="btn btn-sm btn-outline-secondary"
-                        data-bs-dismiss="modal">Tutup</button>
+                        data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
         </div>

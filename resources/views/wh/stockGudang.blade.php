@@ -67,7 +67,7 @@
                         @if (!empty($canSwitchWarehouse) && $canSwitchWarehouse)
                             {{-- Superadmin / Admin pusat: bebas pilih gudang --}}
                             <select id="filterWarehouse" class="form-select">
-                                <option value="">— Semua —</option>
+                                <option value="">— All —</option>
                                 @foreach ($warehouses as $w)
                                     <option value="{{ $w->id }}" @selected(($selectedWarehouseId ?? null) == $w->id)>
                                         {{ $w->warehouse_name }}

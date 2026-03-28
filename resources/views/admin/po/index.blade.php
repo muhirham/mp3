@@ -110,7 +110,7 @@
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
                 <div class="d-flex flex-column">
                     <h5 class="mb-0 fw-bold po-card-title">Purchase Orders</h5>
-                    <span class="text-muted po-muted">Filter otomatis (AJAX) — tanpa tombol apply.</span>
+                    <span class="text-muted po-muted">Automatic Filter (AJAX) — no apply button needed.</span>
                 </div>
 
                 <div class="d-flex flex-wrap gap-2 ms-auto po-actions justify-content-end">
@@ -205,10 +205,10 @@
                 </form>
 
                 <div class="alert alert-info small py-2 mt-3 mb-0">
-                    <strong>Rule Approval:</strong>
+                    <strong>Approval Rules:</strong>
                     <ul class="mb-0 ps-3">
-                        <li>Grand total &le; Rp 1.000.000 → cukup disetujui <strong>Procurement</strong>.</li>
-                        <li>Grand total &gt; Rp 1.000.000 → wajib 2 lapis: <strong>Procurement → CEO</strong>.</li>
+                        <li>Grand total &le; Rp 1,000,000 → approved by <strong>Procurement</strong>.</li>
+                        <li>Grand total &gt; Rp 1,000,000 → requires 2-level approval: <strong>Procurement → CEO</strong>.</li>
                     </ul>
                 </div>
             </div>
@@ -377,7 +377,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="10" class="text-center text-muted">Belum ada PO.</td>
+                                    <td colspan="10" class="text-center text-muted">No Purchase Orders found.</td>
                                 </tr>
                             @endforelse
                         </tbody>
@@ -387,7 +387,7 @@
                 @if ($pos->hasPages())
                     <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <div class="small text-muted">
-                            Menampilkan {{ $pos->firstItem() }}–{{ $pos->lastItem() }} dari {{ $pos->total() }} PO
+                            Showing {{ $pos->firstItem() }}–{{ $pos->lastItem() }} of {{ $pos->total() }} POs
                         </div>
                         <div>
                             {{ $pos->withQueryString()->links('pagination::bootstrap-5') }}
@@ -536,22 +536,22 @@
                                         </div>
 
                                         <div class="mb-3">
-                                            <label class="form-label">Upload foto barang bagus (opsional)</label>
+                                            <label class="form-label">Upload photo of good items (optional)</label>
                                             <input type="file" name="photos_good[]" class="form-control" multiple>
                                         </div>
 
                                         <div class="mb-3">
-                                            <label class="form-label">Upload foto barang rusak (opsional)</label>
+                                            <label class="form-label">Upload photo of damaged items (optional)</label>
                                             <input type="file" name="photos_damaged[]" class="form-control" multiple>
                                         </div>
                                     </div>
 
                                     <div class="modal-footer">
                                         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
-                                            Batal
+                                            Cancel
                                         </button>
                                         <button type="submit" class="btn btn-primary">
-                                            <i class="bx bx-save"></i> Simpan Goods Received
+                                            <i class="bx bx-save"></i> Save Goods Received
                                         </button>
                                     </div>
                                 </form>
@@ -573,7 +573,7 @@
             document.addEventListener('DOMContentLoaded', function() {
                 Swal.fire({
                     icon: 'success',
-                    title: 'Sukses',
+                    title: 'Success',
                     text: @json(session('gr_success')),
                     timer: 1500,
                     showConfirmButton: false
@@ -712,8 +712,8 @@
                 if (fromVal && toVal && fromVal > toVal) {
                     Swal.fire({
                         icon: 'error',
-                        title: 'Range salah',
-                        text: 'Tanggal "from" harus <= "to".'
+                        title: 'Invalid Range',
+                        text: 'The "From" date must be earlier than or equal to the "To" date.'
                     });
                     return false;
                 }
@@ -721,8 +721,8 @@
                 if (!sameMonth(fromVal, toVal)) {
                     Swal.fire({
                         icon: 'error',
-                        title: 'Range salah',
-                        text: 'Range maksimal 1 bulan. From & To harus di bulan yang sama.'
+                        title: 'Invalid Range',
+                        text: 'Maximum range is 1 month. Both "From" and "To" must be in the same month.'
                     });
                     return false;
                 }
@@ -743,8 +743,8 @@
                 if (!newWrapper) {
                     Swal.fire({
                         icon: 'error',
-                        title: 'Gagal',
-                        text: 'Wrapper table tidak ditemukan di response.'
+                        title: 'Failed',
+                        text: 'Table wrapper not found in response.'
                     });
                     return;
                 }
@@ -773,7 +773,7 @@
             });
 
             if (globalSearch) {
-                globalSearch.setAttribute('placeholder', 'Cari PO code...');
+                globalSearch.setAttribute('placeholder', 'Search PO code...');
                 globalSearch.addEventListener('input', debounce(() => applyFilters('replace'), 450));
             }
 
@@ -815,8 +815,8 @@
             const poCode = btn.getAttribute('data-po') || '';
             Swal.fire({
                 icon: 'info',
-                title: 'Tidak bisa GR dari Superadmin',
-                text: `PO ${poCode} berasal dari Request Restock (Warehouse). Goods Received wajib dilakukan oleh Admin Warehouse terkait.`,
+                title: 'Receive blocked for Admin',
+                text: `PO ${poCode} originates from a Warehouse RESTOCK REQUEST. Receiving must be done by the corresponding Warehouse Admin.`,
             });
         });
     </script>

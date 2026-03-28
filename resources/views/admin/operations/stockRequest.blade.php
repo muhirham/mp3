@@ -204,7 +204,7 @@
         function statusBadge(st) {
             switch (st) {
                 case 'approved':
-                    return '<span class="badge bg-info text-dark">REVIEW</span>'; // sudah masuk proses PO
+                    return '<span class="badge bg-info text-dark">REVIEWED</span>'; // already processed into PO draft
                 case 'ordered':
                     return '<span class="badge bg-secondary">ORDERED</span>';
                 case 'received':
@@ -243,8 +243,8 @@
         <td>${escHtml(r.product_name ?? '')}</td>
         <td>${escHtml(r.supplier_name ?? '')}</td>
         <td>${escHtml(r.warehouse_name ?? '')}</td>
-        <td class="text-end">${qty.toLocaleString('id-ID')}</td>
-        <td class="text-end">Rp${total.toLocaleString('id-ID')}</td>
+        <td class="text-end">${qty.toLocaleString()}</td>
+        <td class="text-end">Rp ${total.toLocaleString()}</td>
         <td>${badge}</td>
         <td>${escHtml(r.description ?? '')}</td>
         <td class="text-end">${actions}</td>
@@ -328,8 +328,8 @@
             if (!ids.length) {
                 Swal.fire({
                     icon: 'info',
-                    title: 'Tidak ada data',
-                    text: 'Pilih minimal satu request.',
+                    title: 'No data selected',
+                    text: 'Please select at least one request.',
                     position: 'center'
                 });
                 return;
@@ -338,10 +338,10 @@
             const ok = await Swal.fire({
                 icon: 'question',
                 title: 'Review → PO',
-                html: `Buat PO draft dari <b>${ids.length}</b> request restock terpilih?`,
+                html: `Create draft PO from <b>${ids.length}</b> selected restock requests?`,
                 showCancelButton: true,
-                confirmButtonText: 'Ya, buat PO',
-                cancelButtonText: 'Batal',
+                confirmButtonText: 'Yes, create PO',
+                cancelButtonText: 'Cancel',
                 position: 'center'
             });
 
@@ -378,7 +378,7 @@
                     const txtErr = await res.text();
                     Swal.fire({
                         icon: 'error',
-                        title: 'Gagal',
+                        title: 'Failed',
                         text: txtErr || ('HTTP ' + res.status),
                         position: 'center'
                     });

@@ -13,7 +13,7 @@
         {{-- FORM BUAT HANDOVER PAGI + KIRIM OTP --}}
         <div class="card mb-4">
             <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0 fw-bold">Handover Pagi – Buat & Kirim OTP</h5>
+            <h5 class="mb-0 fw-bold">Morning Handover – Create & Send OTP</h5>
             <small id="handoverInfo" class="text-muted"></small>
             </div>
 
@@ -25,7 +25,7 @@
             <div class="card-body">
                 <div class="row g-3">
                 <div class="col-md-3">
-                    <label class="form-label">Tanggal</label>
+                    <label class="form-label">Date</label>
                     <input type="date" name="handover_date" class="form-control"
                         value="{{ old('handover_date', $today) }}" required>
                 </div>
@@ -39,7 +39,7 @@
                             readonly>
                     @else
                     <select name="warehouse_id" class="form-select" required>
-                        <option value="">— Pilih Gudang —</option>
+                        <option value="">— Select Warehouse —</option>
                         @foreach(($warehouses ?? []) as $w)
                         <option value="{{ $w->id }}" @selected(old('warehouse_id') == $w->id)>
                             {{ $w->name }}
@@ -52,7 +52,7 @@
                 <div class="col-md-5">
                     <label class="form-label">Sales</label>
                     <select name="sales_id" class="form-select" required>
-                    <option value="">— Pilih Sales —</option>
+                    <option value="">— Select Sales —</option>
                     @foreach(($salesUsers ?? []) as $u)
                         <option value="{{ $u->id }}"
                         @selected(($selectedHandover?->sales_id ?? old('sales_id')) == $u->id)>
@@ -65,9 +65,9 @@
                 </div>
                 <hr>
                 <div class="d-flex justify-content-between align-items-center mb-2">
-                <h6 class="mb-0">Item yang Dibawa Pagi</h6>
+                <h6 class="mb-0">Items Issued (Morning)</h6>
                 <button type="button" class="btn btn-sm btn-outline-primary" id="btnAddRow">
-                    <i class="bx bx-plus"></i> Tambah Item
+                    <i class="bx bx-plus"></i> Add Item
                 </button>
                 </div>
 
@@ -75,10 +75,10 @@
                 <table class="table table-sm align-middle" id="tblItems">
                     <thead>
                     <tr>
-                    <th style="width:45%">Produk</th>
+                    <th style="width:45%">Product</th>
                     <th style="width:10%">Qty</th>
-                    <th style="width:15%">Harga</th>
-                    <th style="width:15%">Diskon</th>
+                    <th style="width:15%">Price</th>
+                    <th style="width:15%">Discount</th>
                     <th style="width:20%">Total</th>
 
                     <th style="width:5%"></th>
@@ -93,7 +93,7 @@
                     <tr>
                     <td>
                         <select class="form-select sel-product" name="items[{{ $i }}][product_id]" required>
-                        <option value="">— Pilih Produk —</option>
+                        <option value="">— Select Product —</option>
                         @foreach(($products ?? []) as $p)
                             <option value="{{ $p->id }}"
                                     data-price="{{ (int) $p->selling_price }}"
@@ -136,14 +136,14 @@
                 </div>
 
                 <div class="text-end fw-bold mt-2">
-                Estimasi Grand Total: <span id="grand_total">0</span>
+                Estimated Grand Total: <span id="grand_total">0</span>
                 </div>
             </div>
 
             <div class="card-footer d-flex justify-content-end gap-2">
                 <button type="reset" class="btn btn-light">Reset</button>
                 <button class="btn btn-primary">
-                    {{ $selectedHandover ? 'Update Draft & Kirim OTP Pagi' : 'Simpan Draft & Kirim OTP Pagi' }}
+                    {{ $selectedHandover ? 'Update Draft & Send Morning OTP' : 'Save Draft & Send Morning OTP' }}
                 </button>
             </div>
             </form>
@@ -152,15 +152,15 @@
         {{-- VERIFIKASI OTP PAGI --}}
         <div class="card">
             <div class="card-header">
-            <h5 class="mb-0 fw-bold">Verifikasi OTP Pagi</h5>
+            <h5 class="mb-0 fw-bold">Verify Morning OTP</h5>
             </div>
             <div class="card-body">
             <form method="POST" action="{{ route('sales.handover.morning.verify') }}" class="row g-2 align-items-end">
                 @csrf
                 <div class="col-md-5">
-                <label class="form-label">Pilih Handover (Waiting OTP Pagi)</label>
+                <label class="form-label">Select Handover (Waiting Morning OTP)</label>
                 <select name="handover_id" class="form-select" required>
-                    <option value="">— Pilih —</option>
+                    <option value="">— Select —</option>
                     @foreach(($waitingMorning ?? []) as $h)
                     <option value="{{ $h->id }}"
                     @selected(($selectedHandoverId ?? null) == $h->id)>
@@ -171,18 +171,18 @@
                 </select>
                 </div>
                 <div class="col-md-3">
-                <label class="form-label">OTP Pagi</label>
+                <label class="form-label">Morning OTP</label>
                 <input type="text" name="otp_code" class="form-control"
                         inputmode="numeric" pattern="[0-9]*" placeholder="6 digit" required>
                 </div>
                 <div class="col-md-4">
                 <button type="submit" class="btn btn-success w-100 mt-3 mt-md-0">
-                    Verifikasi OTP &amp; Lock Stok
+                    Verify OTP &amp; Lock Stock
                 </button>
                 </div>
             </form>
             <div class="form-text mt-2">
-                Setelah OTP pagi valid, stok gudang akan dipindah ke stok sales dan nilai bawaan tersimpan.
+                Once the morning OTP is valid, warehouse stock will be transferred to sales stock and initial values will be saved.
             </div>
             </div>
         </div>
@@ -221,17 +221,17 @@
 
                 if(data.active >= data.limit){
                     infoLabel.innerHTML = `<span class="text-danger">
-                        Sales ini memiliki ${data.active} handover aktif (max ${data.limit}) Segera untuk menyelesaikan handover sebelumnya !!!
+                        This salesperson has ${data.active} active handovers (max ${data.limit}). Please complete previous handovers immediately!!!
                     </span>`;
                 }else{
                     infoLabel.innerHTML = `
-                        Handover aktif: <strong>${data.active}</strong> •
-                        Ini akan menjadi <strong>handover ke-${data.next}</strong>
+                        Active handovers: <strong>${data.active}</strong> •
+                        This will be handover <strong>#${data.next}</strong>
                     `;
                 }
 
             }catch(e){
-                infoLabel.textContent = 'Gagal memuat info handover sales';
+                infoLabel.textContent = 'Failed to load sales handover info';
             }
         });
 
@@ -379,7 +379,7 @@
         });
         if (!ok) {
         e.preventDefault();
-        alert('Pastikan setiap item terisi produk & qty yang valid.');
+        alert('Ensure every item has a valid product and quantity.');
         }
     });
 
@@ -394,7 +394,7 @@
     <script>
     Swal.fire({
     icon: 'success',
-    title: 'Berhasil',
+    title: 'Success',
     html: {!! json_encode(session('success')) !!},
     confirmButtonText: 'OK',
     allowOutsideClick: true,
@@ -406,7 +406,7 @@
     <script>
     Swal.fire({
     icon: 'error',
-    title: 'Gagal',
+    title: 'Failed',
     html: {!! json_encode(session('error')) !!},
     });
     </script>

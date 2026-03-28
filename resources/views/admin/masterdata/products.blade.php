@@ -237,7 +237,7 @@
 
                         <div class="col-md-12">
                             <label class="form-label">Description</label>
-                            <textarea name="description" id="description" rows="3" class="form-control" required placeholder="Optional"></textarea>
+                            <textarea name="description" id="description" rows="3" class="form-control" placeholder="Optional"></textarea>
                         </div>
 
                         <div class="col-md-4">

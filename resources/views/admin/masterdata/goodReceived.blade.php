@@ -31,7 +31,7 @@
         <div class="col-lg-3 col-md-4">
           <label class="form-label">Supplier</label>
           <select name="supplier_id" class="form-select">
-            <option value="">— Semua —</option>
+            <option value="">— All —</option>
             @foreach($suppliers as $s)
               <option value="{{ $s->id }}" {{ $supplierId == $s->id ? 'selected' : '' }}>
                 {{ $s->name }}
@@ -56,7 +56,7 @@
           @else
             {{-- superadmin / admin: bisa pilih semua warehouse --}}
             <select name="warehouse_id" class="form-select">
-              <option value="">— Semua —</option>
+              <option value="">— All —</option>
               @foreach($warehouses as $w)
                 <option value="{{ $w->id }}" {{ $warehouseId == $w->id ? 'selected' : '' }}>
                   {{ $w->name ?? $w->warehouse_name }}
@@ -67,7 +67,7 @@
         </div>
 
         <div class="col-lg-3 col-md-4">
-          <label class="form-label">Periode</label>
+          <label class="form-label">Period</label>
           <div class="d-flex gap-1">
             <input type="date"
                    name="date_from"
@@ -100,12 +100,12 @@
           <tr>
             <th style="width:60px;">#</th>
             <th>PO Code</th>
-            <th>GR Code (Terakhir)</th>
+            <th>Latest GR Code</th>
             <th>Product (Summary)</th>
             <th>Supplier</th>
             <th>Warehouse</th>
             <th>Last Received At</th>
-            <th style="width:180px;" class="text-center">Aksi</th>
+            <th style="width:180px;" class="text-center">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -243,7 +243,7 @@
           @empty
             <tr>
               <td colspan="8" class="text-center text-muted">
-                Belum ada Goods Received.
+                No Goods Received records found.
               </td>
             </tr>
           @endforelse
@@ -263,7 +263,7 @@
   <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content" id="modal-po-gr-detail-content">
       {{-- isi akan di-load via AJAX --}}
-      <div class="text-center text-muted py-4">Memuat data...</div>
+      <div class="text-center text-muted py-4">Loading data...</div>
     </div>
   </div>
 </div>
@@ -275,7 +275,7 @@ document.addEventListener('DOMContentLoaded', function () {
   @if(session('success'))
     Swal.fire({
       icon: 'success',
-      title: 'Berhasil',
+      title: 'Success',
       text: @json(session('success')),
       timer: 2500,
       showConfirmButton: false
@@ -285,7 +285,7 @@ document.addEventListener('DOMContentLoaded', function () {
   @if(session('error'))
     Swal.fire({
       icon: 'error',
-      title: 'Gagal',
+      title: 'Failed',
       text: @json(session('error')),
     });
   @endif
@@ -328,11 +328,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
       Swal.fire({
         icon: 'warning',
-        title: 'Batalkan GR?',
-        text: 'Stok akan di-rollback sesuai GR ini.',
+        title: 'Cancel Goods Received?',
+        text: 'Stock will be rolled back according to this Goods Received record.',
         showCancelButton: true,
-        confirmButtonText: 'Ya, batalkan',
-        cancelButtonText: 'Batal'
+        confirmButtonText: 'Yes, cancel',
+        cancelButtonText: 'Cancel'
       }).then(result => {
         if (result.isConfirmed) {
           form.submit();
@@ -352,7 +352,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const url = this.dataset.detailUrl;
         if (!url || !bsModal) return;
 
-        modalBody.innerHTML = '<div class="text-center text-muted py-4">Memuat data...</div>';
+        modalBody.innerHTML = '<div class="text-center text-muted py-4">Loading data...</div>';
 
         fetch(url, {
           headers: {
@@ -369,11 +369,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 e.preventDefault();
                 Swal.fire({
                   icon: 'warning',
-                  title: 'Batalkan GR?',
-                  text: 'Stok akan di-rollback sesuai GR ini.',
+                  title: 'Cancel Goods Received?',
+                  text: 'Stock will be rolled back according to this Goods Received record.',
                   showCancelButton: true,
-                  confirmButtonText: 'Ya, batalkan',
-                  cancelButtonText: 'Batal'
+                  confirmButtonText: 'Yes, cancel',
+                  cancelButtonText: 'Cancel'
                 }).then(result => {
                   if (result.isConfirmed) {
                     form.submit();
@@ -384,7 +384,7 @@ document.addEventListener('DOMContentLoaded', function () {
           })
           .catch(err => {
             console.error(err);
-            modalBody.innerHTML = '<div class="text-danger text-center py-4">Gagal memuat data GR.</div>';
+            modalBody.innerHTML = '<div class="text-danger text-center py-4">Failed to load Goods Received data.</div>';
           });
 
         bsModal.show();
