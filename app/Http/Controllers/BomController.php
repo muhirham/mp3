@@ -35,7 +35,7 @@ class BomController extends Controller
             ->get();
 
         $materials = Product::leftJoinSub($stockSub, 'st', 'st.product_id', '=', 'products.id')
-            ->whereIn('product_type', ['material','BOM'])
+            ->whereIn('product_type', ['material'])
              ->where('products.is_active', 1) // 🔥 TAMBAH INI
             ->select(
                 'products.id',
@@ -124,7 +124,6 @@ class BomController extends Controller
                         'actions' => '
                             <button class="btn btn-sm btn-info js-detail" data-id="'.$r->id.'">Detail</button>
                             <button class="btn btn-sm btn-outline-danger js-del" data-id="'.$r->id.'">Delete</button>
-                            <button class="btn btn-sm btn-success js-produce" data-id="'.$r->id.'">Produce</button>
                         '
                     ];
                 });
@@ -165,8 +164,20 @@ class BomController extends Controller
             'quantities' => ['required','array'],
             'quantities.*' => ['required','numeric','min:0.01'],
         ]);
+        
+        $invalidMaterials = Product::whereIn('id', $r->materials)
+            ->where('product_type', 'BOM')
+            ->exists();
 
-        return DB::transaction(function() use ($r, $user){
+        if ($invalidMaterials) {
+            throw ValidationException::withMessages([
+                'materials' => 'Product type BOM tidak boleh dijadikan material.'
+            ]);
+        }
+
+        $warnings = $this->validateMaterialStock($r->materials, $r->quantities);
+
+        return DB::transaction(function() use ($r, $user, $warnings){
 
             if ($r->product_mode === 'new') {
                 $product = Product::create([
@@ -202,7 +213,8 @@ class BomController extends Controller
 
             return response()->json([
                 'success'=>'BOM created successfully',
-                'id' => $bom->id
+                'id' => $bom->id,
+                'warnings' => $warnings
             ]);            
         });
     }
@@ -250,7 +262,19 @@ public function showPage(Bom $bom)
             'quantities.*' => ['required','numeric','min:0.01'],
         ]);
 
-        return DB::transaction(function() use ($r, $bom, $user){
+        $invalidMaterials = Product::whereIn('id', $r->materials)
+            ->where('product_type', 'BOM')
+            ->exists();
+
+        if ($invalidMaterials) {
+            throw ValidationException::withMessages([
+                'materials' => 'Product type BOM tidak boleh dijadikan material.'
+            ]);
+        }
+
+        $warnings = $this->validateMaterialStock($r->materials, $r->quantities);
+
+        return DB::transaction(function() use ($r, $bom, $user, $warnings){
 
             // 🔥 Update header
             $bom->update([
@@ -271,7 +295,7 @@ public function showPage(Bom $bom)
                 ]);
             }
 
-            return response()->json(['success' => 'BOM updated successfully']);
+            return response()->json(['success' => 'BOM updated successfully','warnings' => $warnings]);
         });
     }
 
@@ -347,6 +371,8 @@ public function produce(Request $r, Bom $bom)
 
             $totalCost = 0;
 
+            $warnings = [];
+
             /* =====================================================
                 1. LOCK & VALIDATE MATERIAL STOCK
             ===================================================== */
@@ -362,10 +388,19 @@ public function produce(Request $r, Bom $bom)
                     ->lockForUpdate()
                     ->first();
 
+                $product = $item->material;
+                $remaining = ($stock->quantity ?? 0) - $qtyUsed;
+
+                // gagal kalau stock tidak cukup
                 if (!$stock || $stock->quantity < $qtyUsed) {
                     throw ValidationException::withMessages([
-                        'stock' => "Stock {$item->material->name} tidak cukup"
+                        'stock' => "{$product->name} stock tidak cukup"
                     ]);
+                }
+
+                // warning kalau mendekati minimum (tetap lanjut)
+                if ($remaining <= $product->stock_minimum) {
+                    $warnings[] = "{$product->name} stock mendekati minimum ({$product->stock_minimum})";
                 }
             }
 
@@ -449,7 +484,8 @@ public function produce(Request $r, Bom $bom)
             ]);
 
             return response()->json([
-                'success' => 'Production executed successfully'
+                'success' => 'Production executed successfully',
+                'warnings' => $warnings
             ]);
         });
 
@@ -469,5 +505,37 @@ public function produce(Request $r, Bom $bom)
         ], 500);
     }
 }
+
+    private function validateMaterialStock(array $materials, array $quantities, int $batch = 1): array
+    {
+        $warnings = [];
+
+        foreach ($materials as $i => $materialId) {
+
+            $product = Product::find($materialId);
+
+            $stock = DB::table('stock_levels')
+                ->where('owner_type', 'pusat')
+                ->where('product_id', $materialId)
+                ->sum('quantity');
+
+            $qtyNeeded = $quantities[$i] * $batch;
+            $remaining = $stock - $qtyNeeded;
+
+            // kalau stock habis / tidak cukup -> gagal
+            if ($stock <= 0 || $stock < $qtyNeeded) {
+                throw ValidationException::withMessages([
+                    'materials' => "{$product->name} stock tidak cukup. Tersedia: {$stock}"
+                ]);
+            }
+
+            // kalau mendekati minimum -> warning
+            if ($remaining <= $product->stock_minimum) {
+                $warnings[] = "{$product->name} stock mendekati batas minimum ({$product->stock_minimum})";
+            }
+        }
+
+        return $warnings;
+    }
 
 }

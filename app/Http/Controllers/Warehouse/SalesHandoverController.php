@@ -28,9 +28,31 @@ class SalesHandoverController extends Controller
      * - Form buat handover baru + kirim OTP pagi
      * - List handover waiting_morning_otp buat verifikasi OTP pagi
      */
+    public function draftBySales($id)
+    {
+        $draft = SalesHandover::where('sales_id', $id)
+            ->where('status', 'draft')
+            ->latest()
+            ->first();
+
+        return response()->json([
+            'handover_id' => $draft?->id
+        ]);
+    }
+
     public function morningForm(Request $request)
     {
         $me = auth()->user();
+        $selectedHandoverId = $request->handover_id;
+
+        $selectedHandover = null;
+
+        if ($selectedHandoverId) {
+            $selectedHandover = SalesHandover::with('items.product')
+                ->where('id', $selectedHandoverId)
+                ->where('status', 'draft')
+                ->first();
+        }
 
         // Warehouses
         $whQuery = Warehouse::query();
@@ -63,7 +85,7 @@ class SalesHandoverController extends Controller
 
         // Handovers menunggu OTP pagi
         $waitingMorning = SalesHandover::with('sales:id,name')
-            ->where('status', 'waiting_morning_otp')
+            ->whereIn('status', ['draft','waiting_morning_otp'])
             ->when($me->warehouse_id, fn ($q) => $q->where('warehouse_id', $me->warehouse_id))
             ->orderBy('handover_date', 'desc')
             ->orderBy('code')
@@ -74,7 +96,9 @@ class SalesHandoverController extends Controller
             'warehouses',
             'salesUsers',
             'products',
-            'waitingMorning'
+            'waitingMorning',
+            'selectedHandoverId',
+            'selectedHandover'
         ));
     }
 
@@ -90,6 +114,7 @@ class SalesHandoverController extends Controller
                 'handover_date'      => ['required', 'date'],
                 'warehouse_id'       => ['required', 'exists:warehouses,id'],
                 'sales_id'           => ['required', 'exists:users,id'],
+                'handover_id' => ['nullable', 'exists:sales_handovers,id'],
                 'items'              => ['required', 'array', 'min:1'],
                 'items.*.product_id' => ['required', 'exists:products,id'],
                 'items.*.qty'        => ['required', 'integer', 'min:1'],
@@ -142,16 +167,31 @@ class SalesHandoverController extends Controller
                 $code = $codePrefix . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
 
                 // Buat header
-                $handover = SalesHandover::create([
-                    'code'          => $code,
-                    'warehouse_id'  => $warehouse->id,
-                    'sales_id'      => $sales->id,
-                    'handover_date' => $date,
-                    'status'        => 'waiting_morning_otp',
-                    'issued_by'     => $me->id,
-                ]);
+                $handover = null;
+
+                if (!empty($data['handover_id'])) {
+                    $handover = SalesHandover::find($data['handover_id']);
+                }
+
+                if (!$handover) {
+                    $handover = SalesHandover::create([
+                        'code'          => $code,
+                        'warehouse_id'  => $warehouse->id,
+                        'sales_id'      => $sales->id,
+                        'handover_date' => $date,
+                        'status'        => 'waiting_morning_otp',
+                        'issued_by'     => $me->id,
+                    ]);
+                } else {
+                    $handover->handover_date = $date;
+                    $handover->status = 'waiting_morning_otp';
+                    $handover->save();
+                }
 
                 // Detail item
+                if (!empty($data['handover_id'])) {
+                    SalesHandoverItem::where('handover_id', $handover->id)->delete();
+                }
                 foreach ($data['items'] as $row) {
                     $product = Product::find($row['product_id']);
                     if (! $product) {

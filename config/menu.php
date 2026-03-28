@@ -99,6 +99,13 @@ return [
             'group' => 'warehouse',
             'icon'  => 'bx bx-check-circle',
         ],
+        [
+            'key'   => 'sales_request_approval',
+            'label' => 'Approval Sales Request',
+            'route' => 'warehouse.stock-requests.index',
+            'group' => 'warehouse',
+            'icon'  => 'bx bx-file-blank',
+        ],
 
         // ================== PROCUREMENT ==================
         [
@@ -151,6 +158,13 @@ return [
             'route'      => 'sales.handover.otps',
             'group'      => 'sales',
             'icon'       => 'bx bx-key',
+        ],
+        [
+            'key'   => 'sales_request',
+            'label' => 'Sales Request',
+            'route' => 'sales-request.index',
+            'group' => 'sales',
+            'icon'  => 'bx bx-cart-download',
         ],
         // ================== MASTER DATA ==================
         [
