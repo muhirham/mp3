@@ -482,11 +482,15 @@ $actions .= '</div>';
             }
 
             if ($fromC->gt($toC)) {
-                return response()-\u003ejson(['error' =\u003e 'The \"to\" date must be \u003e= \"from\" date.'], 422);
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'to' => 'The "to" date must be >= "from" date.',
+                ]);
             }
 
             if ($fromC->format('Y-m') !== $toC->format('Y-m')) {
-                return response()-\u003ejson(['error' =\u003e 'Maximum range is 1 month. \"from\" and \"to\" must be within the same month.'], 422);
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'to' => 'Maximum range is 1 month. "from" and "to" must be within the same month.',
+                ]);
             }
 
             return [$fromC, $toC, $fromC->format('Y-m'), true];
