@@ -117,7 +117,7 @@
                                                 disabled 
                                             @endif>
                                     @endif
-                                        @if (!$canManageRow) disabled @endif>
+                                        @if (!$canManageRow) disabled @endif
                                 </td>
                                 <td>{{ $u->id }}</td>
                                 <td>{{ $u->name }}</td>
