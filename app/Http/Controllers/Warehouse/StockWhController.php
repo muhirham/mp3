@@ -482,15 +482,11 @@ $actions .= '</div>';
             }
 
             if ($fromC->gt($toC)) {
-                throw ValidationException::withMessages([
-                    'to' => 'Tanggal "to" harus >= "from".',
-                ]);
+                return response()-\u003ejson(['error' =\u003e 'The \"to\" date must be \u003e= \"from\" date.'], 422);
             }
 
             if ($fromC->format('Y-m') !== $toC->format('Y-m')) {
-                throw ValidationException::withMessages([
-                    'to' => 'Range maksimal 1 bulan. "from" dan "to" harus di bulan yang sama.',
-                ]);
+                return response()-\u003ejson(['error' =\u003e 'Maximum range is 1 month. \"from\" and \"to\" must be within the same month.'], 422);
             }
 
             return [$fromC, $toC, $fromC->format('Y-m'), true];
@@ -534,7 +530,7 @@ $actions .= '</div>';
 
         if (!empty($inactive)) {
             throw ValidationException::withMessages([
-                'items' => 'Product berikut NONAKTIF dan tidak bisa direquest: '
+                'items' => 'The following products are INACTIVE and cannot be requested: '
                     . implode(', ', $inactive),
             ]);
         }
@@ -590,7 +586,7 @@ $actions .= '</div>';
             }
         });
 
-        return back()->with('success', 'Request restock berhasil dibuat.');
+        return back()->with('success', 'Restock request created successfully.');
     }
 
     /* ================== RECEIVE BARANG ================== */
@@ -640,13 +636,13 @@ $actions .= '</div>';
         }
 
         if (! $hasQty) {
-            return back()->with('error', 'Minimal satu item harus memiliki Qty Good atau Qty Damaged lebih dari 0.');
+            return back()->with('error', 'At least one item must have a Good Qty or Damaged Qty greater than 0.');
         }
 
         // header RR (pakai salah satu baris sebagai anchor)
         $header = DB::table('request_restocks')->where('id', $id)->first();
         if (! $header) {
-            return back()->with('error', 'Restock request tidak ditemukan.');
+            return back()->with('error', 'Restock request not found.');
         }
 
         $hasCode = Schema::hasColumn('request_restocks', 'code');
@@ -665,7 +661,7 @@ $actions .= '</div>';
         $rrRows = $rrQuery->get();
 
         if ($rrRows->isEmpty()) {
-            return back()->with('error', 'Item restock yang dipilih tidak ditemukan.');
+            return back()->with('error', 'The selected restock item was not found.');
         }
 
         $productIds = $rrRows->pluck('product_id')->unique()->all();
@@ -677,7 +673,7 @@ $actions .= '</div>';
 
         if (!empty($inactive)) {
             return back()->with('error',
-                'Tidak bisa menerima barang untuk product NONAKTIF: '
+                'Cannot receive goods for INACTIVE products: '
                 . implode(', ', $inactive)
             );
         }
@@ -731,7 +727,7 @@ $actions .= '</div>';
             $newTotal = $already + $qtyGood + $qtyDamaged;
 
             if ($reqQty > 0 && $newTotal > $reqQty) {
-                return back()->with('error', 'Total penerimaan untuk salah satu item melebihi qty request.');
+                return back()->with('error', 'Total receipt for one or more items exceeds the requested quantity.');
             }
         }
 
@@ -983,11 +979,11 @@ try {
             }
 
             DB::commit();
-            return back()->with('success', 'Penerimaan multi item berhasil disimpan. Stok pusat & warehouse sudah diperbarui.');
+            return back()->with('success', 'Multi-item receipt saved successfully. Central & warehouse stocks have been updated.');
         } catch (\Throwable $e) {
             DB::rollBack();
             report($e);
-            return back()->with('error', 'Gagal menyimpan penerimaan: ' . $e->getMessage());
+            return back()->with('error', 'Failed to save receipt: ' . $e->getMessage());
         }
     }
 
@@ -1006,7 +1002,7 @@ try {
         if (! $row) {
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Request restock tidak ditemukan.',
+                'message' => 'Restock request not found.',
             ], 404);
         }
 
