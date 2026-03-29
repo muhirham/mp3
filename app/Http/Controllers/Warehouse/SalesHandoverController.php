@@ -196,7 +196,7 @@ class SalesHandoverController extends Controller
             if ($activeHandoverCount >= 3) {
                 return back()->withInput()->with(
                     'error',
-                    "Sales {$sales->name} sudah punya 3 handover aktif. Silakan closing salah satu handover sebelum membuat handover baru."
+                    "Sales {$sales->name} already has 3 active handovers. Please close one before creating a new one."
                 );
             }
 
@@ -274,7 +274,7 @@ class SalesHandoverController extends Controller
                     
 
                     if ($discount > $unitPrice) {
-                        throw new \RuntimeException("Diskon melebihi harga jual untuk {$product->name}");
+                        throw new \RuntimeException("Discount exceeds selling price for {$product->name}");
                     }
 
                     $priceAfterDiscount = $unitPrice - $discount;
@@ -302,7 +302,7 @@ class SalesHandoverController extends Controller
                 }
 
                 if (empty($itemsData)) {
-                    throw new \RuntimeException('Minimal harus ada 1 item valid (produk + qty > 0).');
+                    throw new \RuntimeException('At least one valid item is required (product + quantity > 0).');
                 }
 
                 // Generate OTP pagi
@@ -318,11 +318,12 @@ class SalesHandoverController extends Controller
                 DB::rollBack();
 
                 return back()
-                    ->with('error', 'Gagal membuat handover: ' . $e->getMessage())
+                    ->with('error', 'Failed to create handover: ' . $e->getMessage())
                     ->withInput();
             }
 
-            // Kirim email OTP Pagi ke SALES
+            // Pengiriman email dimatikan sesuai request
+            /*
             if ($sales->email) {
                 $lines = [];
                 foreach ($itemsData as $i => $row) {
@@ -357,7 +358,7 @@ class SalesHandoverController extends Controller
         Setelah admin gudang input OTP ini, barang dianggap resmi dibawa sales dan stok gudang dipindah ke stok sales.
 
         Terima kasih.
-        EOT;
+EOT;
 
                 try {
                     Mail::raw($body, function ($message) use ($sales, $handover) {
@@ -371,10 +372,11 @@ class SalesHandoverController extends Controller
                     );
                 }
             }
+            */
 
             return back()->with(
                 'success',
-                "Handover {$handover->code} berhasil dibuat dan OTP pagi sudah dikirim ke email sales."
+                "Handover {$handover->code} created successfully. Morning OTP is ready for use."
             );
     }
     /**
@@ -395,13 +397,13 @@ class SalesHandoverController extends Controller
             ->findOrFail($data['handover_id']);
 
         if ($handover->status !== 'waiting_morning_otp') {
-            return back()->with('error', "Status handover harus 'waiting_morning_otp' untuk verifikasi OTP pagi.");
+            return back()->with('error', "Handover status must be 'waiting_morning_otp' for morning OTP verification.");
         }
 
         [$storedPlain, $storedHash] = $this->splitOtpField($handover->morning_otp_hash);
 
         if (! $storedHash || ! Hash::check($data['otp_code'], $storedHash)) {
-            return back()->with('error', 'OTP pagi tidak valid.');
+            return back()->with('error', 'Invalid morning OTP.');
         }
         if ($handover->discount_set_at) {
          // diskon sudah di-set, lanjut
@@ -441,7 +443,7 @@ class SalesHandoverController extends Controller
                     ->first();
 
                 if (! $whStock || $whStock->quantity < $qty) {
-                    throw new \RuntimeException("Stok gudang tidak cukup untuk produk {$product->name}.");
+                    throw new \RuntimeException("Insufficient warehouse stock for product: {$product->name}.");
                 }
 
                 DB::table('stock_levels')
@@ -513,12 +515,12 @@ class SalesHandoverController extends Controller
         } catch (\Throwable $e) {
             DB::rollBack();
 
-            return back()->with('error', 'Gagal verifikasi OTP pagi: ' . $e->getMessage());
+            return back()->with('error', 'Morning OTP verification failed: ' . $e->getMessage());
         }
 
         return back()->with(
             'success',
-            "OTP pagi valid. Stok sudah dipindah ke sales dan nilai bawaan tersimpan."
+            "Morning OTP verified. Stock successfully moved to sales and initial values saved."
         );
     }
     /**
@@ -537,7 +539,7 @@ class SalesHandoverController extends Controller
 
         // Menu ini cuma buat admin/warehouse
         if (! $isWarehouse && ! $isAdminLike) {
-            abort(403, 'Menu ini hanya untuk admin warehouse.');
+            abort(403, 'This menu is only for warehouse admins.');
         }
 
         // ===== LIST HANDOVER UNTUK DROPDOWN (APPROVAL) =====
@@ -585,7 +587,7 @@ class SalesHandoverController extends Controller
         $me = auth()->user();
 
         if ($handover->sales_id !== $me->id) {
-            abort(403, 'Tidak boleh mengakses handover milik sales lain.');
+            abort(403, 'Access denied. You cannot access another salesperson\'s handover.');
         }
 
         $handover->load(['items.product', 'sales', 'warehouse']);
@@ -631,16 +633,16 @@ class SalesHandoverController extends Controller
         $me = auth()->user();
 
         if ($handover->sales_id !== $me->id) {
-            return back()->with('error', 'Tidak boleh mengubah handover milik sales lain.');
+            return back()->with('error', 'Access denied. You cannot modify another salesperson\'s handover.');
         }
 
         if ($handover->status !== 'on_sales') {
-            return back()->with('error', 'Handover harus berstatus ON_SALES untuk diisi penjualannya.');
+            return back()->with('error', 'Handover must be in ON_SALES status to enter sales data.');
         }
 
         // Kalau sudah pernah diisi oleh sales, lock
         if ($handover->evening_filled_by_sales) {
-            return back()->with('error', 'Data penjualan sudah pernah dikirim. Hubungi admin gudang jika ingin revisi.');
+            return back()->with('error', 'Sales data has already been submitted. Contact warehouse admin for revisions.');
         }
 
         $data = $request->validate([
@@ -657,7 +659,7 @@ class SalesHandoverController extends Controller
 
         if ($transferAmount > 0 && ! $request->hasFile('transfer_proof')) {
             return back()
-                ->with('error', 'Jika ada nominal transfer, bukti transfer wajib diupload.')
+                ->with('error', 'Transfer proof is required if there is a transfer amount.')
                 ->withInput();
         }
 
@@ -682,7 +684,7 @@ class SalesHandoverController extends Controller
                 $qtyRet   = $inputReturned[$item->product_id] ?? 0;
 
                 if ($qtyRet < 0 || $qtyRet > $qtyStart) {
-                    throw new \RuntimeException("Qty kembali tidak valid untuk {$product->name}.");
+                    throw new \RuntimeException("Invalid return quantity for {$product->name}.");
                 }
 
                 $qtySold = max(0, $qtyStart - $qtyRet);
@@ -725,13 +727,13 @@ class SalesHandoverController extends Controller
         } catch (\Throwable $e) {
             DB::rollBack();
 
-            return back()->with('error', 'Gagal menyimpan data penjualan: ' . $e->getMessage())
+            return back()->with('error', 'Failed to save sales data: ' . $e->getMessage())
                          ->withInput();
         }
 
         return back()->with(
             'success',
-            'Data penjualan berhasil disimpan. Menunggu pengecekan & approval admin gudang.'
+            'Sales data saved successfully. Awaiting warehouse admin verification and approval.'
         );
     }
 
@@ -811,11 +813,11 @@ class SalesHandoverController extends Controller
         if (!in_array($view, ['handover','sales','daily'], true)) $view = 'handover';
 
         $statusOptions = [
-            'all'                 => 'Semua Status',
+            'all'                 => 'All Statuses',
             'draft'               => 'Draft',
-            'waiting_morning_otp' => 'Menunggu OTP Pagi',
+            'waiting_morning_otp' => 'Awaiting Morning OTP',
             'on_sales'            => 'On Sales',
-            'waiting_evening_otp' => 'Menunggu Closing (Legacy)',
+            'waiting_evening_otp' => 'Awaiting Closing (Legacy)',
             'closed'              => 'Closed',
             'cancelled'           => 'Cancelled',
         ];
@@ -1411,11 +1413,11 @@ class SalesHandoverController extends Controller
         $status = $request->input('status', 'all');
 
         $statusOptions = [
-            'all'                 => 'Semua Status',
+            'all'                 => 'All Statuses',
             'draft'               => 'Draft',
-            'waiting_morning_otp' => 'Menunggu OTP Pagi',
+            'waiting_morning_otp' => 'Awaiting Morning OTP',
             'on_sales'            => 'On Sales',
-            'waiting_evening_otp' => 'Menunggu OTP Sore',
+            'waiting_evening_otp' => 'Awaiting Evening OTP',
             'closed'              => 'Closed',
             'cancelled'           => 'Cancelled',
         ];
@@ -1511,7 +1513,7 @@ class SalesHandoverController extends Controller
         if (! $this->canWarehouseApprovePayment($handover)) {
             return redirect()
                 ->route('warehouse.sales.reports')
-                ->with('error', 'Handover belum bisa di-approval. Sales belum submit penjualan/payment.');
+                ->with('error', 'Handover cannot be approved. Sales has not submitted sales/payment data.');
         }
 
         $handoverList = SalesHandover::with(['sales', 'warehouse'])
@@ -1527,9 +1529,9 @@ class SalesHandoverController extends Controller
 
         $statusLabelMap = [
             'draft'               => 'Draft',
-            'waiting_morning_otp' => 'Menunggu OTP Pagi',
+            'waiting_morning_otp' => 'Awaiting Morning OTP',
             'on_sales'            => 'On Sales',
-            'waiting_evening_otp' => 'Menunggu OTP Sore',
+            'waiting_evening_otp' => 'Awaiting Evening OTP',
             'closed'              => 'Closed',
             'cancelled'           => 'Cancelled',
         ];
@@ -1571,7 +1573,7 @@ class SalesHandoverController extends Controller
         $me = $request->user();
 
         if (! $this->canWarehouseApprovePayment($handover)) {
-            return back()->with('error', 'Approval ditolak. Sales belum submit penjualan/payment.');
+            return back()->with('error', 'Approval denied. Sales has not submitted sales/payment data.');
         }
 
         $data = $request->validate([
@@ -1648,7 +1650,7 @@ class SalesHandoverController extends Controller
                                     ->first();
 
                                 if (!$salesStock || $salesStock->quantity < $qtySold) {
-                                    throw new \RuntimeException("Stok sales kurang untuk produk {$product->name}.");
+                                    throw new \RuntimeException("Insufficient sales stock for product: {$product->name}.");
                                 }
 
                                 DB::table('stock_levels')
@@ -1688,10 +1690,10 @@ class SalesHandoverController extends Controller
             });
 
         } catch (\Throwable $e) {
-            return back()->with('error', 'Gagal simpan approval: '.$e->getMessage());
+            return back()->with('error', 'Failed to save approval: '.$e->getMessage());
         }
 
-        return back()->with('success', 'Approval payment berhasil disimpan. Jika semua item terjual sudah APPROVED, handover otomatis CLOSED.');
+        return back()->with('success', 'Payment approval saved successfully. Handover will be closed automatically once all sold items are APPROVED.');
     }
     
     public function getActiveCount(User $sales)
