@@ -147,6 +147,6 @@ class StockRequestController extends Controller
 
         return redirect()
             ->route('sales-request.index')
-            ->with('success', 'Request berhasil dibuat');
+            ->with('success', 'Request created successfully');
     }
 }

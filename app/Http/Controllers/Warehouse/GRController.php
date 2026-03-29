@@ -63,7 +63,7 @@ class GRController extends Controller
 
                 // ===== VALIDASI: good + bad ≤ remaining =====
                 if ($qty > $remaining) {
-                    abort(422, "Qty terima melebihi sisa untuk item #{$it->id}");
+                    abort(422, "Receive quantity exceeds remaining for item #{$it->id}");
                 }
 
                 $grCode = 'GR-' . now()->format('Ymd') . '-' . str_pad(mt_rand(1, 9999), 4, '0', STR_PAD_LEFT);
@@ -209,7 +209,7 @@ class GRController extends Controller
             $this->recalcPoFromReceipts($po->id);
         });
 
-        return back()->with('success', 'Goods Received tersimpan & stok diperbarui.');
+        return back()->with('success', 'Goods Received saved & stock updated.');
     }
 
     /**
@@ -308,7 +308,7 @@ class GRController extends Controller
             ->exists();
 
         if ($exists) {
-            return back()->with('error', 'Sudah ada permintaan hapus GR ini yang masih pending.');
+            return back()->with('error', 'A pending delete request already exists for this GR.');
         }
 
         GrDeleteRequest::create([
@@ -319,7 +319,7 @@ class GRController extends Controller
             'reason'             => $data['reason'],
         ]);
 
-        return back()->with('success', 'Permintaan hapus GR sudah dikirim untuk approval.');
+        return back()->with('success', 'GR delete request sent for approval.');
     }
 
     /* ==========================================================
@@ -334,7 +334,7 @@ class GRController extends Controller
         ]);
 
         if ($grReq->status !== 'pending') {
-            return back()->with('error', 'Permintaan ini sudah diproses sebelumnya.');
+            return back()->with('error', 'This request has already been processed.');
         }
 
         if ($data['action'] === 'reject') {
@@ -343,7 +343,7 @@ class GRController extends Controller
             $grReq->approval_note = $data['approval_note'] ?? null;
             $grReq->save();
 
-            return back()->with('success', 'Permintaan hapus GR ditolak.');
+            return back()->with('success', 'GR delete request rejected.');
         }
 
         // ============= APPROVE (rollback stok & buka PO) =============
@@ -414,6 +414,6 @@ class GRController extends Controller
             $grReq->save();
         });
 
-        return back()->with('success', 'GR berhasil dihapus, stok & status PO sudah diperbarui.');
+        return back()->with('success', 'GR deleted successfully, stock & PO status updated.');
     }
 }
