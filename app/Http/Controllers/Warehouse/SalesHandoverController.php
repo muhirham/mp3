@@ -760,7 +760,15 @@ EOT;
             $discount = (int) ($it->discount_per_unit ?? 0);
 
             if ($discount > 0) {
-                return (int) ($it->line_total_after_discount ?? 0);
+                // Prioritaskan kolom yang sudah tersimpan di DB
+                $afterDisc = (int) ($it->line_total_after_discount ?? 0);
+                if ($afterDisc > 0) {
+                    return $afterDisc;
+                }
+                // Fallback: hitung manual dari qty_sold × (unit_price - discount)
+                // Untuk data lama sebelum fix ini diterapkan
+                $netPrice = max(0, (int) ($it->unit_price ?? 0) - $discount);
+                return (int) ($it->qty_sold ?? 0) * $netPrice;
             }
 
             return (int) ($it->line_total_sold ?? 0);
@@ -973,10 +981,23 @@ EOT;
                 $salesLabel = optional($h->sales)->name ?? ('Sales #'.$h->sales_id);
 
                 $dispatched = (int) ($h->total_dispatched_amount ?? 0);
-                $original = $this->calcOriginalSold($h);
-                $real     = $this->calcRealSold($h);
-                $discount = max(0, $original - $real);
-                $diff     = max(0, $dispatched - $real);
+                
+                // Kalkulasi barang dibawa: (Harga Asli & Diskon) langsung tampil full potensi
+                $originalStart = 0;
+                $discountStart = 0;
+                
+                if (! $h->relationLoaded('items')) {
+                    $h->load('items');
+                }
+                
+                foreach ($h->items as $it) {
+                    $originalStart += (int) ($it->line_total_start ?? ((int) $it->qty_start * (int) $it->unit_price));
+                    $discountStart += (int) ($it->discount_total ?? ((int) $it->qty_start * (int) $it->discount_per_unit));
+                }
+
+                $real = $this->calcRealSold($h);
+                // Selisih Stok Aktual: Total Nilai Dibawa (After Disc) - Terjual
+                $diff = max(0, $dispatched - $real);
 
                 $stLabel = $statusOptions[$h->status] ?? $h->status;
 
@@ -999,11 +1020,12 @@ EOT;
                     'status_label'       => $stLabel,
                     'status_badge_class' => $badgeClass,
                     'amount_dispatched'  => $this->formatRp($dispatched),
-                    'amount_original' => $this->formatRp($original),
-                    'amount_sold'     => $this->formatRp($real),
-                    'amount_discount' => $this->formatRp($discount),
-                    'amount_diff'      => $this->formatRp(max(0, $dispatched - $real)),
-                    
+                    // Harga Asli dan Diskon dimunculkan langsung (Potensi barang dibawa)
+                    'amount_original'    => $this->formatRp($originalStart),
+                    'amount_discount'    => $this->formatRp($discountStart > 0 ? $discountStart : 0),
+                    // Terjual dan Selisih Stok hanya muncul kalau sudah closed
+                    'amount_sold'        => $h->status === 'closed' ? $this->formatRp($real) : null,
+                    'amount_diff'        => $h->status === 'closed' ? $this->formatRp($diff) : null,
                 ];
             }
 

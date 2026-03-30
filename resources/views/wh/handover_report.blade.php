@@ -614,8 +614,8 @@
 
                     if (canSeeMargin) {
                         marginCols = `
-      <td class="text-end text-muted">${r.amount_original}</td>
-      <td class="text-end text-danger">-${r.amount_discount}</td>
+      <td class="text-end text-muted">${r.amount_original ?? '-'}</td>
+      <td class="text-end text-danger">${r.amount_discount != null ? '-' + r.amount_discount : '-'}</td>
     `;
                     }
 
@@ -628,9 +628,9 @@
       <td>${r.sales}</td>
       <td><span class="badge ${r.status_badge_class}">${r.status_label}</span></td>
       <td class="text-end">${r.amount_dispatched}</td>
-      <td class="text-end fw-bold">${r.amount_sold}</td>
+      <td class="text-end fw-bold">${r.amount_sold ?? '<span class="text-muted small">—</span>'}</td>
       ${marginCols}
-      <td class="text-end">${r.amount_diff}</td>
+      <td class="text-end">${r.amount_diff ?? '<span class="text-muted small">—</span>'}</td>
       <td class="text-end">
         <button type="button" class="btn btn-sm btn-outline-primary btn-detail" data-id="${r.id}">
           Detail
@@ -812,16 +812,16 @@
                   <td class="text-end">
                     ${hasDiscount ? formatRp(row.discount_per_unit) : '-'}
                   </td>
-              <!-- HARGA SETELAH DISKON -->
+              <!-- HARGA SETELAH DISKON (harga satuan, bukan line total) -->
               <td class="text-end">
                 ${hasDiscount
-                  ? formatRp(row.unit_price_after_discount)
-                  : formatRp(row.line_total_sold)}
+                  ? formatRp(row.unit_price_after_discount || (row.unit_price - row.discount_per_unit))
+                  : formatRp(row.unit_price || 0)}
               </td>
 
-              <!-- NILAI TERJUAL -->
+              <!-- NILAI TERJUAL: tampil hanya kalau qty_sold > 0 -->
               <td class="text-end fw-semibold">
-                ${formatRp(row.line_total_sold || 0)}
+                ${(row.qty_sold ?? 0) > 0 ? formatRp(row.line_total_sold || 0) : formatRp(0)}
               </td>
             </tr>
             `;
@@ -849,11 +849,11 @@
             </div>
             <div class="col-md-4">
               <div class="fw-semibold text-muted small">Nilai Terjual</div>
-              <div>${formatRp(h.total_sold)}</div>
+              <div>${h.status === 'closed' ? formatRp(h.total_sold) : '<span class="text-muted small">— belum closed —</span>'}</div>
             </div>
             <div class="col-md-4">
               <div class="fw-semibold text-muted small">Nilai Sisa Stok (estimasi)</div>
-              <div>${formatRp(h.selisih_stock_value || 0)}</div>
+              <div>${h.status === 'closed' ? formatRp(h.selisih_stock_value || 0) : '<span class="text-muted small">— belum closed —</span>'}</div>
             </div>
           </div>
 

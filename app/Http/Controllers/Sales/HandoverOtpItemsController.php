@@ -236,9 +236,15 @@ class HandoverOtpItemsController extends Controller
             return back()->with('error', 'Payment cannot be filled for this handover status.');
         }
 
-        // wajib OTP verified
+        // wajib OTP verified (bisa dari session atau dari database jika di-bypass WH Admin)
         $sessionKey = 'sales_handover_otp_verified_'.$handover->id;
-        if (!$request->session()->get($sessionKey, false)) {
+        $isOtpVerified = $request->session()->get($sessionKey, false)
+            || (
+                in_array($handover->status, ['on_sales', 'waiting_evening_otp'], true)
+                && !is_null($handover->morning_otp_verified_at)
+            );
+
+        if (!$isOtpVerified) {
             return back()->with('error', 'Morning OTP has not been verified.');
         }
 
@@ -346,6 +352,13 @@ class HandoverOtpItemsController extends Controller
                     $item->qty_sold        = $qtySold;
                     $item->qty_returned    = $qtyReturned;
                     $item->line_total_sold = $lineSold;
+
+                    // ====== SIMPAN KALKULASI DISKON (FIX: kolom ini selama ini selalu 0) ======
+                    $disc     = (int) ($item->discount_per_unit ?? 0);
+                    $netPrice = max(0, $unitPrice - $disc);
+                    $item->unit_price_after_discount = $netPrice;
+                    $item->line_total_after_discount = $qtySold * $netPrice;
+                    $item->discount_total            = $disc * $qtySold;
 
                     // (optional aman) pastiin line_total_start kebentuk kalau masih 0
                     if ((int) $item->line_total_start <= 0) {
