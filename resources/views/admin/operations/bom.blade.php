@@ -292,6 +292,7 @@
             const dtUrl = @json(route('bom.datatable'));
             const storeUrl = @json(route('bom.store'));
             const nextCodeUrl = @json(route('bom.next_code'));
+            const deletePreviewBaseUrl = @json(url('/bom'));
             const canProduceBom = @json($canProduceBom);
             const csrf = $('meta[name="csrf-token"]').attr('content');
             let isSavingBom = false;
@@ -415,7 +416,8 @@
                     <option value="">Choose material</option>
                     @foreach ($materials as $m)
                         <option value="{{ $m->id }}"
-    data-cost="{{ $m->standard_cost ?? 0 }}">
+    data-cost="{{ $m->standard_cost ?? 0 }}"
+    data-is-card="{{ str_contains(strtolower($m->name), 'kartu') ? 1 : 0 }}">
     {{ $m->name }} (Stock: {{ number_format($m->stock) }})
 </option>
 
@@ -436,6 +438,30 @@
 
             $(document).on('click', '.btnRemove', function() {
                 $(this).closest('tr').remove();
+            });
+
+            function syncMaterialQtyRule($row) {
+                const $select = $row.find('select[name="materials[]"]');
+                const $qtyInput = $row.find('input[name="quantities[]"]');
+                const isCard = String($select.find('option:selected').data('is-card') || '0') === '1';
+
+                if (isCard) {
+                    $qtyInput.val(1);
+                    $qtyInput.attr('min', 1);
+                    $qtyInput.attr('max', 1);
+                    $qtyInput.attr('step', 1);
+                    $qtyInput.prop('readonly', true);
+                    return;
+                }
+
+                $qtyInput.removeAttr('max');
+                $qtyInput.attr('min', 1);
+                $qtyInput.attr('step', 'any');
+                $qtyInput.prop('readonly', false);
+            }
+
+            $(document).on('change', 'select[name="materials[]"]', function() {
+                syncMaterialQtyRule($(this).closest('tr'));
             });
 
             /* =========================================================
@@ -571,43 +597,71 @@
             $(document).on('click', '.js-del', function() {
 
                 const id = $(this).data('id');
+                $.get(`${deletePreviewBaseUrl}/${id}/delete-preview`)
+                    .done(function(preview) {
+                        const returnLines = (preview.returns || [])
+                            .filter(item => Number(item.return_qty || 0) > 0)
+                            .map(item => `<li>${item.material_name}: <strong>${Number(item.return_qty).toLocaleString()}</strong></li>`)
+                            .join('');
 
-                Swal.fire({
-                    title: 'Delete BOM?',
-                    text: 'Data cannot be recovered!',
-                    icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonText: 'Yes, delete!',
-                    cancelButtonText: 'Cancel'
-                }).then((result) => {
+                        const returnHtml = returnLines
+                            ? `<ul class="text-start mb-0">${returnLines}</ul>`
+                            : '<div class="text-muted">Tidak ada material yang kembali karena stok produk jadi sudah 0.</div>';
 
-                    if (!result.isConfirmed) return;
+                        Swal.fire({
+                            title: 'Delete BOM?',
+                            icon: 'warning',
+                            html: `
+                                <div class="text-start">
+                                    <div class="mb-2"><strong>BOM:</strong> ${preview.bom_code}</div>
+                                    <div class="mb-2"><strong>Product:</strong> ${preview.product_name}</div>
+                                    <div class="mb-2"><strong>Stok product saat ini:</strong> ${Number(preview.current_finished_stock_qty || 0).toLocaleString()}</div>
+                                    <div class="mb-2"><strong>Total hasil produksi dari BOM ini:</strong> ${Number(preview.total_produced_qty || 0).toLocaleString()}</div>
+                                    <div class="mb-2"><strong>Stok product yang akan diserap:</strong> ${Number(preview.finished_stock_qty || 0).toLocaleString()}</div>
+                                    <div class="mb-2"><strong>Material yang akan balik ke stok owner ini:</strong></div>
+                                    ${returnHtml}
+                                </div>
+                            `,
+                            showCancelButton: true,
+                            confirmButtonText: 'Yes, delete!',
+                            cancelButtonText: 'Cancel'
+                        }).then((result) => {
+                            if (!result.isConfirmed) return;
 
-                    $.ajax({
-                        url: '/bom/' + id,
-                        type: 'POST',
-                        data: {
-                            _method: 'DELETE'
-                        },
-                        success: function(res) {
+                            $.ajax({
+                                url: '/bom/' + id,
+                                type: 'POST',
+                                data: {
+                                    _method: 'DELETE'
+                                },
+                                success: function(res) {
 
-                            table.ajax.reload(null, false);
+                                    table.ajax.reload(null, false);
 
-                            Swal.fire({
-                                icon: 'success',
-                                title: res.success,
-                                timer: 1500,
-                                showConfirmButton: false
+                                    Swal.fire({
+                                        icon: 'success',
+                                        title: res.success,
+                                        timer: 1800,
+                                        showConfirmButton: false
+                                    });
+                                },
+                                error: function(xhr) {
+                                    const msg = xhr.responseJSON?.message || 'Failed to delete data';
+                                    Swal.fire({
+                                        icon: 'error',
+                                        title: msg
+                                    });
+                                }
                             });
-                        },
-                        error: function() {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Failed to delete data'
-                            });
-                        }
+                        });
+                    })
+                    .fail(function(xhr) {
+                        const msg = xhr.responseJSON?.message || 'Failed to load delete preview';
+                        Swal.fire({
+                            icon: 'error',
+                            title: msg
+                        });
                     });
-                });
             });
 
             /* =========================================================

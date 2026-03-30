@@ -202,6 +202,8 @@ class BomController extends Controller
             ]);
         }
 
+        $this->validateCardMaterials($r->materials, $r->quantities);
+
         $warnings = $this->validateMaterialStock($r->materials, $r->quantities);
 
         return DB::transaction(function() use ($r, $user, $warnings){
@@ -305,6 +307,8 @@ class BomController extends Controller
             ]);
         }
 
+        $this->validateCardMaterials($r->materials, $r->quantities);
+
         $warnings = $this->validateMaterialStock($r->materials, $r->quantities);
 
         return DB::transaction(function() use ($r, $bom, $user, $warnings){
@@ -337,8 +341,78 @@ class BomController extends Controller
     {
         $this->ensureBomPermission('bom.delete');
 
-        $bom->delete();
-        return response()->json(['success'=>'BOM deleted']);
+        try {
+            DB::transaction(function () use ($bom) {
+                $preview = $this->buildDestroyPreview($bom, true);
+
+                if ($preview['finished_stock_qty'] > 0) {
+                    foreach ($preview['returns'] as $return) {
+                        $materialStock = DB::table('stock_levels')
+                            ->where('owner_type', $preview['owner']['type'])
+                            ->where('owner_id', $preview['owner']['id'])
+                            ->where('product_id', $return['material_id'])
+                            ->lockForUpdate()
+                            ->first();
+
+                        if ($materialStock) {
+                            DB::table('stock_levels')
+                                ->where('id', $materialStock->id)
+                                ->update([
+                                    'quantity'   => $materialStock->quantity + $return['return_qty'],
+                                    'updated_at' => now(),
+                                ]);
+                        } else {
+                            DB::table('stock_levels')->insert([
+                                'owner_type' => $preview['owner']['type'],
+                                'owner_id'   => $preview['owner']['id'],
+                                'product_id' => $return['material_id'],
+                                'quantity'   => $return['return_qty'],
+                                'created_at' => now(),
+                                'updated_at' => now(),
+                            ]);
+                        }
+                    }
+
+                    if ($preview['finished_stock_row']) {
+                        DB::table('stock_levels')
+                            ->where('id', $preview['finished_stock_row']->id)
+                            ->update([
+                                'quantity'   => $preview['finished_stock_row']->quantity - $preview['finished_stock_qty'],
+                                'updated_at' => now(),
+                            ]);
+                    }
+                }
+
+                $bom->delete();
+            });
+
+            return response()->json(['success'=>'BOM deleted and remaining material stock restored']);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'message' => collect($e->errors())->flatten()->first() ?: 'BOM gagal dihapus',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Throwable $e) {
+            Log::error('Delete BOM error: ' . $e->getMessage());
+
+            return response()->json([
+                'message' => 'Gagal menghapus BOM'
+            ], 500);
+        }
+    }
+
+    public function destroyPreview(Bom $bom)
+    {
+        $this->ensureBomPermission('bom.delete');
+
+        try {
+            return response()->json($this->buildDestroyPreview($bom));
+        } catch (ValidationException $e) {
+            return response()->json([
+                'message' => collect($e->errors())->flatten()->first() ?: 'Preview delete gagal',
+                'errors' => $e->errors(),
+            ], 422);
+        }
     }
 
     public function nextCode()
@@ -598,6 +672,85 @@ public function produce(Request $r, Bom $bom)
         }
 
         return $warnings;
+    }
+
+    private function validateCardMaterials(array $materials, array $quantities): void
+    {
+        $materialProducts = Product::whereIn('id', $materials)
+            ->get(['id', 'name'])
+            ->keyBy('id');
+
+        foreach ($materials as $i => $materialId) {
+            $product = $materialProducts->get((int) $materialId);
+
+            if (! $product) {
+                continue;
+            }
+
+            $qty = (float) ($quantities[$i] ?? 0);
+
+            if ($this->isCardMaterial($product) && $qty !== 1.0) {
+                throw ValidationException::withMessages([
+                    'quantities.' . $i => "{$product->name} wajib qty 1 per batch.",
+                ]);
+            }
+        }
+    }
+
+    private function isCardMaterial(Product $product): bool
+    {
+        return str_contains(strtolower((string) $product->name), 'kartu');
+    }
+
+    private function buildDestroyPreview(Bom $bom, bool $lockRows = false): array
+    {
+        $owner = $this->resolveOwner();
+
+        $bom->loadMissing('items.material', 'product', 'productions');
+
+        $finishedStockQuery = DB::table('stock_levels')
+            ->where('owner_type', $owner['type'])
+            ->where('owner_id', $owner['id'])
+            ->where('product_id', $bom->product_id);
+
+        if ($lockRows) {
+            $finishedStockQuery->lockForUpdate();
+        }
+
+        $finishedStockRow = $finishedStockQuery->first();
+        $currentFinishedStockQty = (int) ($finishedStockRow->quantity ?? 0);
+        $totalProducedQty = (int) $bom->productions->sum(function ($production) use ($bom) {
+            return ((int) $production->production_qty) * max(1, (int) $bom->output_qty);
+        });
+        $finishedStockQty = min($currentFinishedStockQty, $totalProducedQty);
+
+        $outputQty = max(1, (int) $bom->output_qty);
+        $returns = [];
+
+        foreach ($bom->items as $item) {
+            $returnQty = $finishedStockQty > 0
+                ? (int) round(($item->quantity / $outputQty) * $finishedStockQty)
+                : 0;
+
+            $returns[] = [
+                'material_id' => $item->material_id,
+                'material_name' => $item->material?->name ?? 'Unknown Material',
+                'qty_per_output' => (float) $item->quantity,
+                'return_qty' => $returnQty,
+            ];
+        }
+
+        return [
+            'owner' => $owner,
+            'bom_id' => $bom->id,
+            'bom_code' => $bom->bom_code,
+            'product_name' => $bom->product?->name ?? '-',
+            'current_finished_stock_qty' => $currentFinishedStockQty,
+            'total_produced_qty' => $totalProducedQty,
+            'finished_stock_qty' => $finishedStockQty,
+            'finished_stock_row' => $finishedStockRow,
+            'returns' => $returns,
+        ];
     }
 
 }

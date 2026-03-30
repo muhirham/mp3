@@ -625,6 +625,10 @@ Route::post('/warehouse/stock-requests/{id}/reject', [StockRequestApprovalContro
         ->name('bom.destroy')
         ->middleware('menu:bom');
 
+    Route::get('/bom/{bom}/delete-preview', [BomController::class, 'destroyPreview'])
+        ->name('bom.destroy_preview')
+        ->middleware('menu:bom');
+
     Route::get('/bom/next-code', [BomController::class,'nextCode'])
         ->name('bom.next_code')
         ->middleware('menu:bom');
