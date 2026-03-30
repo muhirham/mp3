@@ -236,9 +236,15 @@ class HandoverOtpItemsController extends Controller
             return back()->with('error', 'Payment cannot be filled for this handover status.');
         }
 
-        // wajib OTP verified
+        // wajib OTP verified (bisa dari session atau dari database jika di-bypass WH Admin)
         $sessionKey = 'sales_handover_otp_verified_'.$handover->id;
-        if (!$request->session()->get($sessionKey, false)) {
+        $isOtpVerified = $request->session()->get($sessionKey, false)
+            || (
+                in_array($handover->status, ['on_sales', 'waiting_evening_otp'], true)
+                && !is_null($handover->morning_otp_verified_at)
+            );
+
+        if (!$isOtpVerified) {
             return back()->with('error', 'Morning OTP has not been verified.');
         }
 
