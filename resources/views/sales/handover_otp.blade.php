@@ -3,8 +3,8 @@
 @push('styles')
     <style>
         /* ===============================
-       TABLE COMPACT + ALIGN FIX
-    ================================ */
+           TABLE COMPACT + ALIGN FIX
+        ================================ */
 
         #itemsTable {
             font-size: 12px;
@@ -73,8 +73,8 @@
         }
 
         /* ===============================
-       MOBILE OPTIMIZATION UPGRADE
-    ================================ */
+           MOBILE OPTIMIZATION UPGRADE
+        ================================ */
 
         /* Card info lebih rapi di mobile */
         @media (max-width: 768px) {
@@ -239,7 +239,8 @@
                                 @foreach ($handovers as $handoverOption)
                                     @php
                                         $statusText =
-                                            $statusLabelMap[$handoverOption->status] ?? strtoupper($handoverOption->status);
+                                            $statusLabelMap[$handoverOption->status] ??
+                                            strtoupper($handoverOption->status);
                                         $isVerifiedOption =
                                             $handoverOption->status !== 'waiting_morning_otp' &&
                                             (session('sales_handover_otp_verified_' . $handoverOption->id, false) ||
@@ -247,7 +248,8 @@
                                                     !is_null($handoverOption->morning_otp_verified_at)));
                                     @endphp
                                     <option value="{{ $handoverOption->id }}" @selected(($handover?->id ?? null) === $handoverOption->id)>
-                                        {{ $handoverOption->code }} - {{ optional($handoverOption->handover_date)->format('Y-m-d') }}
+                                        {{ $handoverOption->code }} -
+                                        {{ optional($handoverOption->handover_date)->format('Y-m-d') }}
                                         - {{ $statusText }}
                                         {{ $isVerifiedOption ? '- OTP OK' : '- OTP BELUM' }}
                                     </option>
@@ -305,11 +307,7 @@
                             </div>
                         </div>
                         <div class="col-md-4 mb-2">
-                            @if (
-                                in_array($handover->status, ['waiting_morning_otp', 'on_sales'], true) &&
-                                    !$isOtpVerified &&
-                                    $items->isEmpty()
-                            )
+                            @if (in_array($handover->status, ['waiting_morning_otp', 'on_sales'], true) && !$isOtpVerified && $items->isEmpty())
                                 <button type="button" class="btn btn-sm btn-warning" id="btnInputOtp">
                                     Enter OTP
                                 </button>
@@ -468,7 +466,8 @@
 
                                                 {{-- QTY BAYAR --}}
                                                 <td data-label="Payment Qty">
-                                                    <input type="number" class="form-control form-control-sm js-qty-bayar"
+                                                    <input type="number"
+                                                        class="form-control form-control-sm js-qty-bayar"
                                                         name="items[{{ $row->id }}][payment_qty]" min="0"
                                                         max="{{ $maxQty }}"
                                                         value="{{ old("items.$row->id.payment_qty", $row->payment_qty) }}"
