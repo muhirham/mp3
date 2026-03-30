@@ -97,6 +97,9 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('products/next-code', [ProductController::class, 'nextCode'])
         ->name('products.next_code')
         ->middleware('menu:products');
+    Route::get('products/{product}/warehouse-targets', [ProductController::class, 'warehouseTargets'])
+        ->name('products.warehouse_targets')
+        ->middleware('menu:products');
     Route::resource('products', ProductController::class)
         ->except(['create', 'edit', 'show'])
         ->middleware('menu:products');

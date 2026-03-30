@@ -119,7 +119,8 @@ class StockLevelController extends Controller
 
             // Base query
             $base = DB::table('products')
-                ->joinSub($stockSub, 'st', 'st.product_id', '=', 'products.id');
+                ->joinSub($stockSub, 'st', 'st.product_id', '=', 'products.id')
+                ->whereNull('products.deleted_at');
 
             if ($hasPackages) {
                 $base->leftJoin('packages as pk', 'pk.id', '=', 'products.package_id');
@@ -177,6 +178,7 @@ class StockLevelController extends Controller
             // ==== Total & filtered ====
             $totalBase = DB::table('stock_levels as sl')
                 ->join('products', 'products.id', '=', 'sl.product_id')
+                ->whereNull('products.deleted_at')
                 ->where('sl.owner_type', 'warehouse')
                 ->when($warehouseId, fn($q) => $q->where('sl.owner_id', $warehouseId))
                 ->groupBy('sl.product_id');

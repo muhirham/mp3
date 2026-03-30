@@ -7,12 +7,14 @@ use App\Models\Product;
 use App\Models\Category;
 use App\Models\Supplier;
 use App\Models\Package;
+use App\Models\Warehouse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class ProductController extends Controller
 {
@@ -44,6 +46,10 @@ class ProductController extends Controller
             ->orderBy('package_name')
             ->get();
 
+        $warehouses = Warehouse::select('id', 'warehouse_name')
+            ->orderBy('warehouse_name')
+            ->get();
+
         $nextProductCode = $this->generateNextCode();
 
         // SUMMARY
@@ -53,6 +59,7 @@ class ProductController extends Controller
             'categories',
             'suppliers',
             'packages',
+            'warehouses',
             'nextProductCode',
         ));
     }
@@ -303,11 +310,31 @@ public function datatable(Request $request)
             'product_type'     => ['required','in:material,BOM,normal'],
             'is_active'        => ['nullable','boolean'],
             'stock_minimum' => ['nullable','integer','min:0'],
+            'target_all_warehouses' => ['nullable', 'boolean'],
+            'target_warehouse_ids' => ['nullable', 'array'],
+            'target_warehouse_ids.*' => ['integer', 'exists:warehouses,id'],
 
         ]);
 
+        if (($data['product_type'] ?? null) === 'BOM' && ! $request->boolean('target_all_warehouses')) {
+            $request->validate([
+                'target_warehouse_ids' => ['required', 'array', 'min:1'],
+            ]);
+        }
+
         $data['is_active'] = $request->boolean('is_active', true);
-        Product::create($data);
+        unset($data['target_all_warehouses'], $data['target_warehouse_ids']);
+
+        $product = Product::create($data);
+
+        if ($product->product_type === 'BOM') {
+            $this->createBomWarehouseStocks(
+                $product->id,
+                $request->boolean('target_all_warehouses'),
+                $request->input('target_warehouse_ids', [])
+            );
+        }
+
         return response()->json(['success' => 'Product created successfully.']);
     }
 
@@ -332,6 +359,9 @@ public function datatable(Request $request)
             'product_type'     => ['required','in:material,BOM,normal'],
             'is_active'        => ['nullable','boolean'],
             'stock_minimum' => ['nullable','integer','min:0'],
+            'target_all_warehouses' => ['nullable', 'boolean'],
+            'target_warehouse_ids' => ['nullable', 'array'],
+            'target_warehouse_ids.*' => ['integer', 'exists:warehouses,id'],
 
         ]);
 
@@ -346,15 +376,70 @@ public function datatable(Request $request)
                 'error' => 'Harga beli & harga jual tidak bisa diubah dari sini. Silakan gunakan menu Adjustment untuk mengubah harga.',
             ], 422);
         }
+
+        if (($data['product_type'] ?? null) === 'BOM' && ! $request->boolean('target_all_warehouses')) {
+            $request->validate([
+                'target_warehouse_ids' => ['required', 'array', 'min:1'],
+            ]);
+        }
+
+        $targetAllWarehouses = $request->boolean('target_all_warehouses');
+        $targetWarehouseIds = $request->input('target_warehouse_ids', []);
+
+        unset($data['target_all_warehouses'], $data['target_warehouse_ids']);
+
         $data['is_active'] = $request->boolean('is_active');
         $product->update($data);
 
-        return response()->json(['success' => 'Product updated successfully.']);
+        $warning = null;
+
+        if ($product->product_type === 'BOM') {
+            $warning = $this->syncBomWarehouseStocks(
+                $product->id,
+                $targetAllWarehouses,
+                $targetWarehouseIds
+            );
+        }
+
+        return response()->json([
+            'success' => 'Product updated successfully.',
+            'warning' => $warning,
+        ]);
     }
 
     public function destroy(Product $product)
     {
         $this->ensureProductPermission('products.delete');
+
+        if (Schema::hasTable('stock_levels')) {
+            $totalStock = (int) DB::table('stock_levels')
+                ->where('product_id', $product->id)
+                ->sum('quantity');
+
+            if ($totalStock > 0) {
+                return response()->json([
+                    'message' => "Product tidak bisa dihapus karena stoknya masih ada ({$totalStock}).",
+                ], 422);
+            }
+        }
+
+        if ($product->usedInBomItems()->exists()) {
+            return response()->json([
+                'message' => 'Product tidak bisa dihapus karena masih dipakai sebagai material di BOM.',
+            ], 422);
+        }
+
+        if ($product->bom()->exists()) {
+            return response()->json([
+                'message' => 'Product tidak bisa dihapus karena masih terdaftar sebagai finished product di BOM.',
+            ], 422);
+        }
+
+        if ($product->productionTransactions()->exists()) {
+            return response()->json([
+                'message' => 'Product tidak bisa dihapus karena sudah punya histori production.',
+            ], 422);
+        }
 
         $product->delete();
         return response()->json(['success' => 'Product deleted successfully.']);
@@ -365,6 +450,29 @@ public function datatable(Request $request)
         $this->ensureProductPermission('products.create');
 
         return response()->json(['next_code' => $this->generateNextCode()]);
+    }
+
+    public function warehouseTargets(Product $product)
+    {
+        $this->ensureProductPermission('products.update');
+
+        $rows = DB::table('stock_levels as sl')
+            ->join('warehouses as w', 'w.id', '=', 'sl.owner_id')
+            ->where('sl.owner_type', 'warehouse')
+            ->where('sl.product_id', $product->id)
+            ->select('w.id', 'w.warehouse_name', 'sl.quantity')
+            ->orderBy('w.warehouse_name')
+            ->get();
+
+        $allWarehouseIds = Warehouse::query()->pluck('id')->map(fn($id) => (int) $id)->all();
+        $selectedWarehouseIds = $rows->pluck('id')->map(fn($id) => (int) $id)->all();
+
+        return response()->json([
+            'selected_warehouse_ids' => $selectedWarehouseIds,
+            'all_selected' => !empty($allWarehouseIds) && empty(array_diff($allWarehouseIds, $selectedWarehouseIds)),
+            'locked_warehouse_ids' => $rows->where('quantity', '>', 0)->pluck('id')->map(fn($id) => (int) $id)->all(),
+            'rows' => $rows,
+        ]);
     }
 
     private function generateNextCode(): string
@@ -384,5 +492,88 @@ public function datatable(Request $request)
         }
 
         return $prefix . str_pad($num + 1, 3, '0', STR_PAD_LEFT);
+    }
+
+    private function createBomWarehouseStocks(int $productId, bool $allWarehouses, array $warehouseIds): void
+    {
+        if (! Schema::hasTable('stock_levels')) {
+            return;
+        }
+
+        $targetWarehouseIds = $allWarehouses
+            ? Warehouse::query()->pluck('id')->all()
+            : array_values(array_unique(array_map('intval', $warehouseIds)));
+
+        foreach ($targetWarehouseIds as $warehouseId) {
+            $exists = DB::table('stock_levels')
+                ->where('owner_type', 'warehouse')
+                ->where('owner_id', $warehouseId)
+                ->where('product_id', $productId)
+                ->exists();
+
+            if ($exists) {
+                DB::table('stock_levels')
+                    ->where('owner_type', 'warehouse')
+                    ->where('owner_id', $warehouseId)
+                    ->where('product_id', $productId)
+                    ->update([
+                        'updated_at' => now(),
+                    ]);
+
+                continue;
+            }
+
+            DB::table('stock_levels')->insert([
+                'owner_type' => 'warehouse',
+                'owner_id' => $warehouseId,
+                'product_id' => $productId,
+                'quantity' => 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+    }
+
+    private function syncBomWarehouseStocks(int $productId, bool $allWarehouses, array $warehouseIds): ?string
+    {
+        if (! Schema::hasTable('stock_levels')) {
+            return null;
+        }
+
+        $targetWarehouseIds = $allWarehouses
+            ? Warehouse::query()->pluck('id')->map(fn($id) => (int) $id)->all()
+            : array_values(array_unique(array_map('intval', $warehouseIds)));
+
+        $this->createBomWarehouseStocks($productId, false, $targetWarehouseIds);
+
+        $existingRows = DB::table('stock_levels as sl')
+            ->join('warehouses as w', 'w.id', '=', 'sl.owner_id')
+            ->where('sl.owner_type', 'warehouse')
+            ->where('sl.product_id', $productId)
+            ->select('sl.id', 'sl.owner_id', 'sl.quantity', 'w.warehouse_name')
+            ->get();
+
+        $blockedWarehouses = [];
+
+        foreach ($existingRows as $row) {
+            if (in_array((int) $row->owner_id, $targetWarehouseIds, true)) {
+                continue;
+            }
+
+            if ((int) $row->quantity > 0) {
+                $blockedWarehouses[] = $row->warehouse_name;
+                continue;
+            }
+
+            DB::table('stock_levels')
+                ->where('id', $row->id)
+                ->delete();
+        }
+
+        if (empty($blockedWarehouses)) {
+            return null;
+        }
+
+        return 'Warehouse berikut tidak dilepas karena stoknya masih ada: ' . implode(', ', $blockedWarehouses);
     }
 }

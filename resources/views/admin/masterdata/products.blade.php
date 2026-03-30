@@ -267,6 +267,37 @@
                             <input type="number" name="stock_minimum" id="stock_minimum" class="form-control" required
                                 min="0">
                         </div>
+
+                        <div class="col-md-12 d-none" id="bomWarehouseTargetsBox">
+                            <div class="border rounded p-3 bg-light-subtle">
+                                <label class="form-label fw-semibold">Target Warehouse Untuk Product BOM</label>
+
+                                <div class="form-check mb-2">
+                                    <input type="checkbox" name="target_all_warehouses" id="target_all_warehouses" class="form-check-input" value="1">
+                                    <label class="form-check-label" for="target_all_warehouses">Tampilkan ke semua warehouse</label>
+                                </div>
+
+                                <div id="target_warehouse_ids" class="border rounded bg-white p-2" style="max-height: 180px; overflow-y: auto;">
+                                    @foreach ($warehouses as $warehouse)
+                                        <div class="d-flex align-items-center gap-2 py-1">
+                                            <input type="checkbox"
+                                                name="target_warehouse_ids[]"
+                                                id="target_warehouse_{{ $warehouse->id }}"
+                                                class="target-warehouse-checkbox"
+                                                style="width: 16px; height: 16px; margin: 0; flex: 0 0 16px;"
+                                                value="{{ $warehouse->id }}">
+                                            <label class="mb-0" for="target_warehouse_{{ $warehouse->id }}">
+                                                {{ $warehouse->warehouse_name }}
+                                            </label>
+                                        </div>
+                                    @endforeach
+                                </div>
+
+                                <small class="text-muted d-block mt-2">
+                                    Product BOM akan langsung dibuatkan row stok `0` di warehouse yang dipilih agar muncul di Warehouse Stock Level.
+                                </small>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="mt-4 d-flex justify-content-end gap-2">
@@ -290,6 +321,7 @@
             const baseUrl = @json(url('products'));
             const dtUrl = @json(route('products.datatable'));
             const nextCodeUrl = @json(route('products.next_code'));
+            const warehouseTargetsBaseUrl = @json(url('products'));
             const csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
             $.ajaxSetup({
@@ -399,6 +431,29 @@
                 this.value = this.value.toUpperCase();
             });
 
+            function toggleBomWarehouseTargets() {
+                const isBom = $('#product_type').val() === 'BOM';
+                $('#bomWarehouseTargetsBox').toggleClass('d-none', !isBom);
+
+                if (!isBom) {
+                    $('#target_all_warehouses').prop('checked', false);
+                    $('.target-warehouse-checkbox').prop('disabled', false).prop('checked', false);
+                }
+            }
+
+            $('#product_type').on('change', function() {
+                toggleBomWarehouseTargets();
+            });
+
+            $('#target_all_warehouses').on('change', function() {
+                const checked = $(this).is(':checked');
+                $('.target-warehouse-checkbox').prop('disabled', checked);
+
+                if (checked) {
+                    $('.target-warehouse-checkbox').prop('checked', false);
+                }
+            });
+
             // ==== MODE ADD PRODUCT ====
             $('#btnShowAdd').on('click', function() {
                 $('#modalTitle').text('Add Product');
@@ -407,9 +462,13 @@
                 $('#btnSubmit').text('Submit');
                 $('#formProduct').trigger('reset');
                 $('#category_id, #package_id, #supplier_id').val('');
+                $('#target_all_warehouses').prop('checked', false);
+                $('.target-warehouse-checkbox').prop('disabled', false).prop('checked', false);
+                $('#product_type').val('normal');
 
                 $('#purchasing_price, #selling_price').prop('readonly', false);
                 $('#priceEditNote').addClass('d-none');
+                toggleBomWarehouseTargets();
 
                 $.get(nextCodeUrl, function(res) {
                     $('#product_code').val(res?.next_code || $('#product_code').data('default'));
@@ -431,12 +490,18 @@
                     success: function(res) {
                         $('#mdlProduct').modal('hide');
                         table.ajax.reload(null, false);
-                        Swal.fire({
+                        const swalOptions = {
                             title: res.success || 'Saved',
                             icon: 'success',
-                            timer: 1300,
-                            showConfirmButton: false
-                        });
+                            timer: res.warning ? undefined : 1800,
+                            showConfirmButton: !!res.warning,
+                        };
+
+                        if (res.warning) {
+                            swalOptions.html = res.warning;
+                        }
+
+                        Swal.fire(swalOptions);
                     },
                     error: function(xhr) {
                         let msg = 'Something went wrong!';
@@ -479,6 +544,28 @@
 
                 $('#product_type').val(d.product_type || 'normal');
                 $('#is_active').prop('checked', d.is_active == 1);
+                $('#target_all_warehouses').prop('checked', false);
+                $('.target-warehouse-checkbox').prop('disabled', false).prop('checked', false);
+                toggleBomWarehouseTargets();
+
+                if ((d.product_type || 'normal') === 'BOM') {
+                    $.get(`${warehouseTargetsBaseUrl}/${d.id}/warehouse-targets`, function(res) {
+                        $('#target_all_warehouses').prop('checked', !!res.all_selected);
+                        $('.target-warehouse-checkbox').prop('checked', false).prop('disabled', false);
+
+                        (res.selected_warehouse_ids || []).forEach(function(warehouseId) {
+                            $(`#target_warehouse_${warehouseId}`).prop('checked', true);
+                        });
+
+                        if (res.all_selected) {
+                            $('.target-warehouse-checkbox').prop('disabled', true);
+                        }
+
+                        (res.locked_warehouse_ids || []).forEach(function(warehouseId) {
+                            $(`#target_warehouse_${warehouseId}`).prop('disabled', true);
+                        });
+                    });
+                }
 
                 $('#mdlProduct').modal('show');
             });
@@ -502,8 +589,9 @@
                     }, function(r) {
                         table.ajax.reload(null, false);
                         Swal.fire('Deleted!', r.success || 'Product deleted.', 'success');
-                    }).fail(function() {
-                        Swal.fire('Error!', 'Could not delete product!', 'error');
+                    }).fail(function(xhr) {
+                        const msg = xhr.responseJSON?.message || 'Could not delete product!';
+                        Swal.fire('Error!', msg, 'error');
                     });
                 });
             });
