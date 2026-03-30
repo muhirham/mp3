@@ -1582,8 +1582,14 @@ EOT;
             'decisions.*.reason'     => ['nullable', 'string', 'max:500'],
         ]);
 
+        // Track hasil approval untuk message yang informatif
+        $approvedCount = 0;
+        $rejectedCount = 0;
+        $skippedCount  = 0;
+        $isClosed      = false;
+
         try {
-            DB::transaction(function () use ($handover, $data, $me) {
+            DB::transaction(function () use ($handover, $data, $me, &$approvedCount, &$rejectedCount, &$skippedCount, &$isClosed) {
 
                 $handover->load(['items.product']);
 
@@ -1598,6 +1604,12 @@ EOT;
                     $row    = $data['decisions'][$item->id];
                     $status = $row['status'];
 
+                    // ✅ SAFETY LOCK: Kalau status aslinya REJECTED, jangan izinkan APPROVE langsung (sales harus re-input)
+                    if ($item->payment_status === 'rejected' && $status === 'approved') {
+                        $skippedCount++;
+                        continue;
+                    }
+
                     $item->payment_status = $status;
 
                     $item->payment_reject_reason = ($status === 'rejected')
@@ -1606,11 +1618,14 @@ EOT;
 
                     // recap hanya dari yang approved
                     if ($status === 'approved') {
+                        $approvedCount++;
                         if ($item->payment_method === 'cash') {
                             $totalCash += (int) $item->payment_amount;
                         } elseif ($item->payment_method === 'transfer') {
                             $totalTransfer += (int) $item->payment_amount;
                         }
+                    } else {
+                        $rejectedCount++;
                     }
 
                     $item->save();
@@ -1621,12 +1636,12 @@ EOT;
                 $handover->save();
 
                 // ================================
-                // AUTO CLOSE (INI YANG LO MAU)
+                // AUTO CLOSE
                 // Close kalau SEMUA item yg terjual (qty_sold>0) sudah APPROVED
                 // ================================
                 if ($handover->status !== 'closed') {
 
-                    $itemsSold = $handover->items->where('qty_sold', '>', 0);
+                    $itemsSold   = $handover->items->where('qty_sold', '>', 0);
                     $allApproved = $itemsSold->every(fn($it) => $it->payment_status === 'approved');
 
                     if ($allApproved) {
@@ -1637,9 +1652,6 @@ EOT;
 
                             $qtySold = (int) $item->qty_sold;
 
-                            // ================================
-                            // 1️⃣ KURANGI STOK SALES HANYA YANG TERJUAL
-                            // ================================
                             if ($qtySold > 0) {
 
                                 $salesStock = DB::table('stock_levels')
@@ -1660,40 +1672,50 @@ EOT;
                                         'updated_at' => now(),
                                     ]);
 
-                                // movement sales -> customer
                                 DB::table('stock_movements')->insert([
                                     'product_id' => $product->id,
                                     'from_type'  => 'sales',
                                     'from_id'    => $handover->sales_id,
-                                    'to_type' => 'sales',
-                                    'to_id'   => $handover->sales_id,
+                                    'to_type'    => 'sales',
+                                    'to_id'      => $handover->sales_id,
                                     'quantity'   => $qtySold,
                                     'note'       => "Handover {$handover->code} (sold closing)",
                                     'created_at' => now(),
                                     'updated_at' => now(),
                                 ]);
                             }
-
-                            // ================================
-                            // ❌ JANGAN BALIKIN QTY_RETURNED KE WAREHOUSE
-                            // ================================
-                            // qty_returned tetap ada di stock sales
-                            // return dilakukan lewat Sales Return menu
                         }
 
                         $handover->status                  = 'closed';
                         $handover->closed_by               = $me->id;
                         $handover->evening_otp_verified_at = now();
                         $handover->save();
+                        $isClosed = true;
                     }
                 }
             });
 
         } catch (\Throwable $e) {
-            return back()->with('error', 'Failed to save approval: '.$e->getMessage());
+            return back()->with('error', 'Failed to save approval: ' . $e->getMessage());
         }
 
-        return back()->with('success', 'Payment approval saved successfully. Handover will be closed automatically once all sold items are APPROVED.');
+        // ✅ Message yang informatif sesuai hasil
+        if ($isClosed) {
+            return back()->with('success', "All payments approved. Handover has been CLOSED automatically. (Approved: {$approvedCount})");
+        }
+
+        if ($rejectedCount > 0 && $approvedCount === 0) {
+            return back()->with('error', "All {$rejectedCount} item(s) were REJECTED. Sales must re-submit payment data.");
+        }
+
+        if ($rejectedCount > 0) {
+            return back()->with('error', "Approval saved: {$approvedCount} approved, {$rejectedCount} rejected. Sales must re-submit the rejected item(s)." .
+                ($skippedCount > 0 ? " ({$skippedCount} item(s) skipped — already rejected, awaiting sales re-input.)" : ''));
+        }
+
+        return back()->with('success', "Approval saved. {$approvedCount} item(s) approved." .
+            ($skippedCount > 0 ? " ({$skippedCount} item(s) skipped — already rejected, awaiting sales re-input.)" : '') .
+            ' Handover will be closed automatically once all sold items are APPROVED.');
     }
     
     public function getActiveCount(User $sales)
