@@ -347,6 +347,13 @@ class HandoverOtpItemsController extends Controller
                     $item->qty_returned    = $qtyReturned;
                     $item->line_total_sold = $lineSold;
 
+                    // ====== SIMPAN KALKULASI DISKON (FIX: kolom ini selama ini selalu 0) ======
+                    $disc     = (int) ($item->discount_per_unit ?? 0);
+                    $netPrice = max(0, $unitPrice - $disc);
+                    $item->unit_price_after_discount = $netPrice;
+                    $item->line_total_after_discount = $qtySold * $netPrice;
+                    $item->discount_total            = $disc * $qtySold;
+
                     // (optional aman) pastiin line_total_start kebentuk kalau masih 0
                     if ((int) $item->line_total_start <= 0) {
                         $item->line_total_start = $qtyStart * $unitPrice;
