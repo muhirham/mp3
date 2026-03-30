@@ -544,10 +544,12 @@ Route::post('/warehouse/stock-requests/{id}/reject', [StockRequestApprovalContro
         ->middleware('menu:sales_request_approval');
     
     Route::get('/warehouse/stock-requests/detail', [StockRequestApprovalController::class, 'detail'])
-        ->name('warehouse.stock-requests.detail');
+        ->name('warehouse.stock-requests.detail')
+        ->middleware('menu:sales_request_approval');
 
     // === Sales pages (SALES & WAREHOUSE) ===
-    Route::get('/sales/{sales}/active-handover-count', [SalesHandoverController::class, 'getActiveCount']);
+    Route::get('/sales/{sales}/active-handover-count', [SalesHandoverController::class, 'getActiveCount'])
+        ->middleware('menu:wh_issue');
 
     // === FINANCE ===
     Route::get('/finance/transfer-verifications', [FinanceTransferController::class, 'index'])
@@ -571,10 +573,12 @@ Route::post('/warehouse/stock-requests/{id}/reject', [StockRequestApprovalContro
         ->middleware('menu:sales_daily');
 
     Route::get('/reports/sales/export', [SalesHandoverController::class,'exportSalesExcel'])
-        ->name('sales.report.export');
+        ->name('sales.report.export')
+        ->middleware('menu:wh_sales_reports');
     
     Route::get('/sales/{id}/draft-handover', [SalesHandoverController::class, 'draftBySales'])
-        ->name('sales.handover.draft');
+        ->name('sales.handover.draft')
+        ->middleware('menu:wh_issue');
 
     // key: sales_otp
     Route::get('/sales/otp-items', [HandoverOtpItemsController::class, 'index'])

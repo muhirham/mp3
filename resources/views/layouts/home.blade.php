@@ -110,5 +110,47 @@
     <script src="{{ asset('sneat/assets/js/main.js') }}"></script>
 
     @stack('scripts')
+    
+    <!-- Global Anti Double-Click & Submit Loader -->
+    <script>
+        document.addEventListener('submit', function (e) {
+            const form = e.target;
+            
+            // If already submitting, block the second submit completely
+            if (form.dataset.submitting === 'true') {
+                e.preventDefault();
+                return;
+            }
+            
+            form.dataset.submitting = 'true';
+            
+            // Find the button that was clicked
+            const btn = e.submitter;
+            if (btn) {
+                // Disable UI interactions on the button
+                btn.style.pointerEvents = 'none';
+                btn.style.opacity = '0.7';
+                
+                // Add a cute little spinner if it's a button element
+                if (btn.tagName === 'BUTTON' && !btn.innerHTML.includes('spinner-border')) {
+                    // Optional: preserve exact width so it doesn't jump
+                    const currentWidth = btn.offsetWidth;
+                    if (currentWidth) {
+                        btn.style.width = currentWidth + 20 + 'px'; // add space for spinner
+                    }
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>' + btn.innerHTML;
+                }
+            }
+            
+            // Failsafe: Re-enable form after 5 seconds (useful for AJAX forms that don't reload the page)
+            setTimeout(() => {
+                form.dataset.submitting = 'false';
+                if (btn) {
+                    btn.style.pointerEvents = 'auto';
+                    btn.style.opacity = '1';
+                }
+            }, 5000);
+        });
+    </script>
     </body>
     </html>
