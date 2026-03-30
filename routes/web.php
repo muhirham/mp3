@@ -342,6 +342,14 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->name('sales.handover.morning')
         ->middleware('menu:wh_issue');
 
+    Route::get('/sales/handover/ajax-sales', [SalesHandoverController::class, 'ajaxSalesByWarehouse'])
+        ->name('sales.handover.ajax-sales')
+        ->middleware('menu:wh_issue');
+
+    Route::get('/sales/handover/ajax-products', [SalesHandoverController::class, 'ajaxProductsByWarehouse'])
+        ->name('sales.handover.ajax-products')
+        ->middleware('menu:wh_issue');
+
     Route::post('/sales/handover/morning/store', [SalesHandoverController::class, 'morningStoreAndSendOtp'])
         ->name('sales.handover.morning.store')
         ->middleware('menu:wh_issue');

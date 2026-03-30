@@ -162,7 +162,7 @@ class SalesReturnController extends Controller
             ->exists();
 
         if ($blocked) {
-            return back()->with('error','Return sedang diproses atau sudah disetujui.');
+            return back()->with('error','Return is being processed or has already been approved.');
         }
 
         DB::transaction(function () use ($data, $me) {
@@ -175,7 +175,7 @@ class SalesReturnController extends Controller
                 $good      = $remaining - $damaged - $expired;
 
                 if ($good < 0) {
-                    throw new \Exception("Qty tidak valid");
+                    throw new \Exception("Invalid quantity");
                 }
 
                 foreach ([
@@ -200,7 +200,7 @@ class SalesReturnController extends Controller
             }
         });
 
-        return back()->with('success','Return berhasil diajukan.');
+        return back()->with('success','Return submitted successfully.');
     }
     /**
      * WAREHOUSE VIEW
@@ -289,7 +289,7 @@ class SalesReturnController extends Controller
                 ->first();
 
             if ($salesReturn->status !== 'pending') {
-                throw new \Exception("Sudah diproses");
+                throw new \Exception("Already processed");
             }
 
             if ($salesReturn->condition === 'good') {
@@ -327,13 +327,13 @@ class SalesReturnController extends Controller
             ]);
         });
 
-        return back()->with('success','Return berhasil di-approve.');
+        return back()->with('success','Return approved successfully.');
     }
     
     public function reject(Request $request, SalesReturn $salesReturn)
     {
         if ($salesReturn->status !== 'pending') {
-            return back()->with('error','Return sudah diproses.');
+            return back()->with('error','Return has already been processed.');
         }
 
         $request->validate([
@@ -345,7 +345,7 @@ class SalesReturnController extends Controller
             'reason' => $request->reject_reason,
         ]);
 
-        return back()->with('success','Return ditolak.');
+        return back()->with('success','Return rejected.');
     }
 
     public function getRejected($handoverId)
@@ -384,7 +384,7 @@ class SalesReturnController extends Controller
         });
 
     if ($filtered->isEmpty()) {
-        return back()->with('error','Minimal satu qty harus diisi.');
+        return back()->with('error','At least one quantity must be filled.');
     }
 
         DB::transaction(function () use ($request, $handoverId) {
@@ -420,7 +420,7 @@ class SalesReturnController extends Controller
             }
         });
 
-        return back()->with('success', 'Return berhasil di-resubmit.');
+        return back()->with('success', 'Return resubmitted successfully.');
     }
 
     public function getHdoDetails($handoverId)
@@ -482,7 +482,7 @@ class SalesReturnController extends Controller
             }
         });
 
-        return back()->with('success','Semua return berhasil di-approve.');
+        return back()->with('success','All returns approved successfully.');
     }
 
     public function filterAjax(Request $request)

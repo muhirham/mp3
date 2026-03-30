@@ -21,7 +21,7 @@
         <div class="d-flex align-items-center mb-3">
             <div>
                 <h4 class="mb-1">BOM & Production</h4>
-                <p class="text-muted mb-0">Kelola Bill of Material dan produksi</p>
+                <p class="text-muted mb-0">Manage Bill of Material and production</p>
             </div>
             @if($canCreateBom)
                 <button class="btn btn-primary ms-auto" data-bs-toggle="modal" data-bs-target="#mdlBom">
@@ -513,7 +513,7 @@
                                 $btn.prop('disabled', false).html(canProduceBom ? 'Save & Produce' : 'Save BOM');
                             },
                             error: function(xhr2) {
-                                let msg2 = 'Produksi gagal setelah BOM tersimpan';
+                                let msg2 = 'Production failed after BOM was saved';
 
                                 if (xhr2.responseJSON?.errors) {
                                     msg2 = Object.values(xhr2.responseJSON.errors)[0][0];
@@ -527,7 +527,7 @@
                                     Swal.fire({
                                         icon: 'warning',
                                         title: msg2,
-                                        text: 'BOM sudah tersimpan, tapi proses produksi gagal.'
+                                        text: 'BOM has been saved, but the production process failed.'
                                     });
                                 }, 300);
 
@@ -541,7 +541,7 @@
                     },
                     error: function(xhr) {
 
-                        let msg = 'Terjadi kesalahan';
+                        let msg = 'An error occurred';
 
                         if (xhr.responseJSON?.errors) {
                             msg = Object.values(xhr.responseJSON.errors)[0][0];
@@ -573,12 +573,12 @@
                 const id = $(this).data('id');
 
                 Swal.fire({
-                    title: 'Hapus BOM?',
-                    text: 'Data tidak bisa dikembalikan!',
+                    title: 'Delete BOM?',
+                    text: 'Data cannot be recovered!',
                     icon: 'warning',
                     showCancelButton: true,
-                    confirmButtonText: 'Ya, hapus!',
-                    cancelButtonText: 'Batal'
+                    confirmButtonText: 'Yes, delete!',
+                    cancelButtonText: 'Cancel'
                 }).then((result) => {
 
                     if (!result.isConfirmed) return;
@@ -603,7 +603,7 @@
                         error: function() {
                             Swal.fire({
                                 icon: 'error',
-                                title: 'Gagal hapus data'
+                                title: 'Failed to delete data'
                             });
                         }
                     });
@@ -662,7 +662,7 @@
                     },
                     error: function(xhr) {
 
-                        let msg = 'Produksi gagal';
+                        let msg = 'Production failed';
 
                         if (xhr.responseJSON?.errors) {
                             msg = Object.values(xhr.responseJSON.errors)[0][0];

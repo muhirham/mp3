@@ -11,12 +11,6 @@
             <h4 class="mb-0 fw-bold">Company</h4>
 
             <div class="ms-auto d-flex align-items-center gap-2">
-                <div class="input-group input-group-sm" style="width: 260px;">
-                    <span class="input-group-text">
-                        <i class="bx bx-search"></i>
-                    </span>
-                    <input type="text" id="company-search" class="form-control" placeholder="Search company...">
-                </div>
 
                 @if(auth()->user()->hasPermission('company.create'))
                     <button type="button" class="btn btn-primary" data-bs-toggle="modal"
@@ -43,7 +37,7 @@
         {{-- Tabel Company --}}
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span class="fw-semibold">Daftar Company</span>
+                <span class="fw-semibold">Company List</span>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -51,11 +45,11 @@
                         <thead>
                             <tr>
                                 <th>Logo</th>
-                                <th>Nama</th>
-                                <th>Alamat</th>
-                                <th>Kontak</th>
+                                <th>Name</th>
+                                <th>Address</th>
+                                <th>Contact</th>
                                 <th>Status</th>
-                                <th width="120">Aksi</th>
+                                <th width="120">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -116,9 +110,9 @@
                                         @endif
 
                                         @if ($company->is_active)
-                                            <span class="badge bg-success">Aktif</span>
+                                            <span class="badge bg-success">Active</span>
                                         @else
-                                            <span class="badge bg-secondary">Nonaktif</span>
+                                            <span class="badge bg-secondary">Inactive</span>
                                         @endif
                                     </td>
                                     <td>
@@ -166,43 +160,43 @@
                                                     <div class="row">
                                                         <div class="col-md-6">
                                                             <div class="mb-3">
-                                                                <label class="form-label">Nama Company</label>
+                                                                <label class="form-label">Company Name</label>
                                                                 <input type="text" name="name" class="form-control"
                                                                     required value="{{ old('name', $company->name) }}">
                                                             </div>
 
                                                             <div class="mb-3">
-                                                                <label class="form-label">Nama Legal</label>
+                                                                <label class="form-label">Legal Name</label>
                                                                 <input type="text" name="legal_name" class="form-control"
                                                                     value="{{ old('legal_name', $company->legal_name) }}">
                                                             </div>
 
                                                             <div class="mb-3">
-                                                                <label class="form-label">Singkatan</label>
+                                                                <label class="form-label">Short Name</label>
                                                                 <input type="text" name="short_name" class="form-control"
                                                                     value="{{ old('short_name', $company->short_name) }}">
                                                             </div>
 
                                                             <div class="mb-3">
-                                                                <label class="form-label">Kode</label>
+                                                                <label class="form-label">Code</label>
                                                                 <input type="text" name="code" class="form-control"
                                                                     value="{{ old('code', $company->code) }}">
                                                             </div>
 
                                                             <div class="mb-3">
-                                                                <label class="form-label">Alamat</label>
+                                                                <label class="form-label">Address</label>
                                                                 <textarea name="address" class="form-control" rows="2">{{ old('address', $company->address) }}</textarea>
                                                             </div>
 
                                                             <div class="mb-3 row">
                                                                 <div class="col-6">
-                                                                    <label class="form-label">Kota</label>
+                                                                    <label class="form-label">City</label>
                                                                     <input type="text" name="city"
                                                                         class="form-control"
                                                                         value="{{ old('city', $company->city) }}">
                                                                 </div>
                                                                 <div class="col-6">
-                                                                    <label class="form-label">Provinsi</label>
+                                                                    <label class="form-label">Province</label>
                                                                     <input type="text" name="province"
                                                                         class="form-control"
                                                                         value="{{ old('province', $company->province) }}">
@@ -212,7 +206,7 @@
 
                                                         <div class="col-md-6">
                                                             <div class="mb-3">
-                                                                <label class="form-label">Telepon</label>
+                                                                <label class="form-label">Phone</label>
                                                                 <input type="text" name="phone" class="form-control"
                                                                     value="{{ old('phone', $company->phone) }}">
                                                             </div>
@@ -237,7 +231,7 @@
                                                             </div>
 
                                                             <div class="mb-3">
-                                                                <label class="form-label">Logo Utama</label><br>
+                                                                <label class="form-label">Main Logo</label><br>
                                                                 @php
                                                                     $logo = $company->logo_path;
                                                                 @endphp
@@ -256,7 +250,7 @@
                                                             </div>
 
                                                             <div class="mb-3">
-                                                                <label class="form-label">Logo Kecil</label><br>
+                                                                <label class="form-label">Small Logo</label><br>
                                                                 @if ($company->logo_small_path)
                                                                     <img src="{{ asset('storage/' . $company->logo_small_path) }}"
                                                                         alt="logo kecil"
@@ -274,7 +268,7 @@
                                                                     {{ $company->is_default ? 'checked' : '' }}>
                                                                 <label class="form-check-label"
                                                                     for="company-default-{{ $company->id }}">
-                                                                    Set sebagai default
+                                                                    Set as default
                                                                 </label>
                                                             </div>
 
@@ -285,7 +279,7 @@
                                                                     {{ $company->is_active ? 'checked' : '' }}>
                                                                 <label class="form-check-label"
                                                                     for="company-active-{{ $company->id }}">
-                                                                    Aktif
+                                                                    Active
                                                                 </label>
                                                             </div>
                                                         </div>
@@ -295,10 +289,10 @@
                                                 <div class="modal-footer">
                                                     <button type="button" class="btn btn-outline-secondary"
                                                         data-bs-dismiss="modal">
-                                                        Batal
+                                                        Cancel
                                                     </button>
                                                     <button type="submit" class="btn btn-primary">
-                                                        Simpan Perubahan
+                                                        Save Changes
                                                     </button>
                                                 </div>
                                             </form>
@@ -309,7 +303,7 @@
                             @empty
                                 <tr>
                                     <td colspan="6" class="text-center py-3">
-                                        Belum ada data company.
+                                        No company data yet.
                                     </td>
                                 </tr>
                             @endforelse
@@ -326,7 +320,7 @@
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Tambah Company</h5>
+                    <h5 class="modal-title">Add Company</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <form action="{{ route('companies.store') }}" method="POST" enctype="multipart/form-data">
@@ -335,42 +329,42 @@
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="mb-3">
-                                    <label class="form-label">Nama Company</label>
+                                    <label class="form-label">Company Name</label>
                                     <input type="text" name="name" class="form-control" required
                                         value="{{ old('name') }}">
                                 </div>
 
                                 <div class="mb-3">
-                                    <label class="form-label">Nama Legal</label>
+                                    <label class="form-label">Legal Name</label>
                                     <input type="text" name="legal_name" class="form-control"
                                         value="{{ old('legal_name') }}">
                                 </div>
 
                                 <div class="mb-3">
-                                    <label class="form-label">Singkatan (Short Name)</label>
+                                    <label class="form-label">Short Name</label>
                                     <input type="text" name="short_name" class="form-control"
                                         value="{{ old('short_name') }}" placeholder="NTT, MAND, dll">
                                 </div>
 
                                 <div class="mb-3">
-                                    <label class="form-label">Kode</label>
+                                    <label class="form-label">Code</label>
                                     <input type="text" name="code" class="form-control"
                                         value="{{ old('code') }}" placeholder="NTT01, HO, dll">
                                 </div>
 
                                 <div class="mb-3">
-                                    <label class="form-label">Alamat</label>
+                                    <label class="form-label">Address</label>
                                     <textarea name="address" class="form-control" rows="2">{{ old('address') }}</textarea>
                                 </div>
 
                                 <div class="mb-3 row">
                                     <div class="col-6">
-                                        <label class="form-label">Kota</label>
+                                        <label class="form-label">City</label>
                                         <input type="text" name="city" class="form-control"
                                             value="{{ old('city') }}">
                                     </div>
                                     <div class="col-6">
-                                        <label class="form-label">Provinsi</label>
+                                        <label class="form-label">Province</label>
                                         <input type="text" name="province" class="form-control"
                                             value="{{ old('province') }}">
                                     </div>
@@ -379,7 +373,7 @@
 
                             <div class="col-md-6">
                                 <div class="mb-3">
-                                    <label class="form-label">Telepon</label>
+                                    <label class="form-label">Phone</label>
                                     <input type="text" name="phone" class="form-control"
                                         value="{{ old('phone') }}">
                                 </div>
@@ -403,28 +397,28 @@
                                 </div>
 
                                 <div class="mb-3">
-                                    <label class="form-label">Logo Utama (kop surat/PO)</label>
+                                    <label class="form-label">Main Logo (letterhead/PO)</label>
                                     <input type="file" name="logo" class="form-control">
-                                    <small class="text-muted">Maks 2MB, format gambar.</small>
+                                    <small class="text-muted">Max 2MB, image format.</small>
                                 </div>
 
                                 <div class="mb-3">
-                                    <label class="form-label">Logo Kecil (sidebar/navbar)</label>
+                                    <label class="form-label">Small Logo (sidebar/navbar)</label>
                                     <input type="file" name="logo_small" class="form-control">
-                                    <small class="text-muted">Maks 1MB, format gambar.</small>
+                                    <small class="text-muted">Max 1MB, image format.</small>
                                 </div>
 
                                 <div class="mb-2 form-check">
                                     <input type="checkbox" name="is_default" value="1" class="form-check-input"
                                         id="company-default-create">
-                                    <label class="form-check-label" for="company-default-create">Set sebagai
+                                    <label class="form-check-label" for="company-default-create">Set as
                                         default</label>
                                 </div>
 
                                 <div class="mb-3 form-check">
                                     <input type="checkbox" name="is_active" value="1" class="form-check-input"
                                         id="company-active-create" checked>
-                                    <label class="form-check-label" for="company-active-create">Aktif</label>
+                                    <label class="form-check-label" for="company-active-create">Active</label>
                                 </div>
                             </div>
                         </div>
@@ -432,10 +426,10 @@
 
                     <div class="modal-footer">
                         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
-                            Batal
+                            Cancel
                         </button>
                         <button type="submit" class="btn btn-primary">
-                            Simpan
+                            Save
                         </button>
                     </div>
                 </form>
@@ -451,8 +445,8 @@
             if (successEl) {
                 Swal.fire({
                     icon: 'success',
-                    title: 'Berhasil',
-                    text: successEl.dataset.message || 'Proses berhasil.',
+                    title: 'Success',
+                    text: successEl.dataset.message || 'Process successful.',
                     timer: 2000,
                     showConfirmButton: false
                 });
@@ -463,8 +457,8 @@
             if (errorMsgEl) {
                 Swal.fire({
                     icon: 'error',
-                    title: 'Gagal',
-                    text: errorMsgEl.dataset.message || 'Terjadi kesalahan.',
+                    title: 'Failed',
+                    text: errorMsgEl.dataset.message || 'An error occurred.',
                 });
             }
 
@@ -475,7 +469,7 @@
                 if (errors.length) {
                     Swal.fire({
                         icon: 'error',
-                        title: 'Validasi gagal',
+                        title: 'Validation failed',
                         html: '<ul style="text-align:left;margin:0;padding-left:1.2rem;">' +
                             errors.map(e => `<li>${e}</li>`).join('') +
                             '</ul>'
@@ -497,12 +491,12 @@
                     const name = this.dataset.companyName || 'company';
 
                     Swal.fire({
-                        title: 'Hapus company?',
-                        text: `Data "${name}" akan dihapus.`,
+                        title: 'Delete company?',
+                        text: `Data "${name}" will be deleted.`,
                         icon: 'warning',
                         showCancelButton: true,
-                        confirmButtonText: 'Ya, hapus',
-                        cancelButtonText: 'Batal',
+                        confirmButtonText: 'Yes, delete',
+                        cancelButtonText: 'Cancel',
                     }).then((result) => {
                         if (result.isConfirmed) {
                             form.submit();
@@ -511,21 +505,18 @@
                 });
             });
 
-            // === Global search (client-side filter) ===
-            const searchInput = document.getElementById('company-search');
+            // === Connect global navbar search (client-side filter) ===
             const table = document.getElementById('companies-table');
 
-            if (searchInput && table) {
-                searchInput.addEventListener('input', function() {
-                    const keyword = this.value.toLowerCase();
-                    const rows = table.querySelectorAll('tbody tr');
+            document.getElementById('globalSearch')?.addEventListener('input', function() {
+                const keyword = this.value.toLowerCase();
+                const rows = table.querySelectorAll('tbody tr');
 
-                    rows.forEach(function(row) {
-                        const text = row.innerText.toLowerCase();
-                        row.style.display = text.includes(keyword) ? '' : 'none';
-                    });
+                rows.forEach(function(row) {
+                    const text = row.innerText.toLowerCase();
+                    row.style.display = text.includes(keyword) ? '' : 'none';
                 });
-            }
+            });
         });
     </script>
 @endsection

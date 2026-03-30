@@ -63,7 +63,7 @@
         <div class="d-flex flex-wrap align-items-center mb-3 gap-2">
             <div>
                 <h4 class="mb-1">Products</h4>
-                <p class="mb-0 text-muted">Kelola daftar produk, stok pusat, kategori, dan supplier.</p>
+                <p class="mb-0 text-muted">Manage product list, central stock, categories, and suppliers.</p>
             </div>
             <div class="ms-auto">
                 @if(auth()->user()->hasPermission('products.create'))
@@ -179,7 +179,7 @@
                             <label class="form-label">Product Code <span class="text-danger">*</span></label>
                             <input type="text" name="product_code" id="product_code" class="form-control"
                                 value="{{ $nextProductCode }}" data-default="{{ $nextProductCode }}" required>
-                            <small class="text-muted">Bisa diubah, tidak boleh duplikat.</small>
+                            <small class="text-muted">Editable, must be unique.</small>
                         </div>
 
                         <div class="col-md-8">
@@ -216,7 +216,7 @@
                         </div>
 
                         <div class="col-md-4">
-                            <label class="form-label">Package / Satuan</label>
+                            <label class="form-label">Package / UOM</label>
                             <select name="package_id" id="package_id" class="form-select" required>
                                 <option value="">— None —</option>
                                 @foreach ($packages as $p)
@@ -237,7 +237,7 @@
 
                         <div class="col-md-12">
                             <label class="form-label">Description</label>
-                            <textarea name="description" id="description" rows="3" class="form-control" required placeholder="Optional"></textarea>
+                            <textarea name="description" id="description" rows="3" class="form-control" placeholder="Optional"></textarea>
                         </div>
 
                         <div class="col-md-4">
@@ -257,8 +257,8 @@
                             <input type="number" name="selling_price" id="selling_price" class="form-control"
                                 value="0" min="0">
                             <small class="text-muted small d-none" id="priceEditNote">
-                                Harga beli &amp; harga jual tidak bisa diubah di sini.
-                                Gunakan menu <strong>Adjustment</strong> untuk mengubah harga.
+                                Purchasing &amp; selling prices cannot be changed here.
+                                Use the <strong>Adjustment</strong> menu to update prices.
                             </small>
                         </div>
 
@@ -489,7 +489,7 @@
 
                 Swal.fire({
                     title: 'Delete product?',
-                    text: 'Tindakan ini tidak bisa dibatalkan.',
+                    text: 'This action cannot be undone.',
                     icon: 'warning',
                     showCancelButton: true,
                     confirmButtonText: 'Yes, delete',

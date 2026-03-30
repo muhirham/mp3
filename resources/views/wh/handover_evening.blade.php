@@ -18,9 +18,9 @@
 
     $statusLabelMap = [
         'draft'               => 'Draft',
-        'waiting_morning_otp' => 'Menunggu OTP Pagi',
+        'waiting_morning_otp' => 'Waiting Morning OTP',
         'on_sales'            => 'On Sales',
-        'waiting_evening_otp' => 'Menunggu OTP Sore', // biarin untuk data lama yang keburu ada
+        'waiting_evening_otp' => 'Waiting Evening OTP',
         'closed'              => 'Closed',
         'cancelled'           => 'Cancelled',
     ];
@@ -64,9 +64,9 @@
   {{-- ================== PILIH HANDOVER UNTUK APPROVAL ================== --}}
   <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
-      <h5 class="mb-0 fw-bold">Pilih Handover untuk Approval Payment</h5>
+      <h5 class="mb-0 fw-bold">Select Handover for Payment Approval</h5>
       <small class="text-muted">
-        Handover akan tampil jika sudah diisi oleh sales.
+        Handovers will appear once filled by sales.
       </small>
     </div>
     <div class="card-body">
@@ -74,7 +74,7 @@
         <div class="col-md-7">
           <label class="form-label">Handover</label>
           <select name="handover_id" class="form-select">
-            <option value="">— Pilih —</option>
+            <option value="">— Select —</option>
             @foreach($handoverList as $h)
               @php
                   $stKey   = $h->status;
@@ -92,20 +92,20 @@
         </div>
 
         <div class="col-md-2">
-          <button type="submit" class="btn btn-primary w-100">Lihat</button>
+          <button type="submit" class="btn btn-primary w-100">View</button>
         </div>
 
         <div class="col-md-3">
           @if($handover)
             <a href="{{ url()->current() }}" class="btn btn-outline-secondary w-100">
-              Clear Pilihan
+              Clear Selection
             </a>
           @endif
         </div>
       </form>
 
       <div class="form-text mt-2">
-        Kalau handover belum muncul di sini, pastikan sales sudah mengisi penjualan &amp; payment.
+        If the handover doesn't appear here, ensure sales has filled in sales &amp; payment.
       </div>
     </div>
   </div>
@@ -118,12 +118,12 @@
       <div class="card-body">
         <div class="row">
           <div class="col-md-4 mb-2">
-            <div class="small text-muted fw-semibold">Kode Handover</div>
+            <div class="small text-muted fw-semibold">Handover Code</div>
             <div class="fs-6 fw-bold">{{ $handover->code }}</div>
           </div>
 
           <div class="col-md-4 mb-2">
-            <div class="small text-muted fw-semibold">Tanggal</div>
+            <div class="small text-muted fw-semibold">Date</div>
             <div>{{ optional($handover->handover_date)->format('Y-m-d') }}</div>
           </div>
 
@@ -147,11 +147,11 @@
           </div>
 
           <div class="col-md-4 mb-2">
-            <div class="small text-muted fw-semibold">Info OTP Pagi</div>
+            <div class="small text-muted fw-semibold">Morning OTP Info</div>
             <div class="small">
-              OTP Pagi dikirim:
+              Morning OTP Sent:
               {{ optional($handover->morning_otp_sent_at)->format('Y-m-d H:i') ?? '-' }}<br>
-              OTP Pagi verif:
+              Morning OTP Verified:
               {{ optional($handover->morning_otp_verified_at)->format('Y-m-d H:i') ?? '-' }}
             </div>
           </div>
@@ -162,10 +162,10 @@
     {{-- APPROVAL PAYMENT PER ITEM --}}
     <div class="card mb-4">
       <div class="card-header">
-        <h5 class="mb-0 fw-bold">Approval Payment Per Item</h5>
+        <h5 class="mb-0 fw-bold">Payment Approval Per Item</h5>
         <small class="text-muted">
-          Approve / reject pembayaran yang sudah diinput sales.
-          Item yang sudah <strong>APPROVED</strong> tidak bisa diubah lagi.
+          Approve / reject payments entered by sales.
+          Items already <strong>APPROVED</strong> cannot be modified.
         </small>
       </div>
 
@@ -178,20 +178,19 @@
             <table class="table table-sm table-hover align-middle">
               <thead>
               <tr>
-                <th style="width:20%">Produk</th>
-                <th class="text-end" style="width:7%">Dibawa</th>
-                <th class="text-end" style="width:7%">Kembali</th>
-                <th class="text-end" style="width:7%">Terjual</th>
-                <th class="text-end" style="width:9%">Harga</th>
-                <th class="text-end" style="width:9%">Diskon / Unit</th>
-                <th class="text-end" style="width:10%">Harga Setelah Diskon</th>
-                <th class="text-end" style="width:10%">Nilai Terjual</th>
-                <th class="text-end" style="width:7%">Qty Bayar</th>
-                <th class="text-center" style="width:8%">Metode</th>
-                <th class="text-end" style="width:10%">Nominal</th>
-                <th style="width:10%">Bukti TF</th>
+                <th style="width:20%">Product</th>
+                <th class="text-end" style="width:7%">Issued</th>
+                <th class="text-end" style="width:7%">Returned</th>
+                <th class="text-end" style="width:7%">Sold</th>
+                <th class="text-end" style="width:9%">Price</th>
+                <th class="text-end" style="width:18%">Price After Discount</th>
+                <th class="text-end" style="width:10%">Sold Value</th>
+                <th class="text-end" style="width:7%">Payment Qty</th>
+                <th class="text-center" style="width:8%">Method</th>
+                <th class="text-end" style="width:10%">Amount</th>
+                <th style="width:10%">Transfer Proof</th>
                 <th style="width:10%">Decision</th>
-                <th style="width:11%">Alasan Reject</th>
+                <th style="width:11%">Rejection Reason</th>
               </tr>
               </thead>
 
@@ -274,7 +273,7 @@
                         data-bs-toggle="modal"
                         data-bs-target="#tfModal"
                         data-img="{{ asset('storage/'.$item->payment_transfer_proof_path) }}">
-                        Lihat Bukti
+                        View Proof
                       </a>
                     @else
                       <span class="text-muted small">-</span>
@@ -329,7 +328,7 @@
                              class="form-control form-control-sm"
                              name="decisions[{{ $item->id }}][reason]"
                              value="{{ old("decisions.$item->id.reason", $item->payment_reject_reason) }}"
-                             placeholder="Alasan jika reject">
+                             placeholder="Reason if rejected">
                     @endif
                   </td>
                 </tr>
@@ -337,7 +336,7 @@
               @empty
                 <tr>
                   <td colspan="12" class="text-center text-muted">
-                    Tidak ada item pada handover ini.
+                    No items in this handover.
                   </td>
                 </tr>
               @endforelse
@@ -347,7 +346,7 @@
               <div class="modal-dialog modal-dialog-centered modal-xl">
                 <div class="modal-content">
                   <div class="modal-header">
-                    <h5 class="modal-title">Bukti Transfer</h5>
+                    <h5 class="modal-title">Transfer Proof</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                   </div>
                   <div class="modal-body text-center">
@@ -362,12 +361,12 @@
 
           <div class="mt-3 text-end">
             <a href="{{ url()->current() }}" class="btn btn-outline-secondary">
-              Kembali ke daftar
+              Back to list
             </a>
 
             @if($canEdit && $handover->items->count())
               <button type="submit" class="btn btn-primary">
-                Simpan Approval
+                Save Approval
               </button>
             @endif
           </div>
@@ -379,7 +378,7 @@
     {{-- BELUM PILIH HANDOVER --}}
     <div class="card mb-4">
       <div class="card-body text-center text-muted">
-        Pilih salah satu handover di atas untuk melakukan approval payment.
+        Select a handover above to perform payment approval.
       </div>
     </div>
   @endif
@@ -407,7 +406,7 @@ document.addEventListener('DOMContentLoaded', function () {
   
 Swal.fire({
   icon: 'success',
-  title: 'Berhasil',
+  title: 'Success',
   html: {!! json_encode(session('success')) !!},
   allowOutsideClick: true
 });
@@ -418,7 +417,7 @@ Swal.fire({
 <script>
 Swal.fire({
   icon: 'error',
-  title: 'Gagal',
+  title: 'Failed',
   html: {!! json_encode(session('error')) !!}
 });
 </script>

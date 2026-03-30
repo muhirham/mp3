@@ -75,8 +75,7 @@
                     </div>
                 </div>
 
-                <div class="d-flex justify-content-between mt-3">
-                    <input id="searchTransfer" class="form-control w-25" placeholder="Search...">
+                <div class="d-flex justify-content-end mt-3">
                     <div class="d-flex gap-2">
                         <a href="#" id="btnExport" class="btn btn-success">
                             <i class="bx bx-download"></i> Export Excel
@@ -117,7 +116,8 @@
     <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
     <script>
         const table = $('#tblTransfers').DataTable({
-            searching: false,
+            searching: true,
+            dom: 'rtip',
             ajax: {
                 url: "{{ route('warehouse-transfers.data') }}",
                 data: d => {
@@ -160,8 +160,12 @@
             pageLength: 10
         });
 
-        $('#searchTransfer').keyup(e => table.search(e.target.value).draw());
         $('#f_status,#f_from_wh,#f_to_wh').change(() => table.ajax.reload());
+
+        // Connect global navbar search
+        $('#globalSearch').on('keyup', function() {
+            table.search(this.value).draw();
+        });
 
         $('#btnExport').on('click', function(e) {
             e.preventDefault();
@@ -170,7 +174,6 @@
                 status: $('#f_status').val(),
                 from_warehouse_id: $('#f_from_wh').val(),
                 to_warehouse_id: $('#f_to_wh').val(),
-                q: $('#searchTransfer').val(),
             });
 
             window.location.href =

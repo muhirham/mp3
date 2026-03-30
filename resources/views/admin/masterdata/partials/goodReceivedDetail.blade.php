@@ -100,7 +100,7 @@
 
     <div class="modal-header border-0 pb-1">
     <h5 class="modal-title fw-bold">
-        Tanda Terima Barang (GR) &amp; Detail PO
+        Goods Receipt (GR) &amp; PO Detail
     </h5>
     <button type="button"
             class="btn-close"
@@ -116,13 +116,13 @@
             <div class="text-uppercase small text-muted mb-1">PO Code</div>
             <div class="fs-5 fw-bold">{{ $po->po_code }}</div>
             <div class="small text-muted">
-            Terakhir diterima: {{ $lastReceiveAt }}
+            Last received: {{ $lastReceiveAt }}
             </div>
         </div>
         <div class="text-end small">
             <div class="fw-bold">{{ $company->name ?? config('app.name', 'Inventory System') }}</div>
             <div>{{ $warehouseLabelModal }}</div>
-            <div>Diterima oleh: <strong>{{ $lastReceiver }}</strong></div>
+            <div>Received by: <strong>{{ $lastReceiver }}</strong></div>
         </div>
         </div>
     </div>
@@ -136,8 +136,8 @@
             <td class="ps-0">{{ $supplierLabelModal }}</td>
             </tr>
             <tr>
-            <th class="ps-0">Total Item</th>
-            <td class="ps-0">{{ $totalLines }} item</td>
+            <th class="ps-0">Total Items</th>
+            <td class="ps-0">{{ $totalLines }} items</td>
             </tr>
             <tr>
             <th class="ps-0">Subtotal</th>
@@ -156,7 +156,7 @@
         <div class="col-md-5">
         <table class="table table-sm table-borderless mb-0">
             <tr>
-            <th class="ps-0" style="width:160px;">Total Qty Order</th>
+            <th class="ps-0" style="width:160px;">Total Qty Ordered</th>
             <td class="ps-0">{{ $po->items->sum('qty_ordered') }}</td>
             </tr>
             <tr>
@@ -181,10 +181,10 @@
         <thead class="table-light">
             <tr class="text-center">
             <th style="width:50px;">No.</th>
-            <th>Nama Barang / Deskripsi</th>
-            <th style="width:90px;">Qty Order</th>
+            <th>Product Name / Description</th>
+            <th style="width:90px;">Qty Ordered</th>
             <th style="width:90px;">Qty Received</th>
-            <th style="width:120px;">Harga Satuan</th>
+            <th style="width:120px;">Unit Price</th>
             <th style="width:130px;">Subtotal</th>
             </tr>
         </thead>
@@ -214,7 +214,7 @@
 
     {{-- NOTES --}}
     <div class="mb-3">
-        <div class="fw-semibold mb-1">Catatan Penerimaan</div>
+        <div class="fw-semibold mb-1">Receiving Notes</div>
         <div class="border rounded p-2" style="min-height:60px;">
         {{ $notes ?: '-' }}
         </div>
@@ -223,7 +223,7 @@
     {{-- FOTO --}}
     <div class="row">
         <div class="col-md-6 mb-3">
-        <div class="fw-semibold mb-2">Foto Barang Good</div>
+        <div class="fw-semibold mb-2">Good Item Photos</div>
         @if($goodPhotos->count())
             <div class="d-flex flex-wrap gap-2">
             @foreach($goodPhotos as $p)
@@ -236,12 +236,12 @@
             @endforeach
             </div>
         @else
-            <p class="text-muted mb-0">Tidak ada foto barang good.</p>
+            <p class="text-muted mb-0">No good item photos.</p>
         @endif
         </div>
 
         <div class="col-md-6 mb-3">
-        <div class="fw-semibold text-danger mb-2">Foto Barang Damaged</div>
+        <div class="fw-semibold text-danger mb-2">Damaged Item Photos</div>
         @if($damagedPhotos->count())
             <div class="d-flex flex-wrap gap-2">
             @foreach($damagedPhotos as $p)
@@ -254,7 +254,7 @@
             @endforeach
             </div>
         @else
-            <p class="text-muted mb-0">Tidak ada foto barang damaged.</p>
+            <p class="text-muted mb-0">No damaged item photos.</p>
         @endif
         </div>
     </div>
@@ -263,16 +263,16 @@
     <br><br><br>
     <div class="row mt-4">
         <div class="col-md-6 text-center">
-        <div class="small mb-5">Diterima oleh,</div>
+        <div class="small mb-5">Received by,</div>
         <div style="height:40px;"></div>
         <div class="fw-semibold">{{ $lastReceiver ?: '________________' }}</div>
-        <div class="small text-muted">Warehouse / Penerima</div>
+        <div class="small text-muted">Warehouse / Receiver</div>
         </div>
         <div class="col-md-6 text-center">
-        <div class="small mb-5">Diserahkan oleh,</div>
+        <div class="small mb-5">Submitted by,</div>
         <div style="height:40px;"></div>
         <div class="fw-semibold">________________</div>
-        <div class="small text-muted">Supplier / Kurir</div>
+        <div class="small text-muted">Supplier / Courier</div>
         </div>
     </div>
     </div>
@@ -281,7 +281,7 @@
     <button type="button"
             class="btn btn-outline-secondary"
             data-bs-dismiss="modal">
-        Tutup
+        Close
     </button>
 
     @if($isSuperadmin && $lastReceipt)

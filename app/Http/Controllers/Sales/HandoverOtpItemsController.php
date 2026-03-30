@@ -176,7 +176,7 @@ class HandoverOtpItemsController extends Controller
             if (!$matchedHandover) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Kode OTP tidak cocok dengan handover manapun.',
+                    'message' => 'OTP code does not match any handover.',
                 ], 422);
             }
 
@@ -198,7 +198,7 @@ class HandoverOtpItemsController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'OTP valid, handover berhasil dibuka.',
+                'message' => 'OTP valid, handover opened successfully.',
             ]);
         }
 
@@ -228,18 +228,18 @@ class HandoverOtpItemsController extends Controller
 
         // keamanan: cuma boleh handover milik sales yang login
         if ((int) $handover->sales_id !== (int) $me->id) {
-            abort(403, 'Tidak boleh mengubah handover milik sales lain.');
+            abort(403, 'You are not allowed to modify another sales\' handover.');
         }
 
         // hanya bisa edit saat open
         if (!in_array($handover->status, ['on_sales', 'waiting_evening_otp'], true)) {
-            return back()->with('error', 'Handover tidak bisa diisi payment pada status ini.');
+            return back()->with('error', 'Payment cannot be filled for this handover status.');
         }
 
         // wajib OTP verified
         $sessionKey = 'sales_handover_otp_verified_'.$handover->id;
         if (!$request->session()->get($sessionKey, false)) {
-            return back()->with('error', 'OTP pagi belum diverifikasi.');
+            return back()->with('error', 'Morning OTP has not been verified.');
         }
 
         $itemsInput = $request->input('items', []);
@@ -306,7 +306,7 @@ class HandoverOtpItemsController extends Controller
                     } else {
                         // qtyBayar > 0 => metode wajib
                         if (!$method) {
-                            throw new \RuntimeException("Metode payment wajib diisi (Item ID: {$item->id}).");
+                            throw new \RuntimeException("Payment method is required (Item ID: {$item->id}).");
                         }
 
                         // nominal dibatasi max = unitPrice * qtySold
@@ -317,7 +317,7 @@ class HandoverOtpItemsController extends Controller
 
                         // transfer & nominal > 0 => butuh bukti (baru atau existing)
                         if ($method === 'transfer' && $nominal > 0 && !$proofFile && !$item->payment_transfer_proof_path) {
-                            throw new \RuntimeException("Bukti transfer wajib diupload (Item ID: {$item->id}).");
+                            throw new \RuntimeException("Transfer proof is required (Item ID: {$item->id}).");
                         }
 
                         // kalau method bukan transfer, bersihin proof lama biar gak nyangkut
@@ -359,7 +359,7 @@ class HandoverOtpItemsController extends Controller
                 }
 
                 if ($touched <= 0) {
-                    throw new \RuntimeException('Tidak ada item yang bisa diubah. Item PENDING/APPROVED terkunci.');
+                    throw new \RuntimeException('No items can be modified. PENDING/APPROVED items are locked.');
                 }
 
                 // update header biar report gak 0 terus
@@ -370,10 +370,10 @@ class HandoverOtpItemsController extends Controller
             });
 
         } catch (\Throwable $e) {
-            return back()->with('error', 'Gagal simpan payment: '.$e->getMessage());
+            return back()->with('error', 'Failed to save payment: '.$e->getMessage());
         }
 
-        return back()->with('success', 'Data payment berhasil disimpan, menunggu approval admin warehouse.');
+        return back()->with('success', 'Payment data saved successfully, awaiting warehouse admin approval.');
     }
 
 

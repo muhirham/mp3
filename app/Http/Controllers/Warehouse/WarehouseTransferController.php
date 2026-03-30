@@ -168,7 +168,7 @@ class WarehouseTransferController extends Controller
                 'warehouse_transfer_id' => $transfer->id,
                 'performed_by' => auth()->id(),
                 'action' => 'SUBMITTED',
-                'note' => 'Transfer diajukan ke gudang tujuan',
+                'note' => 'Transfer submitted to destination warehouse',
             ]);
             return response()->json([
                 'success' => true,
@@ -184,7 +184,7 @@ class WarehouseTransferController extends Controller
     public function submit(WarehouseTransfer $transfer)
     {
         if ($transfer->status !== 'draft') {
-            abort(422, 'Status tidak valid');
+            abort(422, 'Invalid status');
         }
 
         return DB::transaction(function () use ($transfer) {
@@ -199,7 +199,7 @@ class WarehouseTransferController extends Controller
                 'warehouse_transfer_id' => $transfer->id,
                 'performed_by' => auth()->id(),
                 'action' => 'SUBMITTED',
-                'note' => 'Transfer diajukan',
+                'note' => 'Transfer submitted',
             ]);
 
             return response()->json($transfer);
@@ -233,10 +233,10 @@ class WarehouseTransferController extends Controller
             'warehouse_transfer_id' => $transfer->id,
             'performed_by' => auth()->id(),
             'action' => 'DEST_APPROVED',
-            'note' => 'Gudang tujuan menyetujui',
+            'note' => 'Destination warehouse approved',
         ]);
 
-        return back()->with('success', 'Transfer berhasil di-approve oleh gudang tujuan');
+        return back()->with('success', 'Transfer approved by destination warehouse successfully');
     }
 
     public function rejectDestination(Request $r, WarehouseTransfer $transfer)
@@ -256,7 +256,7 @@ class WarehouseTransferController extends Controller
             'note' => $r->reason,
         ]);
 
-        return back()->with('success', 'Transfer berhasil direject');
+        return back()->with('success', 'Transfer rejected successfully');
     }
 
     public function grSource(Request $request, WarehouseTransfer $transfer)
@@ -267,14 +267,14 @@ class WarehouseTransferController extends Controller
         abort_if(
             $transfer->status !== 'approved',
             403,
-            'Transfer belum disetujui gudang tujuan'
+            'Transfer not yet approved by destination warehouse'
         );
         // hanya warehouse user yang wajib cocok gudang
         abort_if(
             auth()->user()->hasRole('warehouse')
                 && auth()->user()->warehouse_id !== $transfer->source_warehouse_id,
             403,
-            'Bukan gudang asal'
+            'Not the source warehouse'
         );
         // ===============================
         // VALIDASI INPUT
@@ -296,7 +296,7 @@ class WarehouseTransferController extends Controller
                 $input = $request->items[$item->id] ?? null;
                 if (! $input) {
                     throw ValidationException::withMessages([
-                        "items.{$item->id}" => 'Item tidak ditemukan di request'
+                        "items.{$item->id}" => 'Item not found in request'
                     ]);
                 }
 
@@ -309,7 +309,7 @@ class WarehouseTransferController extends Controller
                 if ($good + $damaged !== (int) $item->qty_transfer) {
                     throw ValidationException::withMessages([
                         "items.{$item->id}" =>
-                        "Qty good + damaged harus sama dengan qty transfer"
+                        "Total of good + damaged quantity must equal the transfer quantity"
                     ]);
                 }
 
@@ -388,7 +388,7 @@ class WarehouseTransferController extends Controller
             ]);
         });
 
-        return back()->with('success', 'Goods Received gudang asal berhasil disimpan');
+        return back()->with('success', 'Source warehouse Goods Received saved successfully');
     }
 
     /* ======================================================

@@ -20,7 +20,7 @@
       // ✅ EDIT PO HANYA SUPERADMIN
       $poLocked = $baseLocked || $approvalLocked || ! $isSuperadmin;
 
-      // ✅ notes lock: kalau sudah ada log reject (1) 2) dst) → kunci permanen
+      // ✅ notes lock: if reject log already exists (1, 2, etc.) → permanent lock
       $hasRejectLog = preg_match('/^\d+\)\s/m', trim((string)($po->notes ?? '')));
       $notesLocked  = $poLocked || $hasRejectLog;
 
@@ -94,11 +94,11 @@
       </h5>
       <small class="text-muted">
         @if($poLocked)
-          PO sudah berstatus <strong>{{ strtoupper($po->status) }}</strong>, tidak dapat diubah.
-          Jika seluruh Goods Received dihapus (approve cancel) dan status PO dibuka lagi (mis. ke DRAFT),
-          maka PO bisa diedit kembali.
+          PO is in <strong>{{ strtoupper($po->status) }}</strong> status and cannot be modified.
+          If all Goods Received records are deleted (approve cancel) and the PO status is reopened (e.g. to DRAFT),
+          the PO can be edited again.
         @else
-          PO baru / aktif, silakan isi item dan simpan.
+          New / Active PO, please fill in items and save.
         @endif
       </small>
       <small class="text-muted d-block mt-1">
@@ -107,7 +107,7 @@
         @if(($po->approval_status ?? '') === 'rejected' && $po->notes)
           <br>
           <div class="text-danger small">
-          <div class="fw-semibold">Alasan ditolak:</div>
+          <div class="fw-semibold">Rejection reason:</div>
           <div>{!! nl2br(e($po->notes)) !!}</div>
         </div>
 
@@ -125,9 +125,6 @@
               data-url-partner="{{ route('po.pdf', ['po' => $po->id, 'tpl' => 'partner']) }}">
         <i class="bx bx-printer me-1"></i> Print / PDF
       </button>
-
-      {{-- Excel --}}
-      <a href="{{ route('po.excel',$po->id) }}" class="btn btn-outline-secondary btn-sm">Excel</a>
     </div>
   </div>
 
@@ -139,10 +136,11 @@
     <div class="card mb-3">
       <div class="card-body row g-3">
         <div class="col-md-4">
-          <label class="form-label">Informasi Supplier</label>
+          <label class="form-label">Supplier Information</label>
           <input type="text"
-                 class="form-control"
-                 value="{{ $po->supplier->supplier_name ?? $po->supplier->name ?? $po->supplier_id }}"
+                 id="poHeaderSupplier"
+                 class="form-control text-truncate"
+                 value="-"
                  disabled>
         </div>
         <div class="col-md-8">
@@ -206,7 +204,7 @@
                     <select name="items[{{ $idx }}][product_id]"
                             class="form-select form-select-sm product-select"
                             @disabled($poLocked)>
-                      <option value="">— Pilih —</option>
+                      <option value="">— Select —</option>
                       @foreach($products as $p)
                         @php
                           $buy  = (int)($p->purchase_price ?? $p->buy_price ?? $p->cost_price ?? 0);
@@ -241,7 +239,7 @@
                       <select name="items[{{ $idx }}][warehouse_id]"
                               class="form-select form-select-sm"
                               @disabled($poLocked)>
-                        <option value="">— Pilih —</option>
+                        <option value="">— Select —</option>
                         @foreach($warehouses as $w)
                           <option value="{{ $w->id }}" @selected($w->id == $it->warehouse_id)>
                             {{ $w->warehouse_name }}
@@ -330,9 +328,9 @@
       </div>
 
       <div class="card-footer d-flex justify-content-between">
-        <a href="{{ route('po.index') }}" class="btn btn-outline-secondary">Kembali</a>
+        <a href="{{ route('po.index') }}" class="btn btn-outline-secondary">Back</a>
         @unless($poLocked)
-          <button type="submit" class="btn btn-primary">Simpan Perubahan</button>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
         @endunless
       </div>
     </div>
@@ -343,7 +341,7 @@
       <form method="POST" action="{{ route('po.order', $po->id) }}" class="d-inline frm-order">
         @csrf
         <button type="submit" class="btn btn-warning">
-          Ajukan Approval
+          Submit for Approval
         </button>
       </form>
     @endif
@@ -428,8 +426,8 @@
 
         <div class="ms-3">
           <select id="po-print-template" class="form-select form-select-sm">
-            <option value="default">Template Standar</option>
-            <option value="partner">Template Partner</option>
+            <option value="default">Standard Template</option>
+            <option value="partner">Partner Template</option>
           </select>
         </div>
 
@@ -447,7 +445,7 @@
       <div class="modal-footer py-2">
         <button type="button" class="btn btn-secondary btn-sm"
                 data-bs-dismiss="modal">
-          Tutup
+          Close
         </button>
         <button type="button" class="btn btn-primary btn-sm" id="btn-run-print">
           <i class="bx bx-printer me-1"></i> Print / Save PDF
@@ -508,6 +506,19 @@
     document.getElementById('ftSubtotal').innerText = subtotal.toLocaleString('id-ID');
     document.getElementById('ftDiscount').innerText = discount.toLocaleString('id-ID');
     document.getElementById('ftGrand').innerText    = (subtotal - discount).toLocaleString('id-ID');
+    
+    // Update Header Supplier dynamically
+    const supCol = new Set();
+    document.querySelectorAll('#tblItems tbody tr').forEach(tr => {
+      const supLabel = tr.querySelector('.js-supplier-label');
+      if (supLabel && supLabel.textContent.trim() !== '-' && supLabel.textContent.trim() !== '') {
+        supCol.add(supLabel.textContent.trim());
+      }
+    });
+    const supHeader = document.getElementById('poHeaderSupplier');
+    if (supHeader) {
+      supHeader.value = supCol.size > 0 ? Array.from(supCol).join(', ') : '-';
+    }
   }
 
   function attachProductAutoPrice(tr) {
@@ -563,7 +574,7 @@
       if (isFromRequest) {
         warehouseCellHtml = `
           <select name="items[${idx}][warehouse_id]" class="form-select form-select-sm">
-            <option value="">— Pilih —</option>
+            <option value="">— Select —</option>
             @foreach($warehouses as $w)
               <option value="{{ $w->id }}">{{ $w->warehouse_name }}</option>
             @endforeach
@@ -585,7 +596,7 @@
           <input type="hidden" name="items[${idx}][id]" value="">
           <input type="hidden" name="items[${idx}][request_id]" value="">
           <select name="items[${idx}][product_id]" class="form-select form-select-sm product-select">
-            <option value="">— Pilih —</option>
+            <option value="">— Select —</option>
             @foreach($products as $p)
               @php
                 $buy  = (int)($p->purchase_price ?? $p->buy_price ?? $p->cost_price ?? 0);
@@ -726,11 +737,11 @@ document.addEventListener('DOMContentLoaded', function () {
         e.preventDefault();
         Swal.fire({
           icon: 'question',
-          title: 'Ajukan approval?',
-          text: 'PO akan dikirim ke Procurement / CEO sesuai rule approval.',
+          title: 'Submit for approval?',
+          text: 'The PO will be sent to Procurement / CEO according to the approval rules.',
           showCancelButton: true,
-          confirmButtonText: 'Ya, ajukan',
-          cancelButtonText: 'Batal'
+          confirmButtonText: 'Yes, submit',
+          cancelButtonText: 'Cancel'
         }).then(res => {
           if (res.isConfirmed) form.submit();
         });
@@ -744,10 +755,10 @@ document.addEventListener('DOMContentLoaded', function () {
         Swal.fire({
           icon: 'warning',
           title: 'Cancel PO?',
-          text: 'PO yang dicancel tidak dapat digunakan untuk GR.',
+          text: 'Cancelled POs cannot be used for Goods Received.',
           showCancelButton: true,
-          confirmButtonText: 'Ya, cancel',
-          cancelButtonText: 'Batal'
+          confirmButtonText: 'Yes, cancel',
+          cancelButtonText: 'Cancel'
         }).then(res => {
           if (res.isConfirmed) form.submit();
         });
@@ -759,19 +770,19 @@ document.addEventListener('DOMContentLoaded', function () {
       btn.addEventListener('click', function () {
         const form = this.closest('form');
         Swal.fire({
-          title: 'Alasan reject Procurement',
+          title: 'Procurement rejection reason',
           input: 'textarea',
-          inputPlaceholder: 'Tuliskan alasan penolakan...',
-          inputAttributes: { 'aria-label': 'Alasan reject' },
+          inputPlaceholder: 'Write the reason for rejection...',
+          inputAttributes: { 'aria-label': 'Rejection reason' },
           showCancelButton: true,
-          confirmButtonText: 'Kirim Reject',
-          cancelButtonText: 'Batal',
+          confirmButtonText: 'Send Rejection',
+          cancelButtonText: 'Cancel',
           inputValidator: value => {
             if (!value) {
-              return 'Alasan wajib diisi';
+              return 'Reason is required';
             }
             if (value.length > 1000) {
-              return 'Maksimal 1000 karakter.';
+              return 'Maximum 1000 characters.';
             }
             return null;
           }
@@ -796,19 +807,19 @@ document.addEventListener('DOMContentLoaded', function () {
       btn.addEventListener('click', function () {
         const form = this.closest('form');
         Swal.fire({
-          title: 'Alasan reject CEO',
+          title: 'CEO rejection reason',
           input: 'textarea',
-          inputPlaceholder: 'Tuliskan alasan penolakan...',
-          inputAttributes: { 'aria-label': 'Alasan reject' },
+          inputPlaceholder: 'Write the reason for rejection...',
+          inputAttributes: { 'aria-label': 'Rejection reason' },
           showCancelButton: true,
-          confirmButtonText: 'Kirim Reject',
-          cancelButtonText: 'Batal',
+          confirmButtonText: 'Send Rejection',
+          cancelButtonText: 'Cancel',
           inputValidator: value => {
             if (!value) {
-              return 'Alasan wajib diisi';
+              return 'Reason is required';
             }
             if (value.length > 1000) {
-              return 'Maksimal 1000 karakter.';
+              return 'Maximum 1000 characters.';
             }
             return null;
           }

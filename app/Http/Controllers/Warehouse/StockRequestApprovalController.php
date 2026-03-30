@@ -108,7 +108,7 @@ class StockRequestApprovalController extends Controller
                 ->count();
 
             if ($activeCount >= 3) {
-                abort(400, 'Sales sudah punya 3 HDO aktif, selesaikan dulu.');
+                abort(400, 'Sales already has 3 active handovers, please complete them first.');
             }
 
             // =========================
@@ -121,7 +121,7 @@ class StockRequestApprovalController extends Controller
                 ->first();
 
             if (!$stock || $stock->quantity < $stockRequest->quantity_requested) {
-                abort(400, 'Stock tidak cukup');
+                abort(400, 'Insufficient stock');
             }
 
             // =========================
@@ -251,7 +251,7 @@ class StockRequestApprovalController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Request ditolak'
+            'message' => 'Request rejected'
         ]);
     }
     public function detail(Request $request)

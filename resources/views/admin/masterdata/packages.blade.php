@@ -23,14 +23,14 @@
 
         <div class="col-12 col-md-auto ms-md-auto d-flex gap-2 justify-content-md-end">
           <div class="small text-muted d-none d-md-flex align-items-center">
-            Gunakan search di navbar atas
+            Use navigation search bar
           </div>
 
           @if(auth()->user()->hasPermission('uom.create'))
             <button class="btn btn-sm btn-primary"
                     data-bs-toggle="modal" data-bs-target="#mdlPkg"
                     id="btnShowAdd">
-              <i class="bx bx-plus"></i> Tambah Satuan
+              <i class="bx bx-plus"></i> Add UOM
             </button>
           @endif
         </div>
@@ -45,7 +45,7 @@
         <thead class="table-light">
           <tr>
             <th style="width:70px" class="text-center">No</th>
-            <th>Satuan</th>
+            <th>UOM Name</th>
             <th style="width:120px" class="text-center">Actions</th>
           </tr>
         </thead>
@@ -62,7 +62,7 @@
     <div class="modal-content">
 
       <div class="modal-header py-2">
-        <h6 class="modal-title fw-bold mb-0" id="modalTitle">Tambah Satuan</h6>
+        <h6 class="modal-title fw-bold mb-0" id="modalTitle">Add UOM</h6>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
 
@@ -72,14 +72,14 @@
 
         <div class="mb-2">
           <label class="form-label small text-uppercase fw-semibold text-muted">
-            Nama Satuan <span class="text-danger">*</span>
+            UOM Name <span class="text-danger">*</span>
           </label>
           <input class="form-control form-control-sm" name="package_name" id="package_name" required>
         </div>
 
         <div class="d-flex gap-2 justify-content-end mt-3">
-          <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-dismiss="modal">Batal</button>
-          <button class="btn btn-sm btn-primary" type="submit" id="btnSubmit">Simpan</button>
+          <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-sm btn-primary" type="submit" id="btnSubmit">Save Changes</button>
         </div>
       </form>
 
@@ -140,7 +140,7 @@ $(function(){
 
   $('#tblPackages').on('error.dt', function(e, settings, techNote, message){
     console.error(message);
-    Swal.fire({ icon:'error', title:'Server error', text:'Cek storage/logs/laravel.log' });
+    Swal.fire({ icon:'error', title:'Server error', text:'Contact administrator' });
   });
 
   // page length
@@ -161,10 +161,10 @@ $(function(){
 
   // ADD
   $('#btnShowAdd').on('click', function(){
-    $('#modalTitle').text('Tambah Satuan');
+    $('#modalTitle').text('Add UOM');
     $('#formPkg').attr('action', baseUrl);
     $('#method').val('POST');
-    $('#btnSubmit').text('Simpan');
+    $('#btnSubmit').text('Save');
     $('#formPkg').trigger('reset');
   });
 
@@ -184,7 +184,7 @@ $(function(){
       success: (res) => {
         bootstrap.Modal.getInstance(mdlEl)?.hide();
         table.ajax.reload(null,false);
-        Swal.fire({ title: res.success || 'Berhasil', icon:'success', timer:1200, showConfirmButton:false });
+        Swal.fire({ title: res.success || 'Success', icon:'success', timer:1200, showConfirmButton:false });
       },
       error: (xhr) => {
         let msg = 'Error';
@@ -198,7 +198,7 @@ $(function(){
   // EDIT
   $(document).on('click', '.js-edit', function(){
     const d = $(this).data();
-    $('#modalTitle').text('Edit Satuan');
+    $('#modalTitle').text('Edit UOM');
     $('#formPkg').attr('action', baseUrl + '/' + d.id);
     $('#method').val('PUT');
     $('#btnSubmit').text('Update');
@@ -211,18 +211,18 @@ $(function(){
     const id = $(this).data('id');
 
     Swal.fire({
-      title:'Hapus satuan?',
-      text:'Data akan dihapus permanen.',
+      title:'Delete UOM?',
+      text:'Data will be permanently deleted.',
       icon:'warning',
       showCancelButton:true,
-      confirmButtonText:'Ya, hapus',
-      cancelButtonText:'Batal'
+      confirmButtonText:'Yes, delete',
+      cancelButtonText:'Cancel'
     }).then(r=>{
       if(!r.isConfirmed) return;
 
       $.post(baseUrl + '/' + id, { _method:'DELETE' }, function(res){
         table.ajax.reload(null,false);
-        Swal.fire({ title:'Deleted', text: res.success || 'Satuan dihapus.', icon:'success', timer:1200, showConfirmButton:false });
+        Swal.fire({ title:'Deleted', text: res.success || 'UOM deleted.', icon:'success', timer:1200, showConfirmButton:false });
       }).fail((xhr)=>{
         const msg = xhr.responseJSON?.error || 'Cannot delete';
         Swal.fire('Error', msg, 'error');

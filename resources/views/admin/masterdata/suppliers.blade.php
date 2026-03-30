@@ -50,7 +50,7 @@
                 </div>
 
                 <div class="ms-auto d-flex flex-wrap align-items-center gap-2">
-                    <div class="small text-muted d-none d-md-block">Search pakai input navbar atas</div>
+                    <div class="small text-muted d-none d-md-block">Search using the top navigation bar</div>
                     @if(auth()->user()->hasPermission('supplier.create'))
                         <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#glassSupplier" id="btnShowAdd">
                             <i class="bx bx-plus"></i> Add Supplier
@@ -80,7 +80,7 @@
                                    class="form-control"
                                    value="{{ $nextSupplierCode }}" required
                                    data-default="{{ $nextSupplierCode }}" placeholder="SUP-001">
-                            <small class="-50">Bisa diganti manual. Duplikat akan ditolak.</small>
+                            <small class="-50">Can be changed manually. Duplicates will be rejected.</small>
                         </div>
 
                         <div class="col-md-6">
@@ -181,7 +181,7 @@ $(function () {
     });
 
     $('#tblSuppliers').on('error.dt', function(){
-        Swal.fire({ icon:'error', title:'Server error', text:'Cek storage/logs/laravel.log' });
+        Swal.fire({ icon:'error', title:'Server error', text:'Check system logs' });
     });
 
     // Page length
@@ -219,8 +219,8 @@ $(function () {
         e.stopPropagation();
         Swal.fire({
             icon: 'warning',
-            title: 'Form belum lengkap',
-            text: 'Mohon lengkapi semua field wajib'
+            title: 'Form incomplete',
+            text: 'Please fill in all required fields'
         });
         return;
     }

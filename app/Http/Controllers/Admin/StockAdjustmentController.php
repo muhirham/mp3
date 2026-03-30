@@ -29,14 +29,42 @@ class StockAdjustmentController extends Controller
     }
 
     /** List produk untuk dropdown (single mode) */
-    public function products()
+    public function products(Request $r)
     {
+        $whId = $r->get('warehouse_id');
+        $user = auth()->user();
+        $canAdjustPusat = empty($user->warehouse_id);
+
+        $isPusat = $canAdjustPusat && empty($whId);
+        $ownerType = $isPusat ? 'pusat' : 'warehouse';
+        $ownerId   = $isPusat ? 0 : (int)$whId;
+
+        $stockMap = [];
+        if (Schema::hasTable('stock_levels')) {
+            $stockMap = DB::table('stock_levels')
+                ->where('owner_type', $ownerType)
+                ->where('owner_id', $ownerId)
+                ->pluck('quantity', 'product_id')
+                ->toArray();
+        }
+
         $rows = Product::orderBy('name')
             ->get(['id','product_code','name','purchasing_price','selling_price']);
 
+        $items = $rows->map(function ($p) use ($stockMap) {
+            return [
+                'id'           => $p->id,
+                'product_code' => $p->product_code,
+                'name'         => $p->name,
+                'purchasing_price' => $p->purchasing_price,
+                'selling_price'    => $p->selling_price,
+                'qty_before'       => (int)($stockMap[$p->id] ?? 0),
+            ];
+        });
+
         return response()->json([
             'status' => 'ok',
-            'items'  => $rows,
+            'items'  => $items,
         ]);
     }
 
@@ -541,10 +569,10 @@ class StockAdjustmentController extends Controller
             ]);
         }
 
-        // optional: jaga maksimal 1 bulan (biar konsisten sama PO)
-        if ($fromC->format('Y-m') !== $toC->format('Y-m')) {
+        // maksimal 2 bulan (sesuai request)
+        if ($fromC->diffInMonths($toC) > 2) {
             throw ValidationException::withMessages([
-                'to' => 'Range maksimal 1 bulan. "from" dan "to" harus di bulan yang sama.',
+                'to' => 'Range maksimal 2 bulan.',
             ]);
         }
 

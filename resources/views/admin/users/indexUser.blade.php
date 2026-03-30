@@ -42,8 +42,6 @@
                     </div>
 
                     <div class="ms-auto d-flex flex-wrap align-items-center gap-2">
-                        <input id="searchUser" type="text" class="form-control" placeholder="Search user..."
-                            style="max-width:260px">
 
                         @if(auth()->user()->hasPermission('users.export'))
                             <div class="btn-group">
@@ -119,7 +117,7 @@
                                                 disabled 
                                             @endif>
                                     @endif
-                                        @if (!$canManageRow) disabled @endif>
+                                        @if (!$canManageRow) disabled @endif
                                 </td>
                                 <td>{{ $u->id }}</td>
                                 <td>{{ $u->name }}</td>
@@ -215,7 +213,7 @@
                 @if ($errors->any() && !session('edit_open_id'))
                     <div class="px-4">
                         <div class="alert alert-danger mb-0">
-                            <div class="fw-semibold mb-1">Gagal menyimpan:</div>
+                            <div class="fw-semibold mb-1">Failed to save:</div>
                             <ul class="mb-0 ps-3">
                                 @foreach ($errors->all() as $err)
                                     <li>{{ $err }}</li>
@@ -378,7 +376,7 @@
                     <div class="mb-3">
                         <label class="form-label">Signature (optional)</label>
                         <input type="file" name="signature" class="form-control bg-transparent border-secondary">
-                        <small class=-50">Kosongkan bila tidak ingin mengubah tanda tangan.</small>
+                        <small class="text-muted">Leave empty to keep current signature.</small>
                     </div>
 
                     <div class="row g-2">
@@ -471,8 +469,7 @@
 
         #pageLength,
         #f_role,
-        #f_status,
-        #searchUser {
+        #f_status {
             font-size: 0.75rem;
             height: calc(1.5em + .5rem + 2px);
             padding: .25rem .5rem;
@@ -514,7 +511,8 @@
                 dom: 't<"d-flex justify-content-between align-items-center p-3 pt-2"ip>'
             });
 
-            $('#searchUser').on('keyup', function() {
+            // Connect global navbar search
+            $('#globalSearch').on('keyup', function() {
                 table.search(this.value).draw();
             });
             $('#pageLength').on('change', function() {
@@ -677,12 +675,12 @@
                 const id = this.dataset.id;
                 const name = this.dataset.name || 'user';
                 Swal.fire({
-                    title: 'Hapus user?',
-                    html: `<div class="text-muted">Data <b>${name}</b> akan dihapus permanen.</div>`,
+                    title: 'Delete user?',
+                    html: `<div class="text-muted">Data <b>${name}</b> will be permanently deleted.</div>`,
                     icon: 'warning',
                     showCancelButton: true,
-                    confirmButtonText: 'Ya, hapus!',
-                    cancelButtonText: 'Batal',
+                    confirmButtonText: 'Yes, delete!',
+                    cancelButtonText: 'Cancel',
                     confirmButtonColor: '#d33'
                 }).then(res => {
                     if (!res.isConfirmed) return;
@@ -695,10 +693,10 @@
                     }).then(async r => {
                         if (!r.ok) {
                             const tx = await r.text();
-                            throw new Error(tx || 'Gagal menghapus.');
+                            throw new Error(tx || 'Failed to delete.');
                         }
                         location.reload();
-                    }).catch(err => Swal.fire('Error', err.message || 'Gagal menghapus.',
+                    }).catch(err => Swal.fire('Error', err.message || 'Failed to delete.',
                         'error'));
                 });
             });
@@ -707,13 +705,13 @@
             $('#btnBulkDelete').on('click', function(e) {
                 e.preventDefault();
                 const ids = getCheckedIds();
-                if (!ids.length) return Swal.fire('Info', 'Pilih minimal satu baris.', 'info');
+                if (!ids.length) return Swal.fire('Info', 'Please select at least one row.', 'info');
                 Swal.fire({
-                    title: 'Hapus data terpilih?',
-                    html: `Total <b>${ids.length}</b> user`,
+                    title: 'Delete selected data?',
+                    html: `Total <b>${ids.length}</b> users`,
                     icon: 'warning',
                     showCancelButton: true,
-                    confirmButtonText: 'Ya, hapus!',
+                    confirmButtonText: 'Yes, delete!',
                     confirmButtonColor: '#d33'
                 }).then(res => {
                     if (!res.isConfirmed) return;
@@ -728,10 +726,10 @@
                         })
                     }).then(async r => {
                         if (!r.ok) {
-                            throw new Error(await r.text() || 'Gagal bulk delete.');
+                            throw new Error(await r.text() || 'Failed to bulk delete.');
                         }
                         location.reload();
-                    }).catch(err => Swal.fire('Error', err.message || 'Gagal bulk delete.',
+                    }).catch(err => Swal.fire('Error', err.message || 'Failed to bulk delete.',
                         'error'));
                 });
             });

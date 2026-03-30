@@ -116,7 +116,7 @@
 
                         {{-- INVENTORY --}}
                         <div class="col-md-4">
-                            <div class="fw-semibold mb-2">inventory</div>
+                            <div class="fw-semibold mb-2">Inventory</div>
 
                             @foreach($groups['inventory'] as $it)
 
@@ -275,7 +275,7 @@
 
                         {{-- PROCUREMENT --}}
                         <div class="col-md-4">
-                            <div class="fw-semibold mb-2">procurement</div>
+                            <div class="fw-semibold mb-2">Procurement</div>
                             @foreach($groups['procurement'] as $it)
                                 <div class="form-check">
                                     <input class="form-check-input"
@@ -289,7 +289,7 @@
 
                         {{-- MASTER --}}
                         <div class="col-md-4">
-                            <div class="fw-semibold mb-2">master</div>
+                            <div class="fw-semibold mb-2">Master</div>
                             @foreach($groups['master'] as $it)
                                 <div class="form-check">
                                     <input class="form-check-input"
@@ -574,7 +574,7 @@
 
                         {{-- INVENTORY --}}
                         <div class="col-md-4">
-                            <div class="fw-semibold mb-2">inventory</div>
+                            <div class="fw-semibold mb-2">Inventory</div>
 
                             @foreach($groups['inventory'] as $it)
 
@@ -756,7 +756,7 @@
 
                         {{-- PROCUREMENT --}}
                         <div class="col-md-4">
-                            <div class="fw-semibold mb-2">procurement</div>
+                            <div class="fw-semibold mb-2">Procurement</div>
                             @foreach($groups['procurement'] as $it)
                                 <div class="form-check">
                                     <input class="form-check-input edit-check" type="checkbox"
@@ -772,7 +772,7 @@
 
                         {{-- MASTER --}}
                         <div class="col-md-4">
-                            <div class="fw-semibold mb-2">master</div>
+                            <div class="fw-semibold mb-2">Master</div>
                             @foreach($groups['master'] as $it)
                                 <div class="form-check">
                                     <input class="form-check-input edit-check" type="checkbox"
@@ -1173,7 +1173,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             Swal.fire({
                 title: 'Delete role?',
-                text: 'Role akan dihapus permanen.',
+                text: 'Role will be permanently deleted.',
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonText: 'Yes, delete',
@@ -1194,7 +1194,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const data = await res.json();
 
                         if (!res.ok) {
-                            throw new Error(data.message || 'Delete gagal');
+                            throw new Error(data.message || 'Delete failed');
                         }
 
                         Swal.fire({

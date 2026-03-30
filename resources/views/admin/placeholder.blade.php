@@ -5,7 +5,7 @@
   <h4 class="mb-3">{{ $title ?? 'Coming Soon' }}</h4>
   <div class="card">
     <div class="card-body">
-      Halaman <strong>{{ $title ?? '-' }}</strong> belum dibuat. Silakan isi nanti.
+      The page <strong>{{ $title ?? '-' }}</strong> has not been created yet. Please fill it later.
     </div>
   </div>
 </div>
