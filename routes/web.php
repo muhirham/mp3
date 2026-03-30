@@ -15,6 +15,7 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WarehouseController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\BomController;
+use App\Http\Controllers\Finance\FinanceTransferController;
 use App\Http\Controllers\Sales\HandoverOtpItemsController;
 use App\Http\Controllers\Sales\SalesController;
 use App\Http\Controllers\Sales\SalesReturnController;
@@ -548,6 +549,10 @@ Route::post('/warehouse/stock-requests/{id}/reject', [StockRequestApprovalContro
     // === Sales pages (SALES & WAREHOUSE) ===
     Route::get('/sales/{sales}/active-handover-count', [SalesHandoverController::class, 'getActiveCount']);
 
+    // === FINANCE ===
+    Route::get('/finance/transfer-verifications', [FinanceTransferController::class, 'index'])
+        ->name('finance.transfers')
+        ->middleware('menu:finance_transfers');
 
     Route::get('/warehouse/sales-reports', [SalesHandoverController::class, 'warehouseSalesReport'])
         ->name('sales.report')

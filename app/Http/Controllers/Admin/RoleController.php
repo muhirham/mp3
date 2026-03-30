@@ -35,6 +35,7 @@ class RoleController extends Controller
             'master'      => $registry->where('group', 'master')->values(),
             'warehouse'   => $registry->where('group', 'warehouse')->values(),
             'sales'       => $registry->where('group', 'sales')->values(),
+            'finance'     => $registry->where('group', 'finance')->values(),
         ];
 
         $homeCandidates = config('menu.home_candidates', []);

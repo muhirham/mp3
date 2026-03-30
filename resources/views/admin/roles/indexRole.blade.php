@@ -517,6 +517,23 @@
                             @endforeach
                         </div>
 
+                        {{-- FINANCE --}}
+                        <div class="col-md-4">
+                            <div class="fw-semibold mb-2">Finance</div>
+                            @foreach($groups['finance'] as $it)
+                                <div class="form-check">
+                                    <input class="form-check-input"
+                                        type="checkbox"
+                                        name="menu_keys[]"
+                                        value="{{ $it['key'] }}"
+                                        id="add_{{ $it['key'] }}">
+                                    <label for="add_{{ $it['key'] }}" class="form-check-label">
+                                        {{ $it['label'] }}
+                                    </label>
+                                </div>
+                            @endforeach
+                        </div>
+
                     </div>
                 </div>
 
@@ -992,6 +1009,22 @@
                         <div class="col-md-4">
                             <div class="fw-semibold mb-2">Sales</div>
                             @foreach($groups['sales'] as $it)
+                                <div class="form-check">
+                                    <input class="form-check-input edit-check" type="checkbox"
+                                           name="menu_keys[]"
+                                           value="{{ $it['key'] }}"
+                                           id="edit_{{ $it['key'] }}">
+                                    <label for="edit_{{ $it['key'] }}" class="form-check-label">
+                                        {{ $it['label'] }}
+                                    </label>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        {{-- FINANCE --}}
+                        <div class="col-md-4">
+                            <div class="fw-semibold mb-2">Finance</div>
+                            @foreach($groups['finance'] as $it)
                                 <div class="form-check">
                                     <input class="form-check-input edit-check" type="checkbox"
                                            name="menu_keys[]"
