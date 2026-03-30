@@ -28,10 +28,12 @@ class BomController extends Controller
     {
         $this->ensureBomPermission('bom.view');
 
-        // Subquery stock pusat
+        // Subquery stock sesuai owner (pusat/warehouse)
+        $owner = $this->resolveOwner();
         $stockSub = DB::table('stock_levels')
             ->selectRaw('product_id, SUM(quantity) as total_stock')
-            ->where('owner_type', 'pusat')
+            ->where('owner_type', $owner['type'])
+            ->where('owner_id', $owner['id'])
             ->groupBy('product_id');
 
         $products = Product::leftJoinSub($stockSub, 'st', 'st.product_id', '=', 'products.id')
@@ -572,8 +574,10 @@ public function produce(Request $r, Bom $bom)
 
             $product = Product::find($materialId);
 
+            $owner = $this->resolveOwner();
             $stock = DB::table('stock_levels')
-                ->where('owner_type', 'pusat')
+                ->where('owner_type', $owner['type'])
+                ->where('owner_id', $owner['id'])
                 ->where('product_id', $materialId)
                 ->sum('quantity');
 
