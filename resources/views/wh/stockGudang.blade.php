@@ -64,21 +64,40 @@
                     <div class="col-12 col-md-4 ms-auto">
                         <label class="form-label mb-1">Warehouse</label>
 
-                        @if (!empty($canSwitchWarehouse) && $canSwitchWarehouse)
-                            {{-- Superadmin / Admin pusat: bebas pilih gudang --}}
-                            <select id="filterWarehouse" class="form-select">
-                                <option value="">— All —</option>
-                                @foreach ($warehouses as $w)
-                                    <option value="{{ $w->id }}" @selected(($selectedWarehouseId ?? null) == $w->id)>
-                                        {{ $w->warehouse_name }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        @else
-                            {{-- Admin WH / user lain: hanya lihat gudang miliknya --}}
-                            <input class="form-control" value="{{ $me->warehouse?->warehouse_name ?? '-' }}" disabled>
-                        @endif
+                        <div class="d-flex gap-2">
+                            @if (!empty($canSwitchWarehouse) && $canSwitchWarehouse)
+                                {{-- Superadmin / Admin pusat: bebas pilih gudang --}}
+                                <select id="filterWarehouse" class="form-select flex-grow-1">
+                                    <option value="">— All —</option>
+                                    @foreach ($warehouses as $w)
+                                        <option value="{{ $w->id }}" @selected(($selectedWarehouseId ?? null) == $w->id)>
+                                            {{ $w->warehouse_name }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            @else
+                                {{-- Admin WH / user lain: hanya lihat gudang miliknya --}}
+                                <input class="form-control flex-grow-1" value="{{ $me->warehouse?->warehouse_name ?? '-' }}" disabled>
+                            @endif
+                        </div>
                     </div>
+
+                    {{-- Export & Date Range Filter --}}
+                    @if($me->hasPermission('products.export'))
+                    <div class="col-12 mt-3 d-flex justify-content-end align-items-end gap-2">
+                        <div>
+                            <label class="form-label mb-1">Date Start</label>
+                            <input type="date" id="exportStartDate" class="form-control">
+                        </div>
+                        <div>
+                            <label class="form-label mb-1">Date End</label>
+                            <input type="date" id="exportEndDate" class="form-control">
+                        </div>
+                        <button id="btnExportStock" class="btn btn-success d-flex align-items-center text-nowrap">
+                            <i class="bx bx-export me-2"></i> Export
+                        </button>
+                    </div>
+                    @endif
 
                 </div>
             </div>
@@ -100,6 +119,7 @@
                             <th class="text-end">STOCK</th>
                             <th class="text-end">MIN STOCK</th>
                             <th>STATUS</th>
+                            <th>CREATED AT</th>
                             <th class="text-end">HPP</th>
                             <th class="text-end">SELLING</th>
                         </tr>
@@ -199,6 +219,10 @@
                         searchable: false
                     },
                     {
+                        data: 'created_at',
+                        orderable: true
+                    },
+                    {
                         data: 'hpp',
                         className: 'text-end'
                     },
@@ -223,6 +247,36 @@
             $('#pageLength').on('change', function() {
                 table.page.len(parseInt(this.value || 10, 10)).draw();
             });
+
+            // Export Logic
+            $('#btnExportStock').on('click', function() {
+                let whId = CAN_SWITCH_WH ? ($('#filterWarehouse').val() || '') : (USER_WAREHOUSE_ID || '');
+                let start = $('#exportStartDate').val();
+                let end = $('#exportEndDate').val();
+                let params = [];
+                
+                if (whId) params.push('warehouse_id=' + whId);
+                if (start) params.push('start_date=' + start);
+                if (end) params.push('end_date=' + end);
+
+                let url = @json(route('stocklevel.exportExcel'));
+                if (params.length > 0) {
+                    url += '?' + params.join('&');
+                }
+                
+                // Add loading spinner specifically to this button
+                let originalHtml = $(this).html();
+                $(this).html('<span class="spinner-border spinner-border-sm me-2"></span> Exporting...').prop('disabled', true);
+                
+                // Redirect to download
+                window.location.href = url;
+                
+                // Restore button after short delay
+                setTimeout(() => {
+                    $(this).html(originalHtml).prop('disabled', false);
+                }, 3000);
+            });
+
         });
     </script>
 @endpush

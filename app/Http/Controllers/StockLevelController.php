@@ -136,6 +136,7 @@ class StockLevelController extends Controller
                 DB::raw('products.id as product_id'),
                 DB::raw('products.product_code'),
                 DB::raw('products.name as product_name'),
+                DB::raw('products.created_at'),
 
                 DB::raw('COALESCE(products.standard_cost,0) as standard_cost'),
                 DB::raw("COALESCE(products.product_type,'normal') as product_type"),
@@ -233,6 +234,7 @@ class StockLevelController extends Controller
                             'status'        => $badge,
                             'hpp'           => 'Rp' . number_format((float)$r->standard_cost, 0, ',', '.'),
                             'selling_price' => 'Rp' . number_format($selling, 0, ',', '.'),
+                            'created_at'    => $r->created_at ? date('Y-m-d H:i:s', strtotime($r->created_at)) : '-',
                         ];
                     });
 
@@ -256,5 +258,30 @@ class StockLevelController extends Controller
                 'error'           => 'Server error: ' . $e->getMessage(),
             ]);
         }
+    }
+
+    /** Expor ke Excel */
+    public function exportExcel(Request $request)
+    {
+        $me = auth()->user();
+
+        // Cek Permission. Siapapun yang boleh harus punya "products.export"
+        if (!$me->hasPermission('products.export')) {
+            abort(403, 'Anda tidak memiliki hak akses untuk Export Data.');
+        }
+
+        $isWarehouseUser = $me->hasRole('warehouse');
+        
+        if ($isWarehouseUser) {
+            $warehouseId = $me->warehouse_id;
+        } else {
+            $warehouseId = $request->integer('warehouse_id') ?: null;
+        }
+
+        $startDate = $request->input('start_date');
+        $endDate   = $request->input('end_date');
+
+        $fileName = 'Product_Stock_' . date('Ymd_His') . '.xlsx';
+        return \Maatwebsite\Excel\Facades\Excel::download(new \App\Exports\ProductStockExport($warehouseId, $startDate, $endDate), $fileName);
     }
 }

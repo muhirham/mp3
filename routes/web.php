@@ -170,6 +170,10 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->name('stocklevel.datatable')
         ->middleware('menu:wh_stocklevel');
 
+    Route::get('/stock-level/export/excel', [StockLevelController::class, 'exportExcel'])
+        ->name('stocklevel.exportExcel')
+        ->middleware('menu:wh_stocklevel');
+
 
     /* === Purchase Orders === */
     // key: po
