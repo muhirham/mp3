@@ -1068,6 +1068,18 @@ EOT;
         }
         $salesList = $salesQuery->orderBy('name')->get(['id','name']);
 
+        // ===== ROUTE NAMES =====
+        // admin -> sales.report, warehouse -> sales.report
+        $listRouteName = 'sales.report'; 
+        $detailRoute   = 'sales.report.detail';
+
+        if ($isAdminLike) {
+            $listRouteName = 'sales.report';
+            $detailRoute   = 'sales.report.detail';
+        }
+
+        $canOpenApproval = $this->canWarehouseApprovePaymentForAny($allForSummary);
+
         return view('wh.handover_report', [
             'me'            => $me,
             'rows'          => $rows,
@@ -1083,6 +1095,9 @@ EOT;
             'salesList'     => $salesList,
             'search'        => $search,
             'canSeeMargin'  => $canSeeMargin,
+            'listRouteName' => $listRouteName,
+            'detailRoute'   => $detailRoute,
+            'canOpenApproval' => $canOpenApproval,
         ]);
     }
 
@@ -1944,6 +1959,12 @@ EOT;
             'next'   => $count + 1,
             'limit'  => 3
         ]);
+    }
+
+    private function canWarehouseApprovePaymentForAny(Collection $handovers): bool
+    {
+        // Simple logic: if any handover satisfies the condition
+        return $handovers->contains(fn($h) => $this->canWarehouseApprovePayment($h));
     }
 
     private function canWarehouseApprovePayment(SalesHandover $handover): bool
