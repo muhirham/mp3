@@ -884,7 +884,25 @@ EOT;
 
     private function calcDiscountLoss(SalesHandover $h): int
     {
-        return max(0, $this->calcOriginalSold($h) - $this->calcRealSold($h));
+        if (! $h->relationLoaded('items')) {
+            $h->load('items');
+        }
+
+        return $h->items->sum(function ($it) {
+            $qtySold = (int) ($it->qty_sold ?? 0);
+            $discPerUnit = (int) ($it->discount_per_unit ?? 0);
+            
+            if ($qtySold > 0 && $discPerUnit > 0) {
+                return $qtySold * $discPerUnit;
+            }
+            
+            // Fallback manual selisih jika field discount_per_unit kosong tapi ada selisih nilai
+            $oriPrice = (int) ($it->unit_price ?? 0);
+            $realVal  = (int) ($it->line_total_after_discount ?? $it->line_total_sold ?? 0);
+            $expected = $qtySold * $oriPrice;
+            
+            return max(0, $expected - $realVal);
+        });
     }
 
     private function reportIndex(Request $request)
@@ -895,13 +913,9 @@ EOT;
         $isWarehouse = $roles->contains('slug', 'warehouse');
         $isSales     = $roles->contains('slug', 'sales');
         $isAdminLike = $roles->contains('slug', 'admin') || $roles->contains('slug', 'superadmin');
-        $canSeeMargin =
-                        $roles->contains('slug','superadmin')
-                    || $roles->contains('slug','admin')
-                    || $roles->contains('slug','warehouse')
-                    || $roles->contains('slug','procurement')
-                    || $roles->contains('slug','ceo');
 
+        // 🔥 OBRAL PERMISSION: Semua bisa liat diskon/margin KECUALI Sales murni (Daily report)
+        $canSeeMargin = ! ($isSales && ! $isAdminLike && ! $isWarehouse);
 
         $dateFrom = $request->query('date_from', now()->toDateString());
         $dateTo   = $request->query('date_to',   now()->toDateString());
@@ -911,6 +925,8 @@ EOT;
         $warehouseId = $request->query('warehouse_id');
         $salesId     = $request->query('sales_id');
         $search      = trim((string) $request->query('q', ''));
+        $perPage     = (int) $request->query('per_page', 10);
+        if (! in_array($perPage, [10, 30, 50])) $perPage = 10;
 
         // view: handover | sales | daily
         $view = (string) $request->query('view', 'handover');
@@ -926,7 +942,7 @@ EOT;
             'cancelled'           => 'Cancelled',
         ];
 
-        // ===== LOCK RULES (ini yang bikin sales cuma lihat data dia) =====
+        // ===== LOCK RULES =====
         if ($isWarehouse && $me->warehouse_id && ! $isAdminLike) {
             $warehouseId = $me->warehouse_id;
         }
@@ -937,39 +953,26 @@ EOT;
         }
 
         // ===== QUERY HANDOVER =====
-        $query = SalesHandover::with(['warehouse','sales'])
+        $query = SalesHandover::with(['warehouse','sales', 'items.product'])
             ->whereBetween('handover_date', [$dateFrom, $dateTo]);
 
         if ($status !== 'all') $query->where('status', $status);
-        if ($warehouseId)      $query->where('warehouse_id', $warehouseId);
-        if ($salesId)          $query->where('sales_id', $salesId);
+        if ($warehouseId && $warehouseId !== 'all') $query->where('warehouse_id', $warehouseId);
+        if ($salesId && $salesId !== 'all') $query->where('sales_id', $salesId);
 
-        // ===== SEARCH (FIX: jangan pernah sentuh column warehouses.name kalau kolomnya ga ada) =====
-        $hasWhNameCol = Schema::hasColumn('warehouses', 'warehouse_name');
-        $hasWhCodeCol = Schema::hasColumn('warehouses', 'warehouse_code');
-        $hasWhNameLegacyCol = Schema::hasColumn('warehouses', 'name'); // jaga-jaga kalau DB lama masih ada
+        $hasWhNameCol       = Schema::hasColumn('warehouses', 'warehouse_name');
+        $hasWhCodeCol       = Schema::hasColumn('warehouses', 'warehouse_code');
+        $hasWhNameLegacyCol = Schema::hasColumn('warehouses', 'name');
 
         if ($search !== '') {
             $q = "%{$search}%";
             $query->where(function ($sub) use ($q, $hasWhNameCol, $hasWhCodeCol, $hasWhNameLegacyCol) {
                 $sub->where('code', 'like', $q)
                     ->orWhereHas('warehouse', function ($w) use ($q, $hasWhNameCol, $hasWhCodeCol, $hasWhNameLegacyCol) {
-                        // NOTE: builder pertama pakai where, sisanya orWhere (biar ga error SQL)
                         $first = true;
-
-                        if ($hasWhNameCol) {
-                            $w->where('warehouse_name', 'like', $q);
-                            $first = false;
-                        }
-
-                        if ($hasWhNameLegacyCol) {
-                            $first ? $w->where('name', 'like', $q) : $w->orWhere('name', 'like', $q);
-                            $first = false;
-                        }
-
-                        if ($hasWhCodeCol) {
-                            $first ? $w->where('warehouse_code', 'like', $q) : $w->orWhere('warehouse_code', 'like', $q);
-                        }
+                        if ($hasWhNameCol) { $w->where('warehouse_name', 'like', $q); $first = false; }
+                        if ($hasWhNameLegacyCol) { $first ? $w->where('name', 'like', $q) : $w->orWhere('name', 'like', $q); $first = false; }
+                        if ($hasWhCodeCol) { $first ? $w->where('warehouse_code', 'like', $q) : $w->orWhere('warehouse_code', 'like', $q); }
                     })
                     ->orWhereHas('sales', function ($s) use ($q) {
                         $s->where('name', 'like', $q);
@@ -977,9 +980,62 @@ EOT;
             });
         }
 
-        $handovers = $query->orderBy('handover_date', 'desc')->orderBy('code')->get();
+        // 1. Calculate GLOBAL SUMMARY (semua data di periode ini)
+        // Kita bangun kueri FRESH biar ga ada state leakage
+        $summaryQuery = SalesHandover::whereBetween('handover_date', [$dateFrom, $dateTo]);
+        if ($status !== 'all') $summaryQuery->where('status', $status);
+        if ($warehouseId && $warehouseId !== 'all') $summaryQuery->where('warehouse_id', $warehouseId);
+        if ($salesId && $salesId !== 'all') $summaryQuery->where('sales_id', $salesId);
+        
+        if ($search !== '') {
+            $q = "%{$search}%";
+            $summaryQuery->where(function ($sub) use ($q, $hasWhNameCol, $hasWhCodeCol, $hasWhNameLegacyCol) {
+                $sub->where('code', 'like', $q)
+                    ->orWhereHas('warehouse', function ($w) use ($q, $hasWhNameCol, $hasWhCodeCol, $hasWhNameLegacyCol) {
+                        $first = true;
+                        if ($hasWhNameCol) { $w->where('warehouse_name', 'like', $q); $first = false; }
+                        if ($hasWhNameLegacyCol) { $first ? $w->where('name', 'like', $q) : $w->orWhere('name', 'like', $q); $first = false; }
+                        if ($hasWhCodeCol) { $first ? $w->where('warehouse_code', 'like', $q) : $w->orWhere('warehouse_code', 'like', $q); }
+                    })
+                    ->orWhereHas('sales', function ($s) use ($q) {
+                        $s->where('name', 'like', $q);
+                    });
+            });
+        }
 
-        [$rows, $summary] = $this->makeReportData($handovers, $statusOptions, $dateFrom, $dateTo, $view);
+        $allForSummary = $summaryQuery->get();
+        [ , $summary] = $this->makeReportData($allForSummary, $statusOptions, $dateFrom, $dateTo, $view);
+
+        // 2. AMBIL SEMUA DATA (Tanpa Paginasi sementara)
+        $itemsQuery = SalesHandover::with(['warehouse','sales', 'items.product'])
+            ->whereBetween('handover_date', [$dateFrom, $dateTo]);
+        
+        if ($status !== 'all') $itemsQuery->where('status', $status);
+        if ($warehouseId && $warehouseId !== 'all') $itemsQuery->where('warehouse_id', $warehouseId);
+        if ($salesId && $salesId !== 'all') $itemsQuery->where('sales_id', $salesId);
+        
+        if ($search !== '') {
+            $q = "%{$search}%";
+            $itemsQuery->where(function ($sub) use ($q, $hasWhNameCol, $hasWhCodeCol, $hasWhNameLegacyCol) {
+                $sub->where('code', 'like', $q)
+                    ->orWhereHas('warehouse', function ($w) use ($q, $hasWhNameCol, $hasWhCodeCol, $hasWhNameLegacyCol) {
+                        $first = true;
+                        if ($hasWhNameCol) { $w->where('warehouse_name', 'like', $q); $first = false; }
+                        if ($hasWhNameLegacyCol) { $first ? $w->where('name', 'like', $q) : $w->orWhere('name', 'like', $q); $first = false; }
+                        if ($hasWhCodeCol) { $first ? $w->where('warehouse_code', 'like', $q) : $w->orWhere('warehouse_code', 'like', $q); }
+                    })
+                    ->orWhereHas('sales', function ($s) use ($q) {
+                        $s->where('name', 'like', $q);
+                    });
+            });
+        }
+            
+        $items = $itemsQuery->orderBy('handover_date', 'desc')
+            ->orderBy('code', 'desc')
+            ->get();
+
+        // 3. Transform data
+        [$rows, ] = $this->makeReportData($items, $statusOptions, $dateFrom, $dateTo, $view);
 
         if ($request->ajax()) {
             return response()->json([
@@ -987,35 +1043,29 @@ EOT;
                 'view'    => $view,
                 'rows'    => $rows,
                 'summary' => $summary,
+                'meta'    => [
+                    'total' => count($rows)
+                ]
             ]);
         }
 
-        // ===== DROPDOWN DATA (FIX UTAMA: jangan select warehouses.name kalau kolom ga ada) =====
+        // ===== DROPDOWN DATA =====
         $whQuery = Warehouse::query();
-
-        // warehouse user => kunci ke warehouse dia
-        // sales murni => kunci ke warehouse dia juga (biar UI sama & aman)
         if (($isWarehouse && $me->warehouse_id && ! $isAdminLike) || ($isSales && ! $isAdminLike && ! $isWarehouse && $me->warehouse_id)) {
             $whQuery->where('id', $warehouseId);
         }
-
-        // orderBy aman (tanpa "name")
         $whQuery->orderBy(DB::raw('COALESCE(warehouse_name, warehouse_code, id)'));
-
         $whSelect = ['id'];
         if ($hasWhNameCol) $whSelect[] = 'warehouse_name';
         if ($hasWhCodeCol) $whSelect[] = 'warehouse_code';
-        if ($hasWhNameLegacyCol) $whSelect[] = 'name'; // cuma kalau kolomnya beneran ada
+        if ($hasWhNameLegacyCol) $whSelect[] = 'name';
         $warehouses = $whQuery->get($whSelect);
 
         $salesQuery = User::whereHas('roles', fn($q) => $q->where('slug','sales'));
         if ($warehouseId) $salesQuery->where('warehouse_id', $warehouseId);
-
-        // sales murni => list cuma dirinya
         if ($isSales && ! $isAdminLike && ! $isWarehouse) {
             $salesQuery->where('id', $me->id);
         }
-
         $salesList = $salesQuery->orderBy('name')->get(['id','name']);
 
         return view('wh.handover_report', [
@@ -1023,18 +1073,16 @@ EOT;
             'rows'          => $rows,
             'summary'       => $summary,
             'view'          => $view,
-
             'dateFrom'      => $dateFrom,
             'dateTo'        => $dateTo,
             'status'        => $status,
             'statusOptions' => $statusOptions,
-
             'warehouseId'   => $warehouseId,
             'salesId'       => $salesId,
             'warehouses'    => $warehouses,
             'salesList'     => $salesList,
             'search'        => $search,
-            'canSeeMargin' => $canSeeMargin,
+            'canSeeMargin'  => $canSeeMargin,
         ]);
     }
 
@@ -1088,7 +1136,13 @@ EOT;
                 
                 foreach ($h->items as $it) {
                     $originalStart += (int) ($it->line_total_start ?? ((int) $it->qty_start * (int) $it->unit_price));
-                    $discountStart += (int) ($it->discount_total ?? ((int) $it->qty_start * (int) $it->discount_per_unit));
+                    
+                    // Diskon: Prioritaskan diskon barang TERJUAL untuk report yang akurat
+                    if ($h->status === 'closed') {
+                       $discountStart += (int) (($it->qty_sold ?? 0) * ($it->discount_per_unit ?? 0));
+                    } else {
+                       $discountStart += (int) ($it->discount_total ?? ((int) $it->qty_start * (int) $it->discount_per_unit));
+                    }
                 }
 
                 $real = $this->calcRealSold($h);
@@ -1116,9 +1170,11 @@ EOT;
                     'status_label'       => $stLabel,
                     'status_badge_class' => $badgeClass,
                     'amount_dispatched'  => $this->formatRp($dispatched),
-                    // Harga Asli dan Diskon dimunculkan langsung (Potensi barang dibawa)
-                    'amount_original'    => $this->formatRp($originalStart),
-                    'amount_discount'    => $this->formatRp($discountStart > 0 ? $discountStart : 0),
+                    // Ori Price: Tampilkan total harga modal (qty_sold * unit_price) jika closed agar match
+                    'amount_original'    => $h->status === 'closed' 
+                                            ? $this->formatRp($real + ($discountStart > 0 ? $discountStart : 0))
+                                            : $this->formatRp($originalStart),
+                    'amount_discount'    => $discountStart > 0 ? $this->formatRp($discountStart) : '0',
                     // Terjual dan Selisih Stok hanya muncul kalau sudah closed
                     'amount_sold'        => $h->status === 'closed' ? $this->formatRp($real) : null,
                     'amount_diff'        => $h->status === 'closed' ? $this->formatRp($diff) : null,
