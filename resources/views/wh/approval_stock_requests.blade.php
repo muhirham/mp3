@@ -156,8 +156,8 @@
                     .catch(err => {
                         Swal.fire({
                             icon:'error',
-                            title:'Detail gagal dibuka',
-                            text: err.message || 'Terjadi kesalahan'
+                            title:'Failed to open detail',
+                            text: err.message || 'An error occurred'
                         });
                     });
             };
@@ -219,9 +219,9 @@
                     setTimeout(() => {
 
                         Swal.fire({
-                            title: 'Alasan reject',
+                            title: 'Rejection reason',
                             input: 'text',
-                            inputPlaceholder: 'Masukkan alasan reject',
+                            inputPlaceholder: 'Enter rejection reason',
                             allowOutsideClick: false,
                             showCancelButton: true,
                             customClass: {
@@ -232,7 +232,7 @@
                                     '30000';
                             },
                             inputValidator: (value) => {
-                                if (!value) return 'Note wajib diisi';
+                                if (!value) return 'Note is required';
                             }
 
                         }).then((result) => {
@@ -302,7 +302,7 @@
             if (remain.length === 0) {
                 Swal.fire({
                     icon: 'warning',
-                    title: 'Tidak ada item approve'
+                    title: 'No items to approve'
                 });
                 return;
             }
@@ -312,7 +312,7 @@
             setTimeout(async () => {
 
                 const confirm = await Swal.fire({
-                    title: 'Approve semua item?',
+                    title: 'Approve all items?',
                     icon: 'warning',
                     showCancelButton: true,
                     customClass: {
@@ -376,7 +376,7 @@
 
                     Swal.fire({
                         icon: 'success',
-                        title: 'Approve selesai',
+                        title: 'Approval completed',
                         timer: 1200,
                         showConfirmButton: false
                     });
@@ -387,8 +387,8 @@
 
                     Swal.fire({
                         icon: 'warning',
-                        title: 'Tidak bisa approve',
-                        text: err.message || 'Sales sudah punya 3 HDO aktif'
+                        title: 'Cannot approve',
+                        text: err.message || 'Sales already has 3 active HDOs'
                     });
                 }
 

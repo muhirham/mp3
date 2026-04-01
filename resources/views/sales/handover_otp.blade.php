@@ -51,18 +51,18 @@
     <div class="card picker mb-3"><div class="card-body">
         <form method="GET" action="{{ route('sales.otp.items') }}" class="row g-2 align-items-end">
             <div class="col-md-10">
-                <div class="small text-muted fw-semibold mb-1">Pilih Handover Aktif</div>
+                <div class="small text-muted fw-semibold mb-1">Select Active Handover</div>
                 <select name="handover_id" class="form-select" onchange="this.form.submit()">
                     @foreach ($handovers as $handoverOption)
                         @php
                             $statusText=$statusLabelMap[$handoverOption->status] ?? strtoupper($handoverOption->status);
                             $isVerifiedOption=$handoverOption->status !== 'waiting_morning_otp' && (session('sales_handover_otp_verified_'.$handoverOption->id,false) || ($handoverOption->status==='on_sales' && !is_null($handoverOption->morning_otp_verified_at)));
                         @endphp
-                        <option value="{{ $handoverOption->id }}" @selected(($handover?->id ?? null)===$handoverOption->id)>{{ $handoverOption->code }} - {{ optional($handoverOption->handover_date)->format('Y-m-d') }} - {{ $statusText }} {{ $isVerifiedOption ? '- OTP OK' : '- OTP BELUM' }}</option>
+                        <option value="{{ $handoverOption->id }}" @selected(($handover?->id ?? null)===$handoverOption->id)>{{ $handoverOption->code }} - {{ optional($handoverOption->handover_date)->format('Y-m-d') }} - {{ $statusText }} {{ $isVerifiedOption ? '- OTP OK' : '- OTP NOT VERIFIED' }}</option>
                     @endforeach
                 </select>
             </div>
-            <div class="col-md-2"><button type="submit" class="btn btn-outline-primary w-100">Lihat</button></div>
+            <div class="col-md-2"><button type="submit" class="btn btn-outline-primary w-100">View</button></div>
         </form>
     </div></div>
     @endif
@@ -94,7 +94,7 @@
 
     <div class="card items-card"><div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">Today's Dispatched Items</h5>
-        <small class="text-muted text-end">Save draft kapan saja selama masih jualan. Submit ke admin WH hanya saat closing akhir hari.</small>
+        <small class="text-muted text-end">Save draft anytime while selling. Submit to Admin WH only for end-of-day closing.</small>
     </div><div class="card-body">
         @if (!$handover)
             <div class="text-center text-muted">No active handover today.</div>
@@ -102,10 +102,10 @@
             <div class="text-center text-muted">Please enter the morning OTP first to view the items list.</div>
         @else
             <div class="sum-grid">
-                <div class="sum-card"><div class="sum-label">Dispatched Qty</div><div class="sum-value">{{ $totalDispatchQty }}</div><div class="sum-note">Total unit dibawa hari ini</div></div>
-                <div class="sum-card"><div class="sum-label">Sold Progress</div><div class="sum-value">{{ $totalSoldQty }}</div><div class="sum-note">Unit yang sudah diinput sales</div></div>
-                <div class="sum-card"><div class="sum-label">Remaining Qty</div><div class="sum-value">{{ $totalRemainingQty }}</div><div class="sum-note">Sisa unit yang masih bisa dijual</div></div>
-                <div class="sum-card"><div class="sum-label">Draft Sales Value</div><div class="sum-value" style="font-size:20px">Rp {{ number_format($totalSalesAmount,0,',','.') }}</div><div class="sum-note">Akumulasi nilai jual sementara</div></div>
+                <div class="sum-card"><div class="sum-label">Dispatched Qty</div><div class="sum-value">{{ $totalDispatchQty }}</div><div class="sum-note">Total units carried today</div></div>
+                <div class="sum-card"><div class="sum-label">Sold Progress</div><div class="sum-value">{{ $totalSoldQty }}</div><div class="sum-note">Units already entered by sales</div></div>
+                <div class="sum-card"><div class="sum-label">Remaining Qty</div><div class="sum-value">{{ $totalRemainingQty }}</div><div class="sum-note">Remaining units available for sale</div></div>
+                <div class="sum-card"><div class="sum-label">Draft Sales Value</div><div class="sum-value" style="font-size:20px">Rp {{ number_format($totalSalesAmount,0,',','.') }}</div><div class="sum-note">Accumulated temporary sales value</div></div>
             </div>
             <div class="helper">
                 <div><p>Save Draft saves sales progress without closing the handover. Submit to Admin WH is used during final end-of-day closing.</p></div>
@@ -138,13 +138,13 @@
                                 <td data-label="Product">
                                     <div class="pname">{{ $productName }}</div>
                                     @if ($productCode)<div class="pcode">{{ $productCode }}</div>@endif
-                                    <div class="chips"><span class="chip">Dibawa: {{ (int)$row->qty_start }}</span><span class="chip">Terjual: {{ $displaySoldQty }}</span><span class="chip">Sisa: {{ $remainingQty }}</span></div>
+                                    <div class="chips"><span class="chip">Carried: {{ (int)$row->qty_start }}</span><span class="chip">Sold: {{ $displaySoldQty }}</span><span class="chip">Remaining: {{ $remainingQty }}</span></div>
                                 </td>
                                 <td data-label="Progress">
                                     <div class="num">Dispatched: {{ (int)$row->qty_start }}</div>
                                     <div class="num">Sold: {{ $displaySoldQty }}</div>
                                     <div class="num">Remaining: {{ $remainingQty }}</div>
-                                    @if ($isRejectedReinput)<div class="note text-danger fw-bold">Rejected by WH. Silakan input ulang (Max: {{ $maxQty }})</div>@elseif ($isRejectedDraftProgress)<div class="note text-warning">Pending payment for partial sold items (Max: {{ $maxQty }})</div>@endif
+                                    @if ($isRejectedReinput)<div class="note text-danger fw-bold">Rejected by WH. Please re-input (Max: {{ $maxQty }})</div>@elseif ($isRejectedDraftProgress)<div class="note text-warning">Pending payment for partial sold items (Max: {{ $maxQty }})</div>@endif
                                     @if ((int)$row->qty_returned > 0)<div class="note">Final returned: {{ (int)$row->qty_returned }}</div>@endif
                                 </td>
                                 <td data-label="Price">
@@ -167,7 +167,7 @@
                                         <div class="ibox"><label class="ilabel">Cash Amount</label><input type="number" class="form-control form-control-sm" name="items[{{ $row->id }}][payment_cash_amount]" min="0" max="{{ $maxNominal }}" value="{{ $cashAmountValue }}" @disabled($isLocked)></div>
                                         <div class="ibox"><label class="ilabel">Transfer Amount</label><input type="number" class="form-control form-control-sm" name="items[{{ $row->id }}][payment_transfer_amount]" min="0" max="{{ $maxNominal }}" value="{{ $transferAmountValue }}" @disabled($isLocked)></div>
                                     </div>
-                                    <div class="note mt-2">Cash dan transfer bisa diisi salah satu atau dua-duanya. Bukti transfer wajib saat submit akhir ke admin WH.</div>
+                                    <div class="note mt-2">Cash and transfer can be filled separately or together. Transfer proof is mandatory during final submission to Admin WH.</div>
                                 </td>
                                 <td data-label="Transfer Proof"><div class="proof">@if ($row->payment_transfer_proof_path)<a href="{{ asset('storage/'.$row->payment_transfer_proof_path) }}" target="_blank">View Proof</a>@endif<input type="file" class="form-control form-control-sm" name="items[{{ $row->id }}][payment_proof]" @disabled($isLocked)></div></td>
                                 <td data-label="Payment Status"><div class="status"><span class="badge {{ $payBadge }}">{{ strtoupper($payStatusKey) }}</span>@if ($row->payment_status === 'rejected' && $row->payment_reject_reason)<div class="small text-danger mt-2">{{ $row->payment_reject_reason }}</div>@endif</div></td>
@@ -222,7 +222,7 @@ document.addEventListener('DOMContentLoaded', function() {
             text: 'The OTP code has been sent to your email. Please enter the code provided by the warehouse admin.',
             input: 'text',
             inputLabel: 'OTP Code',
-            inputPlaceholder: 'Contoh: 123456',
+            inputPlaceholder: 'Example: 123456',
             inputAttributes: { maxlength: 10, autocapitalize: 'off', autocorrect: 'off' },
             allowOutsideClick: false,
             showCancelButton: false,

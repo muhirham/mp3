@@ -1,9 +1,9 @@
-    <!DOCTYPE html>
+<!DOCTYPE html>
     <html>
 
     <head>
         <meta charset="UTF-8">
-        <title>Surat Jalan {{ $transfer->transfer_code }}</title>
+        <title>Delivery Note {{ $transfer->transfer_code }}</title>
         <style>
             @page {
                 size: A4 portrait;
@@ -121,7 +121,7 @@
         @endif
 
         {{-- ================= TITLE ================= --}}
-        <div class="title">SURAT JALAN TRANSFER GUDANG</div>
+        <div class="title">WAREHOUSE TRANSFER DELIVERY NOTE</div>
 
         {{-- ================= INFO TRANSFER ================= --}}
         <table>
@@ -129,12 +129,12 @@
                 <td style="width:50%; vertical-align:top;">
                     <table>
                         <tr>
-                            <td style="width:35%;"><strong>No Transfer</strong></td>
+                            <td style="width:35%;"><strong>Transfer No</strong></td>
                             <td style="width:5%;">:</td>
                             <td>{{ $transfer->transfer_code }}</td>
                         </tr>
                         <tr>
-                            <td><strong>Tanggal</strong></td>
+                            <td><strong>Date</strong></td>
                             <td>:</td>
                             <td>{{ $transfer->approved_destination_at?->format('d/m/Y') ?? $transfer->created_at->format('d/m/Y') }}
                             </td>
@@ -161,7 +161,7 @@
                             <td>{{ $transfer->destinationWarehouse->warehouse_name }}</td>
                         </tr>
                         <tr>
-                            <td><strong>Dibuat oleh</strong></td>
+                            <td><strong>Created by</strong></td>
                             <td>:</td>
                             <td>{{ $transfer->creator->name ?? '-' }}</td>
                         </tr>
@@ -177,10 +177,10 @@
             <thead>
                 <tr>
                     <th style="width:5%;">No</th>
-                    <th>Nama Barang</th>
-                    <th style="width:15%;">Kode Produk</th>
-                    <th style="width:10%;" class="text-center">Qty Kirim</th>
-                    <th style="width:20%;">Keterangan</th>
+                    <th>Product Name</th>
+                    <th style="width:15%;">Product Code</th>
+                    <th style="width:10%;" class="text-center">Ship Qty</th>
+                    <th style="width:20%;">Description</th>
                 </tr>
             </thead>
             <tbody>
@@ -204,7 +204,7 @@
         {{-- ================= NOTE ================= --}}
         @if ($transfer->note)
             <div class="mt-10">
-                <strong>Catatan:</strong>
+                <strong>Note:</strong>
                 <div>{{ $transfer->note }}</div>
             </div>
         @endif
@@ -214,9 +214,9 @@
 
         <table>
             <tr>
-                {{-- GUDANG PENGIRIM --}}
+                {{-- SHIPPING WAREHOUSE --}}
                 <td class="text-center" style="width:50%;">
-                    <div class="small">Dikirim oleh</div>
+                    <div class="small">Shipped by</div>
                     <div class="small text-muted">
                         {{ $transfer->destinationWarehouse->warehouse_name }}
                     </div>
@@ -231,12 +231,12 @@
                     <strong>
                         {{ $transfer->approvedDestinationBy->name ?? '______________' }}
                     </strong>
-                    <div class="small">Admin Gudang Pengirim</div>
+                    <div class="small">Shipping Warehouse Admin</div>
                 </td>
 
                 {{-- GUDANG PENERIMA --}}
                 <td class="text-center" style="width:50%;">
-                    <div class="small">Diterima oleh</div>
+                    <div class="small">Received by</div>
                     <div class="small text-muted">
                         {{ $transfer->sourceWarehouse->warehouse_name }}
                     </div>
