@@ -87,7 +87,11 @@ class User extends Authenticatable
 
     public function allowedMenuKeys(): array
     {
-        return $this->allMenuKeys();
+        $keys = $this->allMenuKeys();
+        if ($this->hasRole(['superadmin', 'finance'])) {
+            $keys[] = 'finance_transfers';
+        }
+        return $keys;
     }
 
     /* ================== HELPER PERMISSION ================== */

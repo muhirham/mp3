@@ -138,6 +138,14 @@ return [
             'group' => 'sales',
             'icon'  => 'bx bx-calendar-check',
         ],
+        // ================== FINANCE ==================
+        [
+            'key'   => 'finance_transfers',
+            'label' => 'Transfer Verifications',
+            'route' => 'finance.transfers',
+            'group' => 'finance',
+            'icon'  => 'bx bx-receipt',
+        ],
         [
             'key'   => 'sales_otp',  // <=== KEY BARU
             'label' => 'Morning OTP & Issued Items',
@@ -204,6 +212,7 @@ return [
         'warehouse'   => ['label' => 'Warehouse',   'icon' => 'bx bx-buildings'],
         'procurement' => ['label' => 'Procurement', 'icon' => 'bx bx-cart'],
         'sales'       => ['label' => 'Sales',       'icon' => 'bx bx-line-chart'],
+        'finance'     => ['label' => 'Finance',     'icon' => 'bx bx-money'],
         'master'      => ['label' => 'Master Data', 'icon' => 'bx bx-slider-alt'],
     ],
 
