@@ -108,7 +108,7 @@
                 <div class="sum-card"><div class="sum-label">Draft Sales Value</div><div class="sum-value" style="font-size:20px">Rp {{ number_format($totalSalesAmount,0,',','.') }}</div><div class="sum-note">Akumulasi nilai jual sementara</div></div>
             </div>
             <div class="helper">
-                <div><h6>Flow baru lebih enak dipakai</h6><p>Save Draft menyimpan progres jualan tanpa menutup handover. Submit to Admin WH dipakai saat closing akhir hari.</p></div>
+                <div><p>Save Draft saves sales progress without closing the handover. Submit to Admin WH is used during final end-of-day closing.</p></div>
                 <span class="badge bg-label-info">{{ $handover->evening_filled_by_sales ? 'Submitted to WH' : 'Draft in progress' }}</span>
             </div>
 
