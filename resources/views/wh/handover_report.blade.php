@@ -250,7 +250,8 @@
                     </div>
 
                     <div class="col-md-3 d-flex align-items-end gap-2">
-                        <button type="button" id="btnResetFilters" class="btn btn-outline-secondary w-100">Reset Filters</button>
+                        <button type="button" id="btnResetFilters" class="btn btn-outline-secondary w-100">Reset
+                            Filters</button>
                         <button type="button" id="btnExportSales" class="btn btn-success w-100">Export Excel</button>
                     </div>
                 </form>
@@ -484,6 +485,7 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         (function() {
+            // 1. DOM ELEMENTS
             const filterForm = document.getElementById('reportFilterForm');
             const rowsTbody = document.getElementById('handoverRows');
             const headEl = document.getElementById('reportHead');
@@ -493,10 +495,7 @@
             const sumSoldEl = document.getElementById('sumSold');
             const sumDiffEl = document.getElementById('sumDiff');
             const periodTextEl = document.getElementById('periodText');
-            const btnExportSales = document.getElementById('btnExportSales');
-
-            const listUrl = @json(route($listRouteName));
-            const detailUrlTemplate = @json(route($detailRoute, 0));
+            const sumDiscountEl = document.getElementById('sumDiscount');
 
             const modalEl = document.getElementById('handoverDetailModal');
             const detailHeader = document.getElementById('detailHeader');
@@ -504,173 +503,72 @@
             const detailTbody = document.querySelector('#detailItemsTable tbody');
             const bsModal = modalEl ? new bootstrap.Modal(modalEl) : null;
 
-            const canOpenApproval = @json($canOpenApproval);
             const approvalButton = document.getElementById('approvalButton');
+
+            // 2. CONFIG & ROUTES
+            const listUrl = @json(route($listRouteName));
+            const detailUrlTemplate = @json(route($detailRoute, 0));
+            const canSeeMargin = @json($canSeeMargin);
+            const canOpenApproval = @json($canOpenApproval);
             const approvalUrlTemplate = canOpenApproval ? @json(route('warehouse.handovers.payments.form', 0)) : null;
+
             let currentHandoverId = null;
 
+            // 3. HELPERS
             function formatRp(num) {
                 return 'Rp ' + new Intl.NumberFormat('id-ID').format(num || 0);
             }
 
-            const canSeeMargin = @json($canSeeMargin);
-
-            document.getElementById('btnExportSales').addEventListener('click', function() {
-
-                const params = new URLSearchParams(window.location.search);
-
-                const view = document.querySelector('[name="view"]').value;
-                const dateFrom = document.querySelector('[name="date_from"]').value;
-                const dateTo = document.querySelector('[name="date_to"]').value;
-                const warehouse = document.querySelector('[name="warehouse_id"]').value;
-                const sales = document.querySelector('[name="sales_id"]').value;
-                const status = document.querySelector('[name="status"]').value;
-
-                params.set('view', view);
-                params.set('date_from', dateFrom);
-                params.set('date_to', dateTo);
-                params.set('warehouse_id', warehouse);
-                params.set('sales_id', sales);
-                params.set('status', status);
-
-                window.location.href = '/reports/sales/export?' + params.toString();
-            });
-
+            // 4. RENDERING FUNCTIONS
             function renderHead(view) {
                 if (view === 'sales') {
-                    headEl.innerHTML = `
-        <tr>
-          <th style="width:4%">#</th>
-          <th style="width:22%">Sales</th>
-          <th style="width:20%">Warehouse</th>
-          <th class="text-end" style="width:10%">HDO</th>
-          <th class="text-end" style="width:13%">Total Carried</th>
-          <th class="text-end" style="width:13%">Total Sold</th>
-          <th class="text-end" style="width:13%">Total Deposit</th>
-          <th style="width:5%"></th>
-        </tr>
-      `;
+                    headEl.innerHTML =
+                        `<tr><th style="width:4%">#</th><th style="width:22%">Sales</th><th style="width:20%">Warehouse</th><th class="text-end" style="width:10%">HDO</th><th class="text-end" style="width:13%">Total Carried</th><th class="text-end" style="width:13%">Total Sold</th><th class="text-end" style="width:13%">Total Deposit</th><th style="width:5%"></th></tr>`;
                     return;
                 }
-
                 if (view === 'daily') {
-                    headEl.innerHTML = `
-        <tr>
-          <th style="width:4%">#</th>
-          <th style="width:16%">Date</th>
-          <th class="text-end" style="width:12%">HDO</th>
-          <th class="text-end" style="width:20%">Total Carried</th>
-          <th class="text-end" style="width:20%">Total Sold</th>
-          <th class="text-end" style="width:20%">Total Deposit</th>
-          <th style="width:8%"></th>
-        </tr>
-      `;
+                    headEl.innerHTML =
+                        `<tr><th style="width:4%">#</th><th style="width:16%">Date</th><th class="text-end" style="width:12%">HDO</th><th class="text-end" style="width:20%">Total Carried</th><th class="text-end" style="width:20%">Total Sold</th><th class="text-end" style="width:20%">Total Deposit</th><th style="width:8%"></th></tr>`;
                     return;
                 }
-
-                let extra = '';
-                if (canSeeMargin) {
-                    extra = `
-          <th class="text-end" style="width:8%">Ori Price</th>
-          <th class="text-end" style="width:8%">Disc</th>
-        `;
-                }
-
-                headEl.innerHTML = `
-        <tr>
-          <th style="width:2%">#</th>
-          <th style="width:8%">Date</th>
-          <th style="width:11%">Code</th>
-          <th style="width:14%">Warehouse</th>
-          <th style="width:13%">Sales</th>
-          <th style="width:7%">Status</th>
-          <th class="text-end" style="width:8%">Carried Val</th>
-          <th class="text-end" style="width:8%">Sold Val</th>
-          ${extra}
-          <th class="text-end" style="width:8%">Diff</th>
-          <th style="width:5%"></th>
-        </tr>
-      `;
+                let extra = canSeeMargin ?
+                    `<th class="text-end" style="width:8%">Ori Price</th><th class="text-end" style="width:8%">Disc</th>` :
+                    '';
+                headEl.innerHTML =
+                    `<tr><th style="width:2%">#</th><th style="width:8%">Date</th><th style="width:11%">Code</th><th style="width:14%">Warehouse</th><th style="width:13%">Sales</th><th style="width:7%">Status</th><th class="text-end" style="width:8%">Carried Val</th><th class="text-end" style="width:8%">Sold Val</th>${extra}<th class="text-end" style="width:8%">Diff</th><th style="width:5%"></th></tr>`;
             }
 
             function renderRows(view, rows) {
                 if (!rows || !rows.length) {
                     rowsTbody.innerHTML =
-                        `<tr><td colspan="10" class="text-center text-muted">No data available for this period.</td></tr>`;
+                        `<tr><td colspan="12" class="text-center text-muted">No data available for this period.</td></tr>`;
                     return;
                 }
 
                 if (view === 'sales') {
-                    rowsTbody.innerHTML = rows.map(r => `
-        <tr>
-          <td>${r.no}</td>
-          <td class="fw-semibold text-wrap-name">${r.sales}</td>
-          <td class="text-wrap-name">${r.warehouse}</td>
-          <td class="text-end">${r.handover_count}</td>
-          <td class="text-end">${r.amount_dispatched}</td>
-          <td class="text-end">${r.amount_sold}</td>
-          <td class="text-end">${r.amount_setor}</td>
-          <td class="text-end">
-            <button type="button" class="btn btn-sm btn-outline-primary btn-drill-sales" data-sales-id="${r.sales_id}">View</button>
-          </td>
-        </tr>
-      `).join('');
+                    rowsTbody.innerHTML = rows.map(r =>
+                        `<tr><td>${r.no}</td><td class="fw-semibold text-wrap-name">${r.sales}</td><td class="text-wrap-name">${r.warehouse}</td><td class="text-end">${r.handover_count}</td><td class="text-end">${r.amount_dispatched}</td><td class="text-end">${r.amount_sold}</td><td class="text-end">${r.amount_setor}</td><td class="text-end"><button type="button" class="btn btn-sm btn-outline-primary btn-drill-sales" data-sales-id="${r.sales_id}">View</button></td></tr>`
+                        ).join('');
                     return;
                 }
-
                 if (view === 'daily') {
-                    rowsTbody.innerHTML = rows.map(r => `
-        <tr>
-          <td>${r.no}</td>
-          <td class="fw-semibold">${r.date}</td>
-          <td class="text-end">${r.handover_count}</td>
-          <td class="text-end">${r.amount_dispatched}</td>
-          <td class="text-end">${r.amount_sold}</td>
-          <td class="text-end">${r.amount_setor}</td>
-          <td class="text-end">
-            <button type="button" class="btn btn-sm btn-outline-primary btn-drill-day" data-date="${r.date}">View</button>
-          </td>
-        </tr>
-      `).join('');
+                    rowsTbody.innerHTML = rows.map(r =>
+                        `<tr><td>${r.no}</td><td class="fw-semibold">${r.date}</td><td class="text-end">${r.handover_count}</td><td class="text-end">${r.amount_dispatched}</td><td class="text-end">${r.amount_sold}</td><td class="text-end">${r.amount_setor}</td><td class="text-end"><button type="button" class="btn btn-sm btn-outline-primary btn-drill-day" data-date="${r.date}">View</button></td></tr>`
+                        ).join('');
                     return;
                 }
 
                 rowsTbody.innerHTML = rows.map(r => {
-                    let marginCols = '';
-
-                    if (canSeeMargin) {
-                        marginCols = `
-      <td class="text-end text-muted">${r.amount_original ?? '-'}</td>
-      <td class="text-end text-danger">${r.amount_discount != null ? '-' + r.amount_discount : '-'}</td>
-    `;
-                    }
-
-                    return `
-    <tr>
-      <td>${r.no}</td>
-      <td>${r.date || '-'}</td>
-      <td class="fw-semibold">${r.code}</td>
-      <td class="text-wrap-name">${r.warehouse}</td>
-      <td class="text-wrap-name">${r.sales}</td>
-      <td><span class="badge ${r.status_badge_class}">${r.status_label}</span></td>
-      <td class="text-end">${r.amount_dispatched}</td>
-      <td class="text-end fw-bold">${r.amount_sold ?? '<span class="text-muted small">—</span>'}</td>
-      ${marginCols}
-      <td class="text-end">${r.amount_diff ?? '<span class="text-muted small">—</span>'}</td>
-      <td class="text-end">
-        <button type="button" class="btn btn-sm btn-outline-primary btn-detail" data-id="${r.id}">
-          Detail
-        </button>
-      </td>
-    </tr>
-  `;
+                    let mCols = canSeeMargin ?
+                        `<td class="text-end text-muted">${r.amount_original ?? '-'}</td><td class="text-end text-danger">${r.amount_discount != null ? '-' + r.amount_discount : '-'}</td>` :
+                        '';
+                    return `<tr><td>${r.no}</td><td>${r.date || '-'}</td><td class="fw-semibold">${r.code}</td><td class="text-wrap-name">${r.warehouse}</td><td class="text-wrap-name">${r.sales}</td><td><span class="badge ${r.status_badge_class}">${r.status_label}</span></td><td class="text-end">${r.amount_dispatched}</td><td class="text-end fw-bold">${r.amount_sold || '-'}</td>${mCols}<td class="text-end">${r.amount_diff || '-'}</td><td class="text-end"><button type="button" class="btn btn-sm btn-outline-primary btn-detail" data-id="${r.id}">Detail</button></td></tr>`;
                 }).join('');
-
             }
 
+            // 5. CORE AJAX LOGIC
             async function reloadList() {
                 const params = new URLSearchParams(new FormData(filterForm));
-
                 try {
                     const res = await fetch(`${filterForm.action}?${params.toString()}`, {
                         headers: {
@@ -678,313 +576,158 @@
                         }
                     });
                     if (!res.ok) throw new Error('HTTP ' + res.status);
-
                     const json = await res.json();
-                    if (!json.success) throw new Error('Response tidak valid');
+                    if (!json.success) throw new Error('Invalid response');
 
-                    const view = json.view || viewEl.value || 'handover';
-                    renderHead(view);
-                    renderRows(view, json.rows || []);
+                    renderHead(json.view || viewEl.value);
+                    renderRows(json.view || viewEl.value, json.rows || []);
 
                     if (json.summary) {
-                        if (sumHdoEl) sumHdoEl.textContent = json.summary.total_hdo_text || '0 HDO';
-                        if (sumSoldEl) sumSoldEl.textContent = json.summary.total_sold_formatted || 'Rp 0';
-                        if (sumDiffEl) sumDiffEl.textContent = json.summary.total_diff_formatted || 'Rp 0';
-                        if (periodTextEl) periodTextEl.textContent = json.summary.period_text || '-';
-                        const sumDiscountEl = document.querySelector('#sumDiscount');
-
+                        if (sumHdoEl) sumHdoEl.textContent = json.summary.total_hdo_text;
+                        if (sumSoldEl) sumSoldEl.textContent = json.summary.total_sold_formatted;
+                        if (sumDiffEl) sumDiffEl.textContent = json.summary.total_diff_formatted;
+                        if (periodTextEl) periodTextEl.textContent = json.summary.period_text;
                         if (sumDiscountEl) {
-                            const discVal = json.summary.total_discount || 'Rp 0';
-                            sumDiscountEl.textContent = discVal !== 'Rp 0' ? '-' + discVal : discVal;
+                            let dv = json.summary.total_discount || 'Rp 0';
+                            sumDiscountEl.textContent = (dv !== 'Rp 0') ? '-' + dv : dv;
                         }
-
                     }
                 } catch (err) {
                     console.error(err);
                     Swal.fire({
                         icon: 'error',
-                        title: 'Failed',
-                        text: 'Failed to load report data.'
+                        title: 'Error',
+                        text: 'Failed to load data.'
                     });
                 }
             }
 
-            // auto reload ketika filter berubah
+            // 6. EVENT LISTENERS
             const autoSelectors = [
                 '#viewFilter',
-                '#perPageFilter',
                 'input[name="date_from"]',
                 'input[name="date_to"]',
                 'select[name="status"]',
                 'select[name="warehouse_id"]',
                 'select[name="sales_id"]',
             ];
-            filterForm.querySelectorAll(autoSelectors.join(',')).forEach(el => el.addEventListener('change',
-                () => reloadList(1)));
-
+            filterForm.querySelectorAll(autoSelectors.join(',')).forEach(el => el.addEventListener('change', () =>
+                reloadList()));
             filterForm.addEventListener('submit', (e) => {
                 e.preventDefault();
-                reloadList(1);
+                reloadList();
+            });
+            document.getElementById('btnResetFilters')?.addEventListener('click', () => {
+                filterForm.reset();
+                reloadList();
             });
 
-            // Pagination Events
-            if (btnPrevPage) {
-                btnPrevPage.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    if (currentPage > 1) reloadList(currentPage - 1);
-                });
-            }
-            if (btnNextPage) {
-                btnNextPage.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    if (currentPage < lastPage) reloadList(currentPage + 1);
-                });
-            }
-
-            // search navbar
-            const hiddenSearch = document.getElementById('searchBox');
-            const navbarSearch = document.querySelector('.layout-navbar input[placeholder*="Search"]');
-            if (navbarSearch && hiddenSearch) {
-                navbarSearch.value = hiddenSearch.value || '';
-                let timer = null;
-                navbarSearch.addEventListener('keyup', function() {
-                    clearTimeout(timer);
-                    timer = setTimeout(function() {
-                        hiddenSearch.value = navbarSearch.value;
-                        reloadList(1);
-                    }, 400);
-                });
-            }
-
             rowsTbody.addEventListener('click', async (e) => {
+                // A. Click Detail
                 const btnDetail = e.target.closest('.btn-detail');
                 if (btnDetail) {
                     const id = btnDetail.dataset.id;
                     if (!id) return;
-
-                    currentHandoverId = null;
+                    currentHandoverId = id;
                     if (approvalButton) approvalButton.classList.add('d-none');
-
                     detailHeader.innerHTML = 'Loading...';
                     detailTbody.innerHTML =
-                        '<tr><td colspan="7" class="text-center text-muted">Loading…</td></tr>';
+                        '<tr><td colspan="8" class="text-center text-muted">Loading…</td></tr>';
                     detailSummary.innerHTML = '';
 
-                    const url = detailUrlTemplate.replace('/0', '/' + id);
-
                     try {
-                        const res = await fetch(url, {
+                        const res = await fetch(detailUrlTemplate.replace('/0', '/' + id), {
                             headers: {
                                 'X-Requested-With': 'XMLHttpRequest'
                             }
                         });
-                        if (!res.ok) throw new Error('HTTP ' + res.status);
-
                         const json = await res.json();
-                        if (!json.success) throw new Error('Gagal load detail');
+                        if (!json.success) throw new Error('Failed');
 
                         const h = json.handover;
                         const it = json.items || [];
-                        currentHandoverId = h.id;
 
-                        const statusLabelMap = {
-                            draft: 'Draft',
-                            waiting_morning_otp: 'Waiting for Morning OTP',
-                            on_sales: 'On Sales',
-                            waiting_evening_otp: 'Waiting for Closing (Legacy)',
-                            closed: 'Closed',
-                            cancelled: 'Cancelled',
-                        };
-                        const badgeClassMap = {
-                            closed: 'bg-label-success',
-                            on_sales: 'bg-label-info',
-                            waiting_morning_otp: 'bg-label-warning',
-                            waiting_evening_otp: 'bg-label-warning',
-                            cancelled: 'bg-label-danger',
-                            default: 'bg-label-secondary',
-                        };
-
-                        const stLabel = statusLabelMap[h.status] || h.status;
-                        const badgeClass = badgeClassMap[h.status] || badgeClassMap.default;
                         detailHeader.innerHTML = `
-          <div class="d-flex flex-column flex-md-row justify-content-between">
-            <div class="mb-2 mb-md-0">
-              <div><span class="fw-semibold">Code:</span> ${h.code}</div>
-              <div><span class="fw-semibold">Date:</span> ${h.handover_date || '-'}</div>
-              <div><span class="fw-semibold">Warehouse:</span> ${h.warehouse_name || '-'}</div>
-              <div><span class="fw-semibold">Sales:</span> ${h.sales_name || '-'}</div>
-              <div>
-                <span class="fw-semibold">Status:</span>
-                <span class="badge ${badgeClass}">${stLabel}</span>
-              </div>
-            </div>
-            <div class="text-md-end small">
-              <div><span class="fw-semibold">Morning OTP sent:</span> ${h.morning_otp_sent_at || '-'}</div>
-              <div><span class="fw-semibold">Morning OTP verified:</span> ${h.morning_otp_verified_at || '-'}</div>
-              <div><span class="fw-semibold">Evening OTP sent:</span> ${h.evening_otp_sent_at || '-'}</div>
-              <div><span class="fw-semibold">Evening OTP verified:</span> ${h.evening_otp_verified_at || '-'}</div>
-            </div>
-          </div>
-        `;
+                            <div class="row"><div class="col-md-6 text-wrap-name">
+                                <div><b>Code:</b> ${h.code}</div><div><b>Date:</b> ${h.handover_date}</div><div><b>Warehouse:</b> ${h.warehouse_name || '-'}</div><div><b>Sales:</b> ${h.sales_name || '-'}</div>
+                            </div><div class="col-md-6 text-md-end small">
+                                <b>Status:</b> <span class="badge bg-secondary">${h.status}</span><br>
+                                Morning OTP: ${h.morning_otp_sent_at || '-'}<br>
+                                Evening OTP: ${h.evening_otp_sent_at || '-'}
+                            </div></div>`;
 
-                        if (canOpenApproval && approvalButton && approvalUrlTemplate && h
-                            .can_open_approval) {
+                        if (canOpenApproval && approvalButton && h.can_open_approval) {
                             approvalButton.classList.remove('d-none');
                         }
 
-                        let htmlItems = '';
-                        it.forEach(row => {
-                            const hasDiscount = (row.discount_per_unit ?? 0) > 0;
+                        detailTbody.innerHTML = it.map(row => {
+                            const disc = (row.discount_per_unit || 0);
+                            return `<tr><td>${row.product_name}</td><td class="text-end">${row.qty_start}</td><td class="text-end">${row.qty_returned}</td><td class="text-end">${row.qty_sold}</td><td class="text-end">${formatRp(row.unit_price)}</td><td class="text-end text-danger">${disc > 0 ? '-' + formatRp(disc) : '-'}</td><td class="text-end">${formatRp(row.unit_price - disc)}</td><td class="text-end fw-bold">${formatRp(row.line_total_sold)}</td></tr>`;
+                        }).join('');
 
-                            htmlItems += `
-            <tr>
-              <td>
-                <div class="fw-semibold">${row.product_name}</div>
-                ${row.product_code ? `<div class="small text-muted">${row.product_code}</div>` : ''}
-              </td>
-
-              <td class="text-end">${row.qty_start ?? 0}</td>
-              <td class="text-end">${row.qty_returned ?? 0}</td>
-              <td class="text-end">${row.qty_sold ?? 0}</td>
-
-              <!-- HARGA ASLI -->
-              <td class="text-end">${formatRp(row.unit_price || 0)}</td>
-
-              <!-- DISKON -->
-                  <td class="text-end">
-                    ${hasDiscount ? formatRp(row.discount_per_unit) : '-'}
-                  </td>
-              <!-- HARGA SETELAH DISKON (harga satuan, bukan line total) -->
-              <td class="text-end">
-                ${hasDiscount
-                  ? formatRp(row.unit_price_after_discount || (row.unit_price - row.discount_per_unit))
-                  : formatRp(row.unit_price || 0)}
-              </td>
-
-              <!-- NILAI TERJUAL: tampil hanya kalau qty_sold > 0 -->
-              <td class="text-end fw-semibold">
-                ${(row.qty_sold ?? 0) > 0 ? formatRp(row.line_total_sold || 0) : formatRp(0)}
-              </td>
-            </tr>
-            `;
-                        });
-                        if (!htmlItems) htmlItems =
-                            '<tr><td colspan="7" class="text-center text-muted">No items.</td></tr>';
-                        detailTbody.innerHTML = htmlItems;
-
-                        // BUKTI TF (BALIKIN)
-                        let proofHtml = '-';
-                        if (h.transfer_proof_url) {
-                            proofHtml = `
-            <div class="mt-1">
-              <img src="${h.transfer_proof_url}" class="img-thumbnail proof-thumb" style="max-width:140px;cursor:pointer;">
-              <div class="small text-muted mt-1">Click image to enlarge.</div>
-            </div>
-          `;
-                        }
-
-                        detailSummary.innerHTML = `
-          <div class="row g-2">
-            <div class="col-md-4">
-              <div class="fw-semibold text-muted small">Carried Value</div>
-              <div>${formatRp(h.total_dispatched || 0)}</div>
-            </div>
-            <div class="col-md-4">
-              <div class="fw-semibold text-muted small">Sold Value</div>
-              <div>${h.status === 'closed' ? formatRp(h.total_sold) : '<span class="text-muted small">— not closed yet —</span>'}</div>
-            </div>
-            <div class="col-md-4">
-              <div class="fw-semibold text-muted small">Remaining Stock Value (estimated)</div>
-              <div>${h.status === 'closed' ? formatRp(h.selisih_stock_value || 0) : '<span class="text-muted small">— not closed yet —</span>'}</div>
-            </div>
-          </div>
-
-          <hr>
-
-          <div class="row g-2">
-            <div class="col-md-4">
-              <div class="fw-semibold text-muted small">Cash Deposit</div>
-              <div>${formatRp(h.cash_amount || 0)}</div>
-            </div>
-            <div class="col-md-4">
-              <div class="fw-semibold text-muted small">Transfer Deposit</div>
-              <div>${formatRp(h.transfer_amount || 0)}</div>
-              ${proofHtml}
-            </div>
-            <div class="col-md-4">
-              <div class="fw-semibold text-muted small">Total Deposit</div>
-              <div>${formatRp(h.setor_total || 0)}</div>
-              <div class="small text-muted">Sales vs Deposit Difference: ${formatRp(h.selisih_jual_vs_setor || 0)}</div>
-            </div>
-          </div>
-        `;
-
+                        detailSummary.innerHTML =
+                            `<hr><div class="row text-center"><div class="col-4 small">Carried<br><b>${formatRp(h.total_dispatched)}</b></div><div class="col-4 small">Sold (Closed)<br><b>${formatRp(h.total_sold)}</b></div><div class="col-4 small">Deposit<br><b>${formatRp(h.setor_total)}</b></div></div>`;
                         bsModal.show();
                     } catch (err) {
                         console.error(err);
                         Swal.fire({
                             icon: 'error',
-                            title: 'Failed',
-                            text: 'Failed to load handover details.'
+                            text: 'Failed to load details.'
                         });
                     }
                     return;
                 }
 
+                // B. Drill down Sales
                 const btnSales = e.target.closest('.btn-drill-sales');
                 if (btnSales) {
-                    const salesId = btnSales.dataset.salesId;
-                    if (!salesId) return;
-
+                    const sid = btnSales.dataset.salesId;
                     viewEl.value = 'handover';
-
-                    const salesSelect = filterForm.querySelector('select[name="sales_id"]');
-                    const salesHidden = filterForm.querySelector('input[name="sales_id"]');
-                    if (salesSelect) salesSelect.value = salesId;
-                    if (salesHidden) salesHidden.value = salesId;
-
-                    reloadList(1);
+                    const sSelect = filterForm.querySelector('select[name="sales_id"]');
+                    if (sSelect) sSelect.value = sid;
+                    reloadList();
                     return;
                 }
 
+                // C. Drill down Day
                 const btnDay = e.target.closest('.btn-drill-day');
                 if (btnDay) {
-                    const date = btnDay.dataset.date;
-                    if (!date) return;
-
+                    const dt = btnDay.dataset.date;
                     viewEl.value = 'handover';
-                    const df = filterForm.querySelector('input[name="date_from"]');
-                    const dt = filterForm.querySelector('input[name="date_to"]');
-                    if (df) df.value = date;
-                    if (dt) dt.value = date;
-
-                    reloadList(1);
-                    return;
+                    filterForm.querySelector('input[name="date_from"]').value = dt;
+                    filterForm.querySelector('input[name="date_to"]').value = dt;
+                    reloadList();
                 }
             });
 
-            // zoom bukti transfer
-            if (modalEl) {
-                modalEl.addEventListener('click', (e) => {
-                    const img = e.target.closest('.proof-thumb');
-                    if (!img) return;
-
-                    Swal.fire({
-                        imageUrl: img.src,
-                        showConfirmButton: false,
-                        showCloseButton: true,
-                        width: 'auto',
-                        background: '#000',
-                    });
+            // Zoom Proof via Event Delegation on modal
+            modalEl?.addEventListener('click', (e) => {
+                const img = e.target.closest('.proof-thumb');
+                if (img) Swal.fire({
+                    imageUrl: img.src,
+                    showConfirmButton: false,
+                    width: 'auto'
                 });
-            }
+            });
 
-            // approval button
-            if (approvalButton && canOpenApproval && approvalUrlTemplate) {
-                approvalButton.addEventListener('click', function() {
-                    if (!currentHandoverId) return;
-                    const url = approvalUrlTemplate.replace('/0', '/' + currentHandoverId);
-                    window.location.href = url;
+            approvalButton?.addEventListener('click', () => {
+                if (currentHandoverId) window.location.href = approvalUrlTemplate.replace('/0', '/' +
+                    currentHandoverId);
+            });
+
+            // Navbar Search
+            const navbarSearch = document.querySelector('.layout-navbar input[placeholder*="Search"]');
+            if (navbarSearch) {
+                let timer = null;
+                navbarSearch.addEventListener('keyup', () => {
+                    clearTimeout(timer);
+                    timer = setTimeout(() => {
+                        const searchBox = document.getElementById('searchBox');
+                        if (searchBox) {
+                            searchBox.value = navbarSearch.value;
+                            reloadList();
+                        }
+                    }, 500);
                 });
             }
         })();
