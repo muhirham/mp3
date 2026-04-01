@@ -442,7 +442,7 @@
         <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header d-flex justify-content-between align-items-center">
-                    <h5 class="modal-title mb-0">Handover Detail</h5>
+                    <h5 class="modal-title mb-0">Detail Handover</h5>
                     <div class="d-flex align-items-center gap-2">
                         @if ($canOpenApproval)
                             <button type="button" id="approvalButton" class="btn btn-sm btn-primary d-none">
@@ -460,14 +460,14 @@
                         <table class="table table-sm align-middle" id="detailItemsTable">
                             <thead>
                                 <tr>
-                                    <th style="width:30%">Product</th>
-                                    <th class="text-end" style="width:10%">Carried</th>
-                                    <th class="text-end" style="width:10%">Returned</th>
-                                    <th class="text-end" style="width:10%">Sold</th>
-                                    <th class="text-end" style="width:13%">Price</th>
-                                    <th class="text-end" style="width:12%">Discount</th>
-                                    <th class="text-end" style="width:14%">Price After Discount</th>
-                                    <th class="text-end" style="width:14%">Sold Value</th>
+                                    <th style="width:30%">Produk</th>
+                                    <th class="text-end" style="width:10%">Dibawa</th>
+                                    <th class="text-end" style="width:10%">Kembali</th>
+                                    <th class="text-end" style="width:10%">Terjual</th>
+                                    <th class="text-end" style="width:13%">Harga</th>
+                                    <th class="text-end" style="width:12%">Diskon</th>
+                                    <th class="text-end" style="width:14%">Harga Setelah Diskon</th>
+                                    <th class="text-end" style="width:14%">Nilai Terjual</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -546,23 +546,67 @@
                 }
 
                 if (view === 'sales') {
-                    rowsTbody.innerHTML = rows.map(r =>
-                        `<tr><td>${r.no}</td><td class="fw-semibold text-wrap-name">${r.sales}</td><td class="text-wrap-name">${r.warehouse}</td><td class="text-end">${r.handover_count}</td><td class="text-end">${r.amount_dispatched}</td><td class="text-end">${r.amount_sold}</td><td class="text-end">${r.amount_setor}</td><td class="text-end"><button type="button" class="btn btn-sm btn-outline-primary btn-drill-sales" data-sales-id="${r.sales_id}">View</button></td></tr>`
-                        ).join('');
+                    rowsTbody.innerHTML = rows.map(r => `
+                        <tr>
+                            <td>${r.no}</td>
+                            <td data-label="Sales" class="fw-semibold text-wrap-name">${r.sales}</td>
+                            <td data-label="Warehouse" class="text-wrap-name">${r.warehouse}</td>
+                            <td data-label="HDO" class="text-end">${r.handover_count}</td>
+                            <td data-label="Total Carried" class="text-end">${r.amount_dispatched}</td>
+                            <td data-label="Total Sold" class="text-end">${r.amount_sold}</td>
+                            <td data-label="Total Deposit" class="text-end">${r.amount_setor}</td>
+                            <td data-label="Action" class="text-end">
+                                <button type="button" class="btn btn-sm btn-outline-primary btn-drill-sales" data-sales-id="${r.sales_id}">View</button>
+                            </td>
+                        </tr>
+                    `).join('');
                     return;
                 }
+
                 if (view === 'daily') {
-                    rowsTbody.innerHTML = rows.map(r =>
-                        `<tr><td>${r.no}</td><td class="fw-semibold">${r.date}</td><td class="text-end">${r.handover_count}</td><td class="text-end">${r.amount_dispatched}</td><td class="text-end">${r.amount_sold}</td><td class="text-end">${r.amount_setor}</td><td class="text-end"><button type="button" class="btn btn-sm btn-outline-primary btn-drill-day" data-date="${r.date}">View</button></td></tr>`
-                        ).join('');
+                    rowsTbody.innerHTML = rows.map(r => `
+                        <tr>
+                            <td>${r.no}</td>
+                            <td data-label="Date" class="fw-semibold">${r.date}</td>
+                            <td data-label="HDO" class="text-end">${r.handover_count}</td>
+                            <td data-label="Total Carried" class="text-end">${r.amount_dispatched}</td>
+                            <td data-label="Total Sold" class="text-end">${r.amount_sold}</td>
+                            <td data-label="Total Deposit" class="text-end">${r.amount_setor}</td>
+                            <td data-label="Action" class="text-end">
+                                <button type="button" class="btn btn-sm btn-outline-primary btn-drill-day" data-date="${r.date}">View</button>
+                            </td>
+                        </tr>
+                    `).join('');
                     return;
                 }
 
                 rowsTbody.innerHTML = rows.map(r => {
-                    let mCols = canSeeMargin ?
-                        `<td class="text-end text-muted">${r.amount_original ?? '-'}</td><td class="text-end text-danger">${r.amount_discount != null ? '-' + r.amount_discount : '-'}</td>` :
-                        '';
-                    return `<tr><td>${r.no}</td><td>${r.date || '-'}</td><td class="fw-semibold">${r.code}</td><td class="text-wrap-name">${r.warehouse}</td><td class="text-wrap-name">${r.sales}</td><td><span class="badge ${r.status_badge_class}">${r.status_label}</span></td><td class="text-end">${r.amount_dispatched}</td><td class="text-end fw-bold">${r.amount_sold || '-'}</td>${mCols}<td class="text-end">${r.amount_diff || '-'}</td><td class="text-end"><button type="button" class="btn btn-sm btn-outline-primary btn-detail" data-id="${r.id}">Detail</button></td></tr>`;
+                    let mCols = '';
+                    if (canSeeMargin) {
+                        mCols = `
+                            <td data-label="Original Price" class="text-end text-muted">${r.amount_original ?? '-'}</td>
+                            <td data-label="Discount" class="text-end text-danger">${r.amount_discount != null ? '-' + r.amount_discount : '-'}</td>
+                        `;
+                    }
+                    return `
+                        <tr>
+                            <td>${r.no}</td>
+                            <td data-label="Date">${r.date || '-'}</td>
+                            <td data-label="Code" class="fw-semibold">${r.code}</td>
+                            <td data-label="Warehouse" class="text-wrap-name">${r.warehouse}</td>
+                            <td data-label="Sales" class="text-wrap-name">${r.sales}</td>
+                            <td data-label="Status">
+                                <span class="badge ${r.status_badge_class}">${r.status_label}</span>
+                            </td>
+                            <td data-label="Carried Value" class="text-end">${r.amount_dispatched}</td>
+                            <td data-label="Sold" class="text-end fw-bold">${r.amount_sold || '-'}</td>
+                            ${mCols}
+                            <td data-label="Difference" class="text-end">${r.amount_diff || '-'}</td>
+                            <td data-label="Action" class="text-end">
+                                <button type="button" class="btn btn-sm btn-outline-primary btn-detail" data-id="${r.id}">Detail</button>
+                            </td>
+                        </tr>
+                    `;
                 }).join('');
             }
 
@@ -628,51 +672,157 @@
                 if (btnDetail) {
                     const id = btnDetail.dataset.id;
                     if (!id) return;
-                    currentHandoverId = id;
+
+                    currentHandoverId = null;
                     if (approvalButton) approvalButton.classList.add('d-none');
+
                     detailHeader.innerHTML = 'Loading...';
                     detailTbody.innerHTML =
                         '<tr><td colspan="8" class="text-center text-muted">Loading…</td></tr>';
                     detailSummary.innerHTML = '';
 
+                    const url = detailUrlTemplate.replace('/0', '/' + id);
+
                     try {
-                        const res = await fetch(detailUrlTemplate.replace('/0', '/' + id), {
+                        const res = await fetch(url, {
                             headers: {
                                 'X-Requested-With': 'XMLHttpRequest'
                             }
                         });
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
+
                         const json = await res.json();
-                        if (!json.success) throw new Error('Failed');
+                        if (!json.success) throw new Error('Gagal load detail');
 
                         const h = json.handover;
                         const it = json.items || [];
+                        currentHandoverId = h.id;
+
+                        const statusLabelMap = {
+                            draft: 'Draft',
+                            waiting_morning_otp: 'Menunggu OTP Pagi',
+                            on_sales: 'On Sales',
+                            waiting_evening_otp: 'Menunggu Closing (Legacy)',
+                            closed: 'Closed',
+                            cancelled: 'Cancelled',
+                        };
+                        const badgeClassMap = {
+                            closed: 'bg-label-success',
+                            on_sales: 'bg-label-info',
+                            waiting_morning_otp: 'bg-label-warning',
+                            waiting_evening_otp: 'bg-label-warning',
+                            cancelled: 'bg-label-danger',
+                            default: 'bg-label-secondary',
+                        };
+
+                        const stLabel = statusLabelMap[h.status] || h.status;
+                        const badgeClass = badgeClassMap[h.status] || badgeClassMap.default;
 
                         detailHeader.innerHTML = `
-                            <div class="row"><div class="col-md-6 text-wrap-name">
-                                <div><b>Code:</b> ${h.code}</div><div><b>Date:</b> ${h.handover_date}</div><div><b>Warehouse:</b> ${h.warehouse_name || '-'}</div><div><b>Sales:</b> ${h.sales_name || '-'}</div>
-                            </div><div class="col-md-6 text-md-end small">
-                                <b>Status:</b> <span class="badge bg-secondary">${h.status}</span><br>
-                                Morning OTP: ${h.morning_otp_sent_at || '-'}<br>
-                                Evening OTP: ${h.evening_otp_sent_at || '-'}
-                            </div></div>`;
+                            <div class="d-flex flex-column flex-md-row justify-content-between">
+                                <div class="mb-2 mb-md-0">
+                                    <div><span class="fw-semibold">Kode:</span> ${h.code}</div>
+                                    <div><span class="fw-semibold">Tanggal:</span> ${h.handover_date || '-'}</div>
+                                    <div><span class="fw-semibold">Warehouse:</span> ${h.warehouse_name || '-'}</div>
+                                    <div><span class="fw-semibold">Sales:</span> ${h.sales_name || '-'}</div>
+                                    <div>
+                                        <span class="fw-semibold">Status:</span>
+                                        <span class="badge ${badgeClass}">${stLabel}</span>
+                                    </div>
+                                </div>
+                                <div class="text-md-end small">
+                                    <div><span class="fw-semibold">OTP Pagi dikirim:</span> ${h.morning_otp_sent_at || '-'}</div>
+                                    <div><span class="fw-semibold">OTP Pagi verif:</span> ${h.morning_otp_verified_at || '-'}</div>
+                                    <div><span class="fw-semibold">OTP Sore dikirim:</span> ${h.evening_otp_sent_at || '-'}</div>
+                                    <div><span class="fw-semibold">OTP Sore verif:</span> ${h.evening_otp_verified_at || '-'}</div>
+                                </div>
+                            </div>
+                        `;
 
-                        if (canOpenApproval && approvalButton && h.can_open_approval) {
+                        if (canOpenApproval && approvalButton && approvalUrlTemplate && h
+                            .can_open_approval) {
                             approvalButton.classList.remove('d-none');
                         }
 
-                        detailTbody.innerHTML = it.map(row => {
-                            const disc = (row.discount_per_unit || 0);
-                            return `<tr><td>${row.product_name}</td><td class="text-end">${row.qty_start}</td><td class="text-end">${row.qty_returned}</td><td class="text-end">${row.qty_sold}</td><td class="text-end">${formatRp(row.unit_price)}</td><td class="text-end text-danger">${disc > 0 ? '-' + formatRp(disc) : '-'}</td><td class="text-end">${formatRp(row.unit_price - disc)}</td><td class="text-end fw-bold">${formatRp(row.line_total_sold)}</td></tr>`;
-                        }).join('');
+                        let htmlItems = '';
+                        it.forEach(row => {
+                            const hasDiscount = (row.discount_per_unit || 0) > 0;
+                            htmlItems += `
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold">${row.product_name}</div>
+                                        ${row.product_code ? `<div class="small text-muted">${row.product_code}</div>` : ''}
+                                    </td>
+                                    <td class="text-end">${row.qty_start ?? 0}</td>
+                                    <td class="text-end">${row.qty_returned ?? 0}</td>
+                                    <td class="text-end">${row.qty_sold ?? 0}</td>
+                                    <td class="text-end">${formatRp(row.unit_price || 0)}</td>
+                                    <td class="text-end">
+                                        ${hasDiscount ? formatRp(row.discount_per_unit) : '-'}
+                                    </td>
+                                    <td class="text-end">
+                                        ${hasDiscount
+                                        ? formatRp(row.unit_price_after_discount || (row.unit_price - row.discount_per_unit))
+                                        : formatRp(row.unit_price || 0)}
+                                    </td>
+                                    <td class="text-end fw-semibold">
+                                        ${(row.qty_sold ?? 0) > 0 ? formatRp(row.line_total_sold || 0) : formatRp(0)}
+                                    </td>
+                                </tr>`;
+                        });
+                        if (!htmlItems) htmlItems =
+                            '<tr><td colspan="8" class="text-center text-muted">Tidak ada item.</td></tr>';
+                        detailTbody.innerHTML = htmlItems;
 
-                        detailSummary.innerHTML =
-                            `<hr><div class="row text-center"><div class="col-4 small">Carried<br><b>${formatRp(h.total_dispatched)}</b></div><div class="col-4 small">Sold (Closed)<br><b>${formatRp(h.total_sold)}</b></div><div class="col-4 small">Deposit<br><b>${formatRp(h.setor_total)}</b></div></div>`;
+                        let proofHtml = '-';
+                        if (h.transfer_proof_url) {
+                            proofHtml = `
+                                <div class="mt-1">
+                                    <img src="${h.transfer_proof_url}" class="img-thumbnail proof-thumb" style="max-width:140px;cursor:pointer;">
+                                    <div class="small text-muted mt-1">Klik gambar untuk memperbesar.</div>
+                                </div>`;
+                        }
+
+                        detailSummary.innerHTML = `
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <div class="fw-semibold text-muted small">Nilai Dibawa</div>
+                                    <div>${formatRp(h.total_dispatched || 0)}</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="fw-semibold text-muted small">Nilai Terjual</div>
+                                    <div>${h.status === 'closed' ? formatRp(h.total_sold) : '<span class="text-muted small">— belum closed —</span>'}</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="fw-semibold text-muted small">Nilai Sisa Stok (estimasi)</div>
+                                    <div>${h.status === 'closed' ? formatRp(h.selisih_stock_value || 0) : '<span class="text-muted small">— belum closed —</span>'}</div>
+                                </div>
+                            </div>
+                            <hr>
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <div class="fw-semibold text-muted small">Setor Tunai</div>
+                                    <div>${formatRp(h.cash_amount || 0)}</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="fw-semibold text-muted small">Setor Transfer</div>
+                                    <div>${formatRp(h.transfer_amount || 0)}</div>
+                                    ${proofHtml}
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="fw-semibold text-muted small">Total Setoran</div>
+                                    <div>${formatRp(h.setor_total || 0)}</div>
+                                    <div class="small text-muted">Selisih jual vs setor: ${formatRp(h.selisih_jual_vs_setor || 0)}</div>
+                                </div>
+                            </div>`;
+
                         bsModal.show();
                     } catch (err) {
                         console.error(err);
                         Swal.fire({
                             icon: 'error',
-                            text: 'Failed to load details.'
+                            title: 'Gagal',
+                            text: 'Gagal memuat detail handover.'
                         });
                     }
                     return;
