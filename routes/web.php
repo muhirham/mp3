@@ -599,6 +599,10 @@ Route::post('/warehouse/stock-requests/{id}/reject', [StockRequestApprovalContro
         ->name('warehouse.handovers.payments.approve')
         ->middleware('menu:wh_sales_reports');
 
+    Route::get('/warehouse/handover-items/{item}/payment-proofs/{index}', [SalesHandoverController::class, 'paymentProofFile'])
+        ->name('warehouse.handover-items.payment-proof')
+        ->middleware('menu:wh_sales_reports');
+
     Route::post('/warehouse/returns/{handover}/approve-all',[SalesReturnController::class,'approveAll'])
         ->name('warehouse.returns.approveAll')
         ->middleware('menu:sales_return_approval');

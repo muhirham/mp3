@@ -23,6 +23,94 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class SalesHandoverController extends Controller
 {
+    private function normalizeItemTransferProofPaths(SalesHandoverItem $item): array
+    {
+        $paths = $item->payment_transfer_proof_paths ?? [];
+
+        if (is_string($paths) && $paths !== '') {
+            $decoded = json_decode($paths, true);
+            $paths = is_array($decoded) ? $decoded : [];
+        }
+
+        if (! is_array($paths)) {
+            $paths = [];
+        }
+
+        $normalized = [];
+        foreach ($paths as $entry) {
+            if (is_string($entry) && $entry !== '') {
+                $normalized[] = ['path' => $entry];
+            } elseif (is_array($entry) && ! empty($entry['path'])) {
+                $normalized[] = $entry;
+            }
+        }
+
+        if (! empty($item->payment_transfer_proof_path)) {
+            $exists = collect($normalized)->contains(fn ($entry) => ($entry['path'] ?? null) === $item->payment_transfer_proof_path);
+            if (! $exists) {
+                $normalized[] = ['path' => $item->payment_transfer_proof_path];
+            }
+        }
+
+        return array_values(array_filter($normalized, fn ($entry) => ! empty($entry['path'] ?? null)));
+    }
+
+    private function buildPaymentProofMeta(SalesHandoverItem $item): array
+    {
+        $proofPaths = $this->normalizeItemTransferProofPaths($item);
+        $transferQty = (int) ($item->payment_transfer_qty ?? 0);
+        $transferAmount = (int) ($item->payment_transfer_amount ?? 0);
+        $proofCount = count($proofPaths);
+
+        if ($proofCount === 0) {
+            return [];
+        }
+
+        $knownQty = 0;
+        $knownAmount = 0;
+        $missingIndexes = [];
+
+        foreach ($proofPaths as $idx => $proofEntry) {
+            $entryQty = (int) ($proofEntry['qty'] ?? 0);
+            $entryAmount = (int) ($proofEntry['amount'] ?? 0);
+
+            if ($entryQty > 0 || $entryAmount > 0) {
+                $knownQty += $entryQty;
+                $knownAmount += $entryAmount;
+            } else {
+                $missingIndexes[] = $idx;
+            }
+        }
+
+        if (count($missingIndexes) > 0) {
+            $remainingProofQty = max(0, $transferQty - $knownQty);
+            $remainingProofAmount = max(0, $transferAmount - $knownAmount);
+            $missingCount = count($missingIndexes);
+
+            foreach ($missingIndexes as $offset => $missingIndex) {
+                $divisor = max(1, $missingCount - $offset);
+                $allocatedQty = intdiv($remainingProofQty, $divisor);
+                $allocatedAmount = intdiv($remainingProofAmount, $divisor);
+
+                $proofPaths[$missingIndex]['qty'] = $allocatedQty;
+                $proofPaths[$missingIndex]['amount'] = $allocatedAmount;
+
+                $remainingProofQty -= $allocatedQty;
+                $remainingProofAmount -= $allocatedAmount;
+            }
+        }
+
+        return array_values(array_map(function (array $proof, int $index) {
+            return [
+                'path' => $proof['path'] ?? null,
+                'qty' => (int) ($proof['qty'] ?? 0),
+                'amount' => (int) ($proof['amount'] ?? 0),
+                'saved_at' => $proof['saved_at'] ?? null,
+                'label' => 'Transfer ' . ($index + 1),
+            ];
+        }, $proofPaths, array_keys($proofPaths)));
+    }
+
     /**
      * HALAMAN PAGI:
      * - Form buat handover baru + kirim OTP pagi
@@ -561,16 +649,24 @@ EOT;
         $selectedId = $request->integer('handover_id') ?: null;
         $handover   = null;
 
-        if ($selectedId) {
-            $detailQuery = SalesHandover::with(['warehouse', 'sales', 'items.product'])
-                ->where('id', $selectedId);
+          if ($selectedId) {
+              $detailQuery = SalesHandover::with(['warehouse', 'sales', 'items.product'])
+                  ->where('id', $selectedId)
+                  ->where(function ($q) {
+                      $q->whereIn('status', ['waiting_evening_otp', 'closed'])
+                          ->orWhere('status', 'on_sales'); // Allow any on_sales HDO to be viewed if selected
+                  });
 
             if ($isWarehouse && $me->warehouse_id && ! $isAdminLike) {
                 $detailQuery->where('warehouse_id', $me->warehouse_id);
             }
-
-            $handover = $detailQuery->firstOrFail();
-        }
+  
+              $handover = $detailQuery->firstOrFail();
+              $handover->items->transform(function (SalesHandoverItem $item) {
+                  $item->payment_transfer_proof_meta = $this->buildPaymentProofMeta($item);
+                  return $item;
+              });
+          }
 
         return view('wh.handover_evening', [
             'me'           => $me,
@@ -1574,6 +1670,11 @@ EOT;
         $canEdit      = $handover->status !== 'closed';
         $canVerifyOtp = $handover->status === 'waiting_evening_otp';
 
+        $handover->items->transform(function (SalesHandoverItem $item) {
+            $item->payment_transfer_proof_meta = $this->buildPaymentProofMeta($item);
+            return $item;
+        });
+
         $itemsSold   = $handover->items->where('qty_sold', '>', 0);
         $allApproved = $itemsSold->count() > 0
             && $itemsSold->every(fn($it) => $it->payment_status === 'approved');
@@ -1615,8 +1716,7 @@ EOT;
 
                 $handover->load(['items.product']);
 
-                $totalCash     = 0;
-                $totalTransfer = 0;
+                $handover->load(['items.product']);
 
                 foreach ($handover->items as $item) {
                     if (!isset($data['decisions'][$item->id])) {
@@ -1633,40 +1733,59 @@ EOT;
                     }
 
                     $item->payment_status = $status;
-
                     $item->payment_reject_reason = ($status === 'rejected')
                         ? ($row['reason'] ?? null)
                         : null;
 
-                    // recap hanya dari yang approved
                     if ($status === 'approved') {
                         $approvedCount++;
-                        if ($item->payment_method === 'cash') {
-                            $totalCash += (int) $item->payment_amount;
-                        } elseif ($item->payment_method === 'transfer') {
-                            $totalTransfer += (int) $item->payment_amount;
-                        }
+                        // 🔥 FINALIZE RETURN QUANTITY ONLY ON APPROVAL
+                        $item->qty_returned = max(0, (int)$item->qty_start - (int)$item->qty_sold);
                     } else {
+                        // Reject: jangan di-wipe datanya biar sales bisa benerin yang salah aja.
+                        // Hanya tandai statusnya sebagai rejected.
                         $rejectedCount++;
                     }
 
                     $item->save();
                 }
 
-                $handover->cash_amount     = $totalCash;
-                $handover->transfer_amount = $totalTransfer;
+                // 🔥 RE-CALCULATE TOTALS FROM ALL APPROVED ITEMS (Aggregated)
+                $handover->load('items');
+                $allApprovedItems = $handover->items->where('payment_status', 'approved');
+                
+                $handover->cash_amount     = (int) $allApprovedItems->sum('payment_cash_amount');
+                $handover->transfer_amount = (int) $allApprovedItems->sum('payment_transfer_amount');
+                $handover->total_sold_amount = (int) $allApprovedItems->sum('line_total_sold');
+
+                // Jika ada rejection, paksa status balik ke on_sales
+                if ($rejectedCount > 0) {
+                    $handover->status = 'on_sales';
+                    $handover->evening_filled_by_sales = false;
+                    $handover->evening_filled_at = null;
+                    $handover->evening_otp_hash = null;
+                    $handover->evening_otp_sent_at = null;
+                    $handover->evening_otp_verified_at = null;
+                    $handover->closed_by = null;
+                }
+
                 $handover->save();
 
                 // ================================
-                // AUTO CLOSE
-                // Close kalau SEMUA item yg terjual (qty_sold>0) sudah APPROVED
+                // AUTO CLOSE (SAFE VERSION)
                 // ================================
                 if ($handover->status !== 'closed') {
+                    // Check if there are ANY pending or rejected items that were previously sold
+                    $hasUnfinished = $handover->items->contains(fn($it) => 
+                        $it->qty_start > 0 && in_array($it->payment_status, ['pending', 'rejected'])
+                    );
 
-                    $itemsSold   = $handover->items->where('qty_sold', '>', 0);
-                    $allApproved = $itemsSold->every(fn($it) => $it->payment_status === 'approved');
+                    // Only close if ALL items are approved
+                    $allActuallyApproved = $handover->items->every(fn($it) => 
+                        $it->qty_start == 0 || $it->payment_status === 'approved'
+                    );
 
-                    if ($allApproved) {
+                    if (!$hasUnfinished && $allActuallyApproved) {
 
                         foreach ($handover->items as $item) {
                             $product = $item->product;
@@ -1727,11 +1846,11 @@ EOT;
         }
 
         if ($rejectedCount > 0 && $approvedCount === 0) {
-            return back()->with('error', "All {$rejectedCount} item(s) were REJECTED. Sales must re-submit payment data.");
+            return back()->with('success', "All {$rejectedCount} item(s) were rejected. Sales must re-submit payment data.");
         }
 
         if ($rejectedCount > 0) {
-            return back()->with('error', "Approval saved: {$approvedCount} approved, {$rejectedCount} rejected. Sales must re-submit the rejected item(s)." .
+            return back()->with('success', "Approval saved: {$approvedCount} approved, {$rejectedCount} rejected. Sales must re-submit the rejected item(s)." .
                 ($skippedCount > 0 ? " ({$skippedCount} item(s) skipped — already rejected, awaiting sales re-input.)" : ''));
         }
 
@@ -1740,6 +1859,24 @@ EOT;
             ' Handover will be closed automatically once all sold items are APPROVED.');
     }
     
+    public function paymentProofFile(Request $request, SalesHandoverItem $item, int $index = 0)
+    {
+        $proofPaths = $this->normalizeItemTransferProofPaths($item);
+        $proofMeta = $proofPaths[$index] ?? null;
+        $proofPath = $proofMeta['path'] ?? null;
+
+        abort_unless($proofPath, 404, 'Transfer proof not found.');
+        abort_unless(Storage::disk('public')->exists($proofPath), 404, 'Transfer proof file missing.');
+        $mimeType = Storage::disk('public')->mimeType($proofPath) ?: 'application/octet-stream';
+        $fileName = basename($proofPath);
+
+        return response(Storage::disk('public')->get($proofPath), 200, [
+            'Content-Type' => $mimeType,
+            'Content-Disposition' => 'inline; filename="' . $fileName . '"',
+            'Cache-Control' => 'private, max-age=3600', // 1 hour is safe with URL versioning
+        ]);
+    }
+
     public function getActiveCount(User $sales)
     {
         $count = SalesHandover::where('sales_id', $sales->id)
@@ -1770,7 +1907,7 @@ EOT;
         }
 
         return $handover->items->contains(function ($item) {
-            return ($item->payment_status ?? 'draft') !== 'draft';
+            return ! is_null($item->payment_status);
         });
     }
 

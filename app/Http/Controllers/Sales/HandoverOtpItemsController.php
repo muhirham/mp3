@@ -12,382 +12,402 @@ use Illuminate\Support\Facades\Storage;
 class HandoverOtpItemsController extends Controller
 {
     /**
-     * Helper: parse nilai kolom OTP.
+     * Normalise stored transfer proof paths to a consistent array structure.
+     */
+    protected function normalizeTransferProofPaths($item): array
+    {
+        $paths = $item->payment_transfer_proof_paths ?? [];
+        if (is_string($paths) && $paths !== '') {
+            $decoded = json_decode($paths, true);
+            $paths = is_array($decoded) ? $decoded : [];
+        }
+        if (!is_array($paths)) {
+            $paths = [];
+        }
+        $normalized = [];
+        foreach ($paths as $entry) {
+            if (is_string($entry) && $entry !== '') {
+                $normalized[] = ['path' => $entry];
+            } elseif (is_array($entry) && !empty($entry['path'])) {
+                $normalized[] = $entry;
+            }
+        }
+        if (!empty($item->payment_transfer_proof_path)) {
+            $exists = collect($normalized)->contains(fn($e) => ($e['path'] ?? null) === $item->payment_transfer_proof_path);
+            if (! $exists) {
+                $normalized[] = ['path' => $item->payment_transfer_proof_path];
+            }
+        }
+        return array_values(array_filter($normalized, fn($e) => !empty($e['path'] ?? null)));
+    }
+
+    /**
+     * Parse OTP value – can be plain, hash, or "plain|hash".
      */
     protected function parseOtpValue(?string $value): array
     {
         if (! $value) {
-            return [null, null]; // [plain, hash]
+            return [null, null];
         }
-
         if (str_contains($value, '|')) {
             [$plain, $hash] = explode('|', $value, 2);
-            $plain = trim($plain) !== '' ? trim($plain) : null;
-            $hash  = trim($hash)  !== '' ? trim($hash)  : null;
-            return [$plain, $hash];
+            return [trim($plain) ?: null, trim($hash) ?: null];
         }
-
-        if (
-            str_starts_with($value, '$2y$') ||
-            str_starts_with($value, '$2a$') ||
-            str_starts_with($value, '$2b$') ||
-            str_starts_with($value, '$argon2')
-        ) {
-            return [null, $value]; // hash only
+        if (str_starts_with($value, '$2y$') || str_starts_with($value, '$2a$')) {
+            return [null, $value];
         }
-
-        return [$value, null]; // plain 6 digit
+        return [$value, null];
     }
 
     /**
-     * Halaman OTP pagi & list barang dibawa hari ini
-     * + form isi payment per item.
+     * Show OTP page + list of items.
      */
     public function index(Request $request)
     {
         $me = $request->user();
-
-        $handovers = SalesHandover::with([
-                'warehouse',
-                'items.product',
-                'sales',
-            ])
+        $handovers = SalesHandover::with(['warehouse', 'items.product', 'sales'])
             ->where('sales_id', $me->id)
-            ->whereIn('status', [
-                'waiting_morning_otp',
-                'on_sales',
-                'waiting_evening_otp',
-            ])
+            ->whereIn('status', ['waiting_morning_otp', 'on_sales', 'waiting_evening_otp'])
             ->orderByDesc('handover_date')
-            ->orderByDesc('id')
             ->get();
 
-        $requestedHandoverId = $request->integer('handover_id');
-        $activeHandoverId    = $request->session()->get('sales_active_handover_id');
-
-        // default: handover terbaru
+        $reqId = $request->integer('handover_id');
+        $actId = $request->session()->get('sales_active_handover_id');
         $handover = $handovers->first();
-
-        if ($requestedHandoverId) {
-            $handover = $handovers->firstWhere('id', $requestedHandoverId) ?? $handover;
-        } elseif ($activeHandoverId) {
-            $handover = $handovers->firstWhere('id', $activeHandoverId) ?? $handover;
+        if ($reqId) {
+            $handover = $handovers->firstWhere('id', $reqId) ?? $handover;
+        } elseif ($actId) {
+            $handover = $handovers->firstWhere('id', $actId) ?? $handover;
         }
-
         if ($handover) {
             $request->session()->put('sales_active_handover_id', $handover->id);
         }
 
-            $isOtpVerified  = false;
-            $items          = collect();
-            $canEditPayment = false;
-
-            if ($handover) {
-                $sessionKey = 'sales_handover_otp_verified_'.$handover->id;
-
-                // 🔥 OTP UNLOCK LOGIC FINAL
-                $isOtpVerified =
-                    $request->session()->get($sessionKey, false)
-                    || (
-                        $handover->status === 'on_sales'
-                        && !is_null($handover->morning_otp_verified_at)
-                    );
-
-                if ($isOtpVerified) {
-                    $items = $handover->items()
-                        ->with('product')
-                        ->orderBy('id')
-                        ->get();
-
-                    $canEditPayment = in_array(
-                        $handover->status,
-                        ['on_sales', 'waiting_evening_otp'],
-                        true
-                    );
-                }
+        $isOtpVerified = false;
+        $items = collect();
+        $canEdit = false;
+        if ($handover) {
+            $sessionKey = 'sales_handover_otp_verified_' . $handover->id;
+            $isOtpVerified = $request->session()->get($sessionKey, false) ||
+                ($handover->status === 'on_sales' && ! is_null($handover->morning_otp_verified_at));
+            if ($isOtpVerified) {
+                $items = $handover->items()->with('product')->orderBy('id')->get();
+                $canEdit = in_array($handover->status, ['on_sales', 'waiting_evening_otp'], true);
             }
-
-            $statusButuhOtp = false;
-            $harusPopupOtp  = false;
-
-            if ($handover) {
-                $statusButuhOtp = in_array(
-                    $handover->status,
-                    ['waiting_morning_otp','on_sales'],
-                    true
-                );
-
-                $harusPopupOtp = $statusButuhOtp && !$isOtpVerified;
-            }
+        }
 
         return view('sales.handover_otp', [
-            'me'             => $me,
-            'handovers'      => $handovers,
-            'handover'       => $handover,
-            'items'          => $items,
-            'isOtpVerified'  => $isOtpVerified,
-            'canEditPayment' => $canEditPayment,
-            'harusPopupOtp'  => $harusPopupOtp,
+            'me'               => $me,
+            'handovers'        => $handovers,
+            'handover'         => $handover,
+            'items'            => $items,
+            'isOtpVerified'    => $isOtpVerified,
+            'canEditPayment'   => $canEdit,
+            'harusPopupOtp'    => ($handover && in_array($handover->status, ['waiting_morning_otp', 'on_sales'], true) && ! $isOtpVerified),
         ]);
     }
 
+    /**
+     * Verify morning OTP via AJAX.
+     */
+    public function verify(Request $request)
+    {
+        $request->validate(['otp_code' => 'required']);
+        $me = $request->user();
+        $inputOtp = trim($request->otp_code);
+        $handovers = SalesHandover::where('sales_id', $me->id)
+            ->whereIn('status', ['waiting_morning_otp', 'on_sales', 'waiting_evening_otp'])
+            ->get();
+
+        $matched = null;
+        foreach ($handovers as $ho) {
+            [$plain, $hash] = $this->parseOtpValue($ho->morning_otp_hash);
+            if (! $plain && ! $hash) {
+                continue;
+            }
+            if (($hash && Hash::check($inputOtp, $hash)) || ($plain && hash_equals($plain, $inputOtp))) {
+                $matched = $ho;
+                break;
+            }
+        }
+        if (! $matched) {
+            return response()->json(['success' => false, 'message' => 'OTP invalid'], 422);
+        }
+        $request->session()->put('sales_active_handover_id', $matched->id);
+        $request->session()->put('sales_handover_otp_verified_' . $matched->id, true);
+
+        return response()->json(['success' => true]);
+    }
 
     /**
-     * Verifikasi OTP pagi via AJAX.
+     * Internal helper to resize and compress images using GD.
      */
-        public function verify(Request $request)
-        {
-            $request->validate([
-                'otp_code' => ['required', 'string'],
-            ]);
+    private function saveOptimizedImage($file, $directory): string
+    {
+        $maxDim = 1200;
+        $quality = 75;
+        $path = $file->getRealPath();
+        
+        // Get image type and dimensions
+        $info = @getimagesize($path);
+        if (!$info) return $file->store($directory, 'public');
+        
+        [$width, $height, $type] = $info;
 
-            $me = $request->user();
-            $inputOtp = trim($request->otp_code);
-
-            /**
-             * 🔎 CARI HANDOVER YANG OTP-NYA COCOK
-             */
-            $handovers = SalesHandover::where('sales_id', $me->id)
-                ->whereIn('status', [
-                    'waiting_morning_otp',
-                    'on_sales',
-                    'waiting_evening_otp',
-                ])
-                ->get();
-
-            $matchedHandover = null;
-
-            foreach ($handovers as $handover) {
-                [$plain, $hash] = $this->parseOtpValue($handover->morning_otp_hash);
-
-                if (!$plain && !$hash) {
-                    continue;
-                }
-
-                if (
-                    ($hash && Hash::check($inputOtp, $hash)) ||
-                    ($plain && hash_equals($plain, $inputOtp))
-                ) {
-                    $matchedHandover = $handover;
-                    break;
+        // Handle orientation (Auto-Rotate) if JPEG
+        $rotateDeg = 0;
+        if ($type === IMAGETYPE_JPEG && function_exists('exif_read_data')) {
+            $exif = @exif_read_data($path);
+            if (!empty($exif['Orientation'])) {
+                switch ($exif['Orientation']) {
+                    case 3: $rotateDeg = 180; break;
+                    case 6: $rotateDeg = -90; break;
+                    case 8: $rotateDeg = 90; break;
                 }
             }
-
-            if (!$matchedHandover) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'OTP code does not match any handover.',
-                ], 422);
-            }
-
-            /**
-             * ✅ SET HANDOVER AKTIF
-             */
-            $request->session()->put(
-                'sales_active_handover_id',
-                $matchedHandover->id
-            );
-
-            /**
-             * ✅ OTP VERIFIED PER HANDOVER
-             */
-            $request->session()->put(
-                'sales_handover_otp_verified_'.$matchedHandover->id,
-                true
-            );
-
-            return response()->json([
-                'success' => true,
-                'message' => 'OTP valid, handover opened successfully.',
-            ]);
         }
 
+        // Calculate scale
+        $newWidth = $width;
+        $newHeight = $height;
+        if ($width > $maxDim || $height > $maxDim) {
+            $ratio = $width / $height;
+            if ($ratio > 1) {
+                $newWidth = $maxDim;
+                $newHeight = (int)($maxDim / $ratio);
+            } else {
+                $newHeight = $maxDim;
+                $newWidth = (int)($maxDim * $ratio);
+            }
+        }
 
+        // Create source resource
+        $src = match($type) {
+            IMAGETYPE_JPEG => @imagecreatefromjpeg($path),
+            IMAGETYPE_PNG  => @imagecreatefrompng($path),
+            IMAGETYPE_WEBP => @imagecreatefromwebp($path),
+            default        => null,
+        };
+        if (!$src) return $file->store($directory, 'public');
+
+        // Auto-Rotate if needed before resampling
+        if ($rotateDeg) {
+            $src = imagerotate($src, $rotateDeg, 0);
+            $width = imagesx($src);
+            $height = imagesy($src);
+            
+            // Recalculate new dimensions for rotated image
+            $newWidth = $width;
+            $newHeight = $height;
+            if ($width > $maxDim || $height > $maxDim) {
+                $ratio = $width / $height;
+                if ($ratio > 1) {
+                    $newWidth = $maxDim;
+                    $newHeight = (int)($maxDim / $ratio);
+                } else {
+                    $newHeight = $maxDim;
+                    $newWidth = (int)($maxDim * $ratio);
+                }
+            }
+        }
+
+        // Create destination (True Color)
+        $dst = imagecreatetruecolor($newWidth, $newHeight);
+
+        // 🔥 WHITE BACKGROUND for PNG/WebP (prevent black background on JPEG convert)
+        $white = imagecolorallocate($dst, 255, 255, 255);
+        imagefill($dst, 0, 0, $white);
+
+        imagecopyresampled($dst, $src, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+
+        // UNIQUE FILENAME (Cache Busting)
+        $fileName = time() . '_' . bin2hex(random_bytes(4)) . '.jpg';
+        $finalPath = $directory . '/' . $fileName;
+
+        ob_start();
+        imagejpeg($dst, null, $quality);
+        $imageData = ob_get_clean();
+
+        Storage::disk('public')->put($finalPath, $imageData);
+
+        imagedestroy($src);
+        imagedestroy($dst);
+
+        return $finalPath;
+    }
 
     /**
-     * SALES isi payment per item.
+     * Save payment data – supports split cash/transfer.
      */
     public function savePayments(Request $request)
     {
         $me = $request->user();
-
         $request->validate([
-            'handover_id' => ['required', 'integer', 'exists:sales_handovers,id'],
-            'items'       => ['required', 'array'],
-            'items.*.payment_qty'    => ['nullable', 'integer', 'min:0'],
-            'items.*.payment_method' => ['nullable', 'in:cash,transfer'],
-            'items.*.payment_amount' => ['nullable', 'integer', 'min:0'],
-            'items.*.payment_proof'  => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:2048'],
+            'handover_id' => 'required|exists:sales_handovers,id',
+            'submit_mode' => 'required|in:draft,submit',
+            'items'       => 'required|array',
         ]);
 
         $handover = SalesHandover::with(['items.product'])
             ->where('id', $request->handover_id)
-            ->whereIn('status', ['on_sales','waiting_evening_otp'])
+            ->where('sales_id', $me->id)
+            ->whereIn('status', ['on_sales', 'waiting_evening_otp'])
             ->firstOrFail();
 
-
-        // keamanan: cuma boleh handover milik sales yang login
-        if ((int) $handover->sales_id !== (int) $me->id) {
-            abort(403, 'You are not allowed to modify another sales\' handover.');
+        $otpVerified = session('sales_handover_otp_verified_' . $handover->id, false) ||
+            ($handover->status === 'on_sales' && ! is_null($handover->morning_otp_verified_at));
+        if (! $otpVerified) {
+            return back()->with('error', 'OTP not verified');
         }
 
-        // hanya bisa edit saat open
-        if (!in_array($handover->status, ['on_sales', 'waiting_evening_otp'], true)) {
-            return back()->with('error', 'Payment cannot be filled for this handover status.');
-        }
-
-        // wajib OTP verified (bisa dari session atau dari database jika di-bypass WH Admin)
-        $sessionKey = 'sales_handover_otp_verified_'.$handover->id;
-        $isOtpVerified = $request->session()->get($sessionKey, false)
-            || (
-                in_array($handover->status, ['on_sales', 'waiting_evening_otp'], true)
-                && !is_null($handover->morning_otp_verified_at)
-            );
-
-        if (!$isOtpVerified) {
-            return back()->with('error', 'Morning OTP has not been verified.');
-        }
-
+        $isFinal = $request->submit_mode === 'submit';
         $itemsInput = $request->input('items', []);
 
         try {
-            DB::transaction(function () use ($handover, $itemsInput, $request) {
-
-                $touched   = 0;
+            DB::transaction(function () use ($handover, $itemsInput, $request, $isFinal) {
+                $touched = 0;
                 $totalSold = 0;
 
                 foreach ($handover->items as $item) {
-                    if (!isset($itemsInput[$item->id])) {
+                    if (! isset($itemsInput[$item->id])) {
                         continue;
                     }
 
-                    $currentStatus = $item->payment_status ?: 'draft';
-
-                    // LOCK server: pending/approved ga boleh diubah
-                    if (in_array($currentStatus, ['pending', 'approved'], true)) {
+                    $status = $item->payment_status ?: 'draft';
+                    if (in_array($status, ['pending', 'approved'], true)) {
                         continue;
                     }
 
                     $row = $itemsInput[$item->id];
-
-                    $qtyStart  = (int) $item->qty_start;
+                    $qtyStart = (int) $item->qty_start;
                     $unitPrice = (int) ($item->unit_price ?: ($item->product?->selling_price ?? 0));
-                    $maxQty    = $qtyStart;
 
-                    $qtyBayar = (int) ($row['payment_qty'] ?? 0);
-                    if ($qtyBayar < 0) $qtyBayar = 0;
-                    if ($qtyBayar > $maxQty) $qtyBayar = $maxQty;
+                    $rawSoldQty = (int) $item->qty_sold;
+                    $existingPaymentQty = (int) ($item->payment_qty ?? 0);
+                    $isRejected = $status === 'rejected';
+                    $isDraftProgress = (! $isRejected && $rawSoldQty > 0 && $existingPaymentQty > 0 && $existingPaymentQty < $rawSoldQty);
 
-                    $method = $row['payment_method'] ?? null;
-                    $method = ($method !== null && trim($method) === '') ? null : $method;
+                    $baseSoldQty = $isRejected ? 0 : $rawSoldQty;
+                    $isReinput = $isRejected || $isDraftProgress;
 
-                    $proofFile = $request->file("items.{$item->id}.payment_proof");
+                    $baseCashQty = $isRejected ? 0 : (int) ($item->payment_cash_qty ?? 0);
+                    $baseTransferQty = $isRejected ? 0 : (int) ($item->payment_transfer_qty ?? 0);
+                    $baseCashAmt = $isRejected ? 0 : (int) ($item->payment_cash_amount ?? 0);
+                    $baseTransferAmt = $isRejected ? 0 : (int) ($item->payment_transfer_amount ?? 0);
+                    $proofPaths = $isRejected ? [] : $this->normalizeTransferProofPaths($item);
 
-                    // ====== HITUNG SOLD/RETURNED OTOMATIS (INI YANG LO MAU) ======
-                    // Terjual = qty bayar
-                    $qtySold = $qtyBayar;
+                    // Qty that can still be paid for this item
+                    $editableQty = $isReinput
+                        ? max(0, ($baseSoldQty > 0 ? $baseSoldQty : $qtyStart) - ($baseCashQty + $baseTransferQty))
+                        : max(0, $qtyStart - $baseSoldQty);
 
-                    // Kembali = qty_start - qty_sold
-                    $qtyReturned = max(0, $qtyStart - $qtySold);
+                    $cashQty = max(0, (int) ($row['payment_cash_qty'] ?? 0));
+                    $transferQty = max(0, (int) ($row['payment_transfer_qty'] ?? 0));
+                    $totalQty = $cashQty + $transferQty;
 
-                    $lineSold = $qtySold * $unitPrice;
-
-                    // ====== PAYMENT LOGIC ======
-                    // Kalau qtyBayar = 0 -> anggap batal / tidak ada transaksi
-                    // Balikin field payment ke 0/null & status ke draft (biar bisa diubah lagi)
-                    if ($qtyBayar === 0) {
-
-                        // kalau ada bukti lama, hapus biar gak numpuk & biar bener-bener reset
-                        if ($item->payment_transfer_proof_path) {
-                            Storage::disk('public')->delete($item->payment_transfer_proof_path);
-                            $item->payment_transfer_proof_path = null;
-                        }
-
-                        $item->payment_qty           = 0;
-                        $item->payment_method        = null;
-                        $item->payment_amount        = 0;
-                        $item->payment_status        = 'draft';
-                        $item->payment_reject_reason = null;
-
-                    } else {
-                        // qtyBayar > 0 => metode wajib
-                        if (!$method) {
-                            throw new \RuntimeException("Payment method is required (Item ID: {$item->id}).");
-                        }
-
-                        // nominal dibatasi max = unitPrice * qtySold
-                        $maxNominal = $unitPrice * $qtySold;
-                        $nominal    = (int) ($row['payment_amount'] ?? 0);
-                        if ($nominal < 0) $nominal = 0;
-                        if ($nominal > $maxNominal) $nominal = $maxNominal;
-
-                        // transfer & nominal > 0 => butuh bukti (baru atau existing)
-                        if ($method === 'transfer' && $nominal > 0 && !$proofFile && !$item->payment_transfer_proof_path) {
-                            throw new \RuntimeException("Transfer proof is required (Item ID: {$item->id}).");
-                        }
-
-                        // kalau method bukan transfer, bersihin proof lama biar gak nyangkut
-                        if ($method !== 'transfer' && $item->payment_transfer_proof_path) {
-                            Storage::disk('public')->delete($item->payment_transfer_proof_path);
-                            $item->payment_transfer_proof_path = null;
-                        }
-
-                        // replace proof jika upload baru
-                        if ($proofFile) {
-                            if ($item->payment_transfer_proof_path) {
-                                Storage::disk('public')->delete($item->payment_transfer_proof_path);
-                            }
-                            $item->payment_transfer_proof_path = $proofFile->store('handover_item_transfer_proofs', 'public');
-                        }
-
-                        $item->payment_qty           = $qtyBayar;
-                        $item->payment_method        = $method;
-                        $item->payment_amount        = $nominal;
-                        $item->payment_status        = 'pending';
-                        $item->payment_reject_reason = null;
+                    if ($totalQty > $editableQty) {
+                        throw new \RuntimeException("Total payment qty ({$totalQty}) exceeds allowed qty ({$editableQty}) for item #{$item->id}");
                     }
 
-                    // ====== SIMPAN SOLD/RETURNED/LINE SOLD (INI BIAR UI KEISI & WH BISA PROSES) ======
-                    $item->unit_price      = $unitPrice;
-                    $item->qty_sold        = $qtySold;
-                    $item->qty_returned    = $qtyReturned;
-                    $item->line_total_sold = $lineSold;
+                    $proofFile = $request->file("items.{$item->id}.payment_proof");
+                    $proofFiles = $proofFile ? (is_array($proofFile) ? $proofFile : [$proofFile]) : [];
 
-                    // ====== SIMPAN KALKULASI DISKON (FIX: kolom ini selama ini selalu 0) ======
-                    $disc     = (int) ($item->discount_per_unit ?? 0);
-                    $netPrice = max(0, $unitPrice - $disc);
+                    if (!empty($proofFiles)) {
+                        // 🔥 REPLACE LOGIC: Delete old files from storage before replacing
+                        foreach ($proofPaths as $oldProof) {
+                            $oldPath = $oldProof['path'] ?? null;
+                            if ($oldPath && Storage::disk('public')->exists($oldPath)) {
+                                Storage::disk('public')->delete($oldPath);
+                            }
+                        }
+                        $proofPaths = []; // Reset list so only new ones are stored
+                    }
+
+                    $qtySold = $isReinput
+                        ? ($isRejected ? $totalQty : $baseSoldQty)
+                        : $baseSoldQty + $totalQty;
+
+                    $qtyReturned = max(0, $qtyStart - $qtySold);
+
+                    $cashAmount = max(0, (int) ($row['payment_cash_amount'] ?? 0));
+                    $transferAmount = max(0, (int) ($row['payment_transfer_amount'] ?? 0));
+
+                    // Nominal validation
+                    if ($cashAmount > ($unitPrice * $cashQty)) {
+                        throw new \RuntimeException("Cash amount exceeds allowed value for item #{$item->id}");
+                    }
+                    if ($transferAmount > ($unitPrice * $transferQty)) {
+                        throw new \RuntimeException("Transfer amount exceeds allowed value for item #{$item->id}");
+                    }
+
+                    // Proof required when there is a transfer payment
+                    if ($transferQty > 0 && $transferAmount > 0 && empty($proofFiles) && empty($proofPaths)) {
+                        throw new \RuntimeException("Transfer proof is required for item #{$item->id}");
+                    }
+
+                    foreach ($proofFiles as $pf) {
+                        // 🔥 OPTIMIZED IMAGE SAVE (Resize & Compress)
+                        $stored = $this->saveOptimizedImage($pf, 'handover_item_transfer_proofs');
+                        $proofPaths[] = [
+                            'path'   => $stored,
+                            'qty'    => $transferQty,
+                            'amount' => $transferAmount,
+                            'saved_at' => now()->format('Y-m-d H:i:s'),
+                        ];
+                    }
+                    $proofPaths = collect($proofPaths)
+                        ->filter(fn($e) => ! empty($e['path']))
+                        ->unique('path')
+                        ->values()
+                        ->all();
+
+                    // Update payment fields
+                    $item->payment_cash_qty        = $baseCashQty + $cashQty;
+                    $item->payment_cash_amount     = $baseCashAmt + $cashAmount;
+                    $item->payment_transfer_qty    = $baseTransferQty + $transferQty;
+                    $item->payment_transfer_amount = $baseTransferAmt + $transferAmount;
+                    $item->payment_qty             = $item->payment_cash_qty + $item->payment_transfer_qty;
+                    $item->payment_amount          = $item->payment_cash_amount + $item->payment_transfer_amount;
+                    $item->payment_transfer_proof_paths = $proofPaths;
+                    $item->payment_method = ($item->payment_cash_qty > 0 && $item->payment_transfer_qty > 0)
+                        ? null
+                        : ($item->payment_transfer_qty > 0 ? 'transfer' : 'cash');
+                    $item->payment_status = $isFinal ? 'pending' : null;
+                    $item->payment_reject_reason = null;
+
+                    // Update pricing / qty fields
+                    $item->unit_price = $unitPrice;
+                    $item->qty_sold = $qtySold;
+                    $item->qty_returned = $qtyReturned;
+                    $item->line_total_sold = $qtySold * $unitPrice;
+
+                    // Discount handling
+                    $discountPerUnit = (int) ($item->discount_per_unit ?? 0);
+                    $netPrice = max(0, $unitPrice - $discountPerUnit);
                     $item->unit_price_after_discount = $netPrice;
                     $item->line_total_after_discount = $qtySold * $netPrice;
-                    $item->discount_total            = $disc * $qtySold;
+                    $item->discount_total = $discountPerUnit * $qtySold;
 
-                    // (optional aman) pastiin line_total_start kebentuk kalau masih 0
                     if ((int) $item->line_total_start <= 0) {
                         $item->line_total_start = $qtyStart * $unitPrice;
                     }
 
                     $item->save();
-
-                    $totalSold += $lineSold;
+                    $totalSold += $item->line_total_sold;
                     $touched++;
                 }
 
-                if ($touched <= 0) {
-                    throw new \RuntimeException('No items can be modified. PENDING/APPROVED items are locked.');
+                if ($touched > 0) {
+                    $handover->total_sold_amount = $totalSold;
+                    $handover->evening_filled_by_sales = $isFinal;
+                    $handover->evening_filled_at = $isFinal ? now() : null;
+                    $handover->save();
                 }
-
-                // update header biar report gak 0 terus
-                $handover->total_sold_amount       = $totalSold;
-                $handover->evening_filled_by_sales = true;
-                $handover->evening_filled_at       = now();
-                $handover->save();
             });
-
         } catch (\Throwable $e) {
-            return back()->with('error', 'Failed to save payment: '.$e->getMessage());
+            return back()->with('error', 'Error: ' . $e->getMessage());
         }
 
-        return back()->with('success', 'Payment data saved successfully, awaiting warehouse admin approval.');
+        return back()->with('success', $isFinal ? 'Submitted' : 'Draft saved');
     }
-
-
 }

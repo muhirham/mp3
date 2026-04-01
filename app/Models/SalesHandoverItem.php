@@ -29,9 +29,14 @@ class SalesHandoverItem extends Model
 
         // payment per item
         'payment_qty',
+        'payment_cash_qty',
+        'payment_cash_amount',
+        'payment_transfer_qty',
+        'payment_transfer_amount',
         'payment_method',
         'payment_amount',
         'payment_transfer_proof_path',
+        'payment_transfer_proof_paths',
         'payment_status',
         'payment_reject_reason',
     ];
@@ -48,7 +53,12 @@ class SalesHandoverItem extends Model
         'unit_price_after_discount'  => 'integer',
         'line_total_after_discount'  => 'integer',
         'payment_qty'        => 'integer',
+        'payment_cash_qty'   => 'integer',
+        'payment_cash_amount' => 'integer',
+        'payment_transfer_qty' => 'integer',
+        'payment_transfer_amount' => 'integer',
         'payment_amount'     => 'integer',
+        'payment_transfer_proof_paths' => 'array',
         
     ];
 
