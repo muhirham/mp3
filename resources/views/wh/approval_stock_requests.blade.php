@@ -436,5 +436,14 @@
                 window.location.href = `${window.location.pathname}?${params.toString()}`;
             });
         });
+
+        // GLOBAL SEARCH FILTER (Client-side)
+        $('#globalSearch').on('keyup', function() {
+            const val = $(this).val().toLowerCase();
+            $('#requestTable tr').each(function() {
+                const text = $(this).text().toLowerCase();
+                $(this).toggle(text.indexOf(val) > -1);
+            });
+        });
     </script>
 @endpush

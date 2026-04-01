@@ -326,6 +326,15 @@ document.addEventListener('DOMContentLoaded', function() {
             cancelButtonText: 'Review Again'
         }).then((result) => { if (result.isConfirmed) form.submit(); });
     });
+
+    // GLOBAL SEARCH FILTER
+    $('#globalSearch').on('keyup', function() {
+        const val = $(this).val().toLowerCase();
+        $('#itemsTable tbody tr').each(function() {
+            const text = $(this).text().toLowerCase();
+            $(this).toggle(text.indexOf(val) > -1);
+        });
+    });
 })();
 </script>
 @endpush

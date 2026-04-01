@@ -38,7 +38,7 @@
             $statusLabel = $statusLabelMap[$statusKey] ?? $statusKey;
             $badgeClass = $badgeClassMap[$statusKey] ?? $badgeClassMap['default'];
 
-            // edit approval only if not closed yet
+            // edit approval hanya kalau belum closed
             $canEdit = $handover->status !== 'closed';
 
             $summaryIssued = (int) $handover->items->sum('qty_start');
@@ -710,4 +710,18 @@
             });
         </script>
     @endif
+
+    <script>
+        $(document).ready(function() {
+            // GLOBAL SEARCH FILTER
+            $('#globalSearch').on('keyup', function() {
+                const val = $(this).val().toLowerCase();
+                // Target the items table rows
+                $('.table-approval tbody tr').each(function() {
+                    const text = $(this).text().toLowerCase();
+                    $(this).toggle(text.indexOf(val) > -1);
+                });
+            });
+        });
+    </script>
 @endpush
