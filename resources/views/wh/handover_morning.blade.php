@@ -35,7 +35,7 @@
                     @if(!empty($me?->warehouse_id))
                     <input type="hidden" name="warehouse_id" value="{{ $me->warehouse_id }}">
                     <input type="text" class="form-control"
-                            value="{{ $me->warehouse?->warehouse_name ?? ('Gudang #'.$me->warehouse_id) }}"
+                            value="{{ $me->warehouse?->warehouse_name ?? ('Warehouse #'.$me->warehouse_id) }}"
                             readonly>
                     @else
                     <select name="warehouse_id" class="form-select" required>
@@ -98,7 +98,7 @@
                             <option value="{{ $p->id }}"
                                     data-price="{{ (int) $p->selling_price }}"
                                     @selected($draft?->product_id == $p->id)>
-                            {{ $p->name }} ({{ $p->product_code }}) | Stok WH: {{ number_format((int) ($p->warehouse_stock ?? 0), 0, ',', '.') }}
+                            {{ $p->name }} ({{ $p->product_code }}) | WH Stock: {{ number_format((int) ($p->warehouse_stock ?? 0), 0, '.', ',') }}
                             </option>
                         @endforeach
                         </select>
@@ -173,7 +173,7 @@
                 <div class="col-md-3">
                 <label class="form-label">Morning OTP</label>
                 <input type="text" name="otp_code" class="form-control"
-                        inputmode="numeric" pattern="[0-9]*" placeholder="6 digit" required>
+                        inputmode="numeric" pattern="[0-9]*" placeholder="6 digits" required>
                 </div>
                 <div class="col-md-4">
                 <button type="submit" class="btn btn-success w-100 mt-3 mt-md-0">
@@ -206,9 +206,9 @@
                 let html = `<option value="">— Select Product —</option>`;
                 productsContext.forEach(p => {
                     const stock = parseInt(p.warehouse_stock || 0);
-                    const stockFmt = new Intl.NumberFormat('id-ID').format(stock);
+                    const stockFmt = new Intl.NumberFormat('en-US').format(stock);
                     html += `<option value="${p.id}" data-price="${p.selling_price}" ${currentVal == p.id ? 'selected' : ''}>
-                        ${p.name} (${p.product_code}) | Stok WH: ${stockFmt}
+                        ${p.name} (${p.product_code}) | WH Stock: ${stockFmt}
                     </option>`;
                 });
                 sel.innerHTML = html;
@@ -291,7 +291,7 @@
     const grandLabel = document.getElementById('grand_total');
 
     function formatIdr(num){
-        return new Intl.NumberFormat('id-ID').format(num || 0);
+        return new Intl.NumberFormat('en-US').format(num || 0);
     }
 
     // reindex semua row supaya name items[0]..items[n] selalu rapi
@@ -380,9 +380,9 @@
             <option value="">— Select Product —</option>
             ${productsContext.map(p => {
                  const stock = parseInt(p.warehouse_stock || 0);
-                 const stockFmt = new Intl.NumberFormat('id-ID').format(stock);
+                 const stockFmt = new Intl.NumberFormat('en-US').format(stock);
                  return `<option value="${p.id}" data-price="${p.selling_price}">
-                    ${p.name} (${p.product_code}) | Stok WH: ${stockFmt}
+                    ${p.name} (${p.product_code}) | WH Stock: ${stockFmt}
                  </option>`;
             }).join('')}
             </select>

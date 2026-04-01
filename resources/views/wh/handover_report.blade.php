@@ -3,87 +3,118 @@
 @section('content')
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-<style>
-/* ================= DESKTOP BASE ================= */
+    <style>
+        /* ================= DESKTOP BASE ================= */
 
-.swal2-container { z-index: 2005 !important; }
+        .swal2-container {
+            z-index: 2005 !important;
+        }
 
-.table { font-size: 12px; }
-.table thead th { font-size: 11px; white-space: nowrap; }
-.table tbody td { padding-top: 4px; padding-bottom: 4px; }
-.badge { font-size: 10px; padding: 3px 6px; }
-.table td, .table th { white-space: nowrap; }
+        .table {
+            font-size: 11.5px;
+            table-layout: auto;
+            width: 100% !important;
+            margin-bottom: 0;
+        }
 
-/* ================= MOBILE RESPONSIVE UPGRADE ================= */
+        .table thead th {
+            font-size: 11px;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
 
-@media (max-width: 768px) {
+        .table tbody td {
+            padding-top: 6px;
+            padding-bottom: 6px;
+            vertical-align: middle;
+        }
 
-    /* FILTER STACK */
-    #reportFilterForm .col-md-3 {
-        flex: 0 0 100%;
-        max-width: 100%;
-    }
+        .badge {
+            font-size: 9.5px;
+            padding: 3.5px 7px;
+        }
 
-    /* SUMMARY STACK */
-    .row.text-center > .col-md-6 {
-        flex: 0 0 100%;
-        max-width: 100%;
-        margin-bottom: 15px;
-    }
+        .table td.text-wrap-name {
+            white-space: normal !important;
+            min-width: 120px;
+            line-height: 1.2;
+        }
 
-    /* TABLE TO CARD */
-    .table-responsive {
-        overflow: visible;
-    }
+        .table td:not(.text-wrap-name),
+        .table th {
+            white-space: nowrap;
+        }
 
-    .table-responsive table thead {
-        display: none;
-    }
+        /* ================= MOBILE RESPONSIVE UPGRADE ================= */
 
-    .table-responsive table tbody tr {
-        display: block;
-        background: #ffffff;
-        border-radius: 14px;
-        padding: 14px;
-        margin-bottom: 14px;
-        box-shadow: 0 4px 14px rgba(0,0,0,0.05);
-    }
+        @media (max-width: 768px) {
 
-    .table-responsive table tbody td {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        border: none !important;
-        padding: 6px 0;
-        font-size: 13px;
-        white-space: normal !important;
-    }
+            /* FILTER STACK */
+            #reportFilterForm .col-md-3 {
+                flex: 0 0 100%;
+                max-width: 100%;
+            }
 
-    .table-responsive table tbody td::before {
-        content: attr(data-label);
-        font-weight: 600;
-        font-size: 11px;
-        text-transform: uppercase;
-        color: #6c757d;
-        margin-right: 10px;
-    }
+            /* SUMMARY STACK */
+            .row.text-center>.col-md-6 {
+                flex: 0 0 100%;
+                max-width: 100%;
+                margin-bottom: 15px;
+            }
 
-    /* BUTTON FULL WIDTH */
-    .btn {
-        width: 100%;
-    }
+            /* TABLE TO CARD */
+            .table-responsive {
+                overflow: visible;
+            }
 
-    /* MODAL RESPONSIVE */
-    .modal-dialog {
-        margin: 10px;
-    }
+            .table-responsive table thead {
+                display: none;
+            }
 
-    .modal-content {
-        border-radius: 16px;
-    }
+            .table-responsive table tbody tr {
+                display: block;
+                background: #ffffff;
+                border-radius: 14px;
+                padding: 14px;
+                margin-bottom: 14px;
+                box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+            }
 
-}
-</style>
+            .table-responsive table tbody td {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                border: none !important;
+                padding: 6px 0;
+                font-size: 13px;
+                white-space: normal !important;
+            }
+
+            .table-responsive table tbody td::before {
+                content: attr(data-label);
+                font-weight: 600;
+                font-size: 11px;
+                text-transform: uppercase;
+                color: #6c757d;
+                margin-right: 10px;
+            }
+
+            /* BUTTON FULL WIDTH */
+            .btn {
+                width: 100%;
+            }
+
+            /* MODAL RESPONSIVE */
+            .modal-dialog {
+                margin: 10px;
+            }
+
+            .modal-content {
+                border-radius: 16px;
+            }
+
+        }
+    </style>
 
     @php
         $me = $me ?? auth()->user();
@@ -93,12 +124,7 @@
         $isSales = $roles->contains('slug', 'sales');
         $isAdminLike = $roles->contains('slug', 'admin') || $roles->contains('slug', 'superadmin');
 
-        $canSeeMargin =
-            $roles->contains('slug', 'superadmin') ||
-            $roles->contains('slug', 'admin') ||
-            $roles->contains('slug', 'warehouse') ||
-            $roles->contains('slug', 'procurement') ||
-            $roles->contains('slug', 'ceo');
+        $canSeeMargin = !($isSales && !$isAdminLike && !$isWarehouse);
 
         $statusLabels = $statusOptions ?? [];
 
@@ -138,21 +164,21 @@
 
                     {{-- VIEW --}}
                     <div class="col-md-3">
-                        <label class="form-label">Tampilan</label>
+                        <label class="form-label">View</label>
                         <select name="view" id="viewFilter" class="form-select">
-                            <option value="handover" @selected($view === 'handover')>Detail Handover</option>
-                            <option value="sales" @selected($view === 'sales')>Rekap per Sales</option>
-                            <option value="daily" @selected($view === 'daily')>Rekap per Hari</option>
+                            <option value="handover" @selected($view === 'handover')>Handover Detail</option>
+                            <option value="sales" @selected($view === 'sales')>Recap per Sales</option>
+                            <option value="daily" @selected($view === 'daily')>Recap per Day</option>
                         </select>
                     </div>
 
                     <div class="col-md-3">
-                        <label class="form-label">Dari Tanggal</label>
+                        <label class="form-label">From Date</label>
                         <input type="date" name="date_from" value="{{ $dateFrom }}" class="form-control">
                     </div>
 
                     <div class="col-md-3">
-                        <label class="form-label">Sampai Tanggal</label>
+                        <label class="form-label">To Date</label>
                         <input type="date" name="date_to" value="{{ $dateTo }}" class="form-control">
                     </div>
 
@@ -176,11 +202,11 @@
                             <input type="hidden" name="warehouse_id" value="{{ $lockedWarehouseId }}">
                             <input type="text" class="form-control" value="{{ $lockedName }}" readonly>
                             <div class="form-text">
-                                {{ $lockWarehouseForSales ? 'Report ini hanya untuk warehouse kamu.' : 'User ini terkunci ke warehouse tersebut.' }}
+                                {{ $lockWarehouseForSales ? 'This report is only for your warehouse.' : 'This user is locked to this warehouse.' }}
                             </div>
                         @else
                             <select name="warehouse_id" class="form-select">
-                                <option value="">Semua Gudang</option>
+                                <option value="">All Warehouses</option>
                                 @foreach ($warehouses as $w)
                                     @php
                                         $whLabel =
@@ -201,10 +227,10 @@
                         @if ($isSales && !$isAdminLike && !$isWarehouse)
                             <input type="hidden" name="sales_id" value="{{ $me->id }}">
                             <input type="text" class="form-control" value="{{ $me->name }}" readonly>
-                            <div class="form-text">Report ini hanya untuk handover milik kamu.</div>
+                            <div class="form-text">This report is only for your handover.</div>
                         @else
                             <select name="sales_id" class="form-select">
-                                <option value="">Semua Sales</option>
+                                <option value="">All Sales</option>
                                 @foreach ($salesList as $s)
                                     <option value="{{ $s->id }}" @selected($salesId == $s->id)>{{ $s->name }}
                                     </option>
@@ -223,17 +249,9 @@
                         </select>
                     </div>
 
-                    <div class="col-md-3 d-flex gap-2">
-                        <a href="{{ route($listRouteName) }}" class="btn btn-outline-secondary flex-fill mt-3 mt-md-0">
-                            Reset
-                        </a>
-                    </div>
-
-
-                    <div class="col-md-3 d-flex gap-2">
-                        <a href="#" id="btnExportSales" class="btn btn-success">
-                            Export Excel
-                        </a>
+                    <div class="col-md-3 d-flex align-items-end gap-2">
+                        <button type="button" id="btnResetFilters" class="btn btn-outline-secondary w-100">Reset Filters</button>
+                        <button type="button" id="btnExportSales" class="btn btn-success w-100">Export Excel</button>
                     </div>
                 </form>
 
@@ -252,7 +270,7 @@
 
                         @if ($canSeeMargin)
                             <div>
-                                <div class="fw-semibold text-muted small">Total Diskon</div>
+                                <div class="fw-semibold text-muted small">Total Discount</div>
                                 <div class="fs-5 fw-bold text-danger" id="sumDiscount">
                                     -{{ $summary['total_discount'] ?? 'Rp 0' }}
                                 </div>
@@ -263,13 +281,13 @@
                     {{-- KANAN --}}
                     <div class="col-md-6">
                         <div class="mb-3">
-                            <div class="fw-semibold text-muted small">Total Nilai Penjualan (Closed)</div>
+                            <div class="fw-semibold text-muted small">Total Sales Value (Closed)</div>
                             <div class="fs-5 fw-bold" id="sumSold">{{ $summary['total_sold_formatted'] }}</div>
                         </div>
 
                         {{-- Nilai sisa stok tepat di bawah penjualan --}}
                         <div class="pt-1">
-                            <div class="fw-semibold text-muted small">Perkiraan Nilai Sisa Stok</div>
+                            <div class="fw-semibold text-muted small">Estimated Remaining Stock Value</div>
                             <div class="fs-5 fw-bold" id="sumDiff">{{ $summary['total_diff_formatted'] }}</div>
                         </div>
                     </div>
@@ -277,8 +295,9 @@
                 </div>
 
                 <div class="mt-2 text-muted small text-center">
-                    Periode:
-                    <span class="fw-semibold" id="periodText">{{ $summary['period_text'] }}</span>
+                    Period:
+                    <span class="fw-semibold"
+                        id="periodText">{{ str_replace(' s/d ', ' to ', $summary['period_text']) }}</span>
                 </div>
 
             </div>
@@ -297,42 +316,42 @@
                             @if ($view === 'sales')
                                 <tr>
                                     <th style="width:4%">#</th>
-                                    <th style="width:18%">Sales</th>
-                                    <th style="width:18%">Warehouse</th>
+                                    <th style="width:22%">Sales</th>
+                                    <th style="width:20%">Warehouse</th>
                                     <th class="text-end" style="width:10%">HDO</th>
-                                    <th class="text-end" style="width:16%">Total Dibawa</th>
-                                    <th class="text-end" style="width:16%">Total Terjual (Closed)</th>
-                                    <th class="text-end" style="width:16%">Total Setor</th>
-                                    <th style="width:8%"></th>
+                                    <th class="text-end" style="width:13%">Total Carried</th>
+                                    <th class="text-end" style="width:13%">Total Sold</th>
+                                    <th class="text-end" style="width:13%">Total Deposit</th>
+                                    <th style="width:5%"></th>
                                 </tr>
                             @elseif($view === 'daily')
                                 <tr>
                                     <th style="width:4%">#</th>
-                                    <th style="width:14%">Tanggal</th>
-                                    <th class="text-end" style="width:10%">HDO</th>
-                                    <th class="text-end" style="width:18%">Total Dibawa</th>
-                                    <th class="text-end" style="width:18%">Total Terjual (Closed)</th>
-                                    <th class="text-end" style="width:18%">Total Setor</th>
+                                    <th style="width:16%">Date</th>
+                                    <th class="text-end" style="width:12%">HDO</th>
+                                    <th class="text-end" style="width:20%">Total Carried</th>
+                                    <th class="text-end" style="width:20%">Total Sold</th>
+                                    <th class="text-end" style="width:20%">Total Deposit</th>
                                     <th style="width:8%"></th>
                                 </tr>
                             @else
                                 <tr>
-                                    <th style="width:4%">#</th>
-                                    <th style="width:10%">Tanggal</th>
-                                    <th style="width:13%">Kode</th>
-                                    <th style="width:18%">Warehouse</th>
-                                    <th style="width:16%">Sales</th>
-                                    <th style="width:11%">Status</th>
-                                    <th class="text-end" style="width:12%">Nilai Dibawa</th>
-                                    <th class="text-end" style="width:12%">Terjual (After Disc)</th>
+                                    <th style="width:2%">#</th>
+                                    <th style="width:8%">Date</th>
+                                    <th style="width:11%">Code</th>
+                                    <th style="width:14%">Warehouse</th>
+                                    <th style="width:13%">Sales</th>
+                                    <th style="width:7%">Status</th>
+                                    <th class="text-end" style="width:8%">Carried Val</th>
+                                    <th class="text-end" style="width:8%">Sold Val</th>
 
                                     @if ($canSeeMargin)
-                                        <th class="text-end" style="width:12%">Harga Asli</th>
-                                        <th class="text-end" style="width:12%">Diskon</th>
+                                        <th class="text-end" style="width:8%">Ori Price</th>
+                                        <th class="text-end" style="width:8%">Disc</th>
                                     @endif
 
-                                    <th class="text-end" style="width:12%">Selisih (stok)</th>
-                                    <th style="width:8%"></th>
+                                    <th class="text-end" style="width:8%">Diff</th>
+                                    <th style="width:5%"></th>
                                 </tr>
                             @endif
                         </thead>
@@ -342,8 +361,8 @@
                                 @if ($view === 'sales')
                                     <tr>
                                         <td>{{ $r['no'] }}</td>
-                                        <td class="fw-semibold">{{ $r['sales'] }}</td>
-                                        <td>{{ $r['warehouse'] }}</td>
+                                        <td class="fw-semibold text-wrap-name">{{ $r['sales'] }}</td>
+                                        <td class="text-wrap-name">{{ $r['warehouse'] }}</td>
                                         <td class="text-end">{{ $r['handover_count'] }}</td>
                                         <td class="text-end">{{ $r['amount_dispatched'] }}</td>
                                         <td class="text-end">{{ $r['amount_sold'] }}</td>
@@ -351,7 +370,7 @@
                                         <td class="text-end">
                                             <button type="button" class="btn btn-sm btn-outline-primary btn-drill-sales"
                                                 data-sales-id="{{ $r['sales_id'] }}">
-                                                Lihat
+                                                View
                                             </button>
                                         </td>
                                     </tr>
@@ -366,27 +385,31 @@
                                         <td class="text-end">
                                             <button type="button" class="btn btn-sm btn-outline-primary btn-drill-day"
                                                 data-date="{{ $r['date'] }}">
-                                                Lihat
+                                                View
                                             </button>
                                         </td>
                                     </tr>
                                 @else
                                     <tr>
                                         <td>{{ $r['no'] }}</td>
-                                        <td data-label="Tanggal">{{ $r['date'] }}</td>
-                                        <td data-label="Kode" class="fw-semibold">{{ $r['code'] }}</td>
-                                        <td data-label="Warehouse">{{ $r['warehouse'] }}</td>
-                                        <td data-label="Sales">{{ $r['sales'] }}</td>
+                                        <td data-label="Date">{{ $r['date'] }}</td>
+                                        <td data-label="Code" class="fw-semibold">{{ $r['code'] }}</td>
+                                        <td data-label="Warehouse" class="text-wrap-name">{{ $r['warehouse'] }}</td>
+                                        <td data-label="Sales" class="text-wrap-name">{{ $r['sales'] }}</td>
                                         <td data-label="Status">
-                                        <span class="badge {{ $r['status_badge_class'] }}">{{ $r['status_label'] }}</span>
+                                            <span
+                                                class="badge {{ $r['status_badge_class'] }}">{{ $r['status_label'] }}</span>
                                         </td>
-                                        <td data-label="Nilai Dibawa" class="text-end">{{ $r['amount_dispatched'] }}</td>
-                                        <td data-label="Terjual" class="text-end fw-bold">{{ $r['amount_sold'] }}</td>
+                                        <td data-label="Carried Value" class="text-end">{{ $r['amount_dispatched'] }}
+                                        </td>
+                                        <td data-label="Sold" class="text-end fw-bold">{{ $r['amount_sold'] }}</td>
                                         @if ($canSeeMargin)
-                                            <td data-label="Harga Asli" class="text-end text-muted">{{ $r['amount_original'] }}</td>
-                                            <td data-label="Diskon" class="text-end text-danger">-{{ $r['amount_discount'] }}</td>
+                                            <td data-label="Original Price" class="text-end text-muted">
+                                                {{ $r['amount_original'] }}</td>
+                                            <td data-label="Discount" class="text-end text-danger">
+                                                -{{ $r['amount_discount'] }}</td>
                                         @endif
-                                        <td data-label="Selisih" class="text-end">{{ $r['amount_diff'] }}</td>
+                                        <td data-label="Difference" class="text-end">{{ $r['amount_diff'] }}</td>
 
                                         <td data-label="Action" class="text-end">
                                             <button type="button" class="btn btn-sm btn-outline-primary btn-detail"
@@ -398,7 +421,8 @@
                                 @endif
                             @empty
                                 <tr>
-                                    <td colspan="{{ $view === 'handover' ? ($canSeeMargin ? 11 : 9) : ($view === 'sales' ? 8 : 7) }}" class="text-center text-muted">Belum ada data pada periode ini.
+                                    <td colspan="{{ $view === 'handover' ? ($canSeeMargin ? 11 : 9) : ($view === 'sales' ? 8 : 7) }}"
+                                        class="text-center text-muted">No data available for this period.
                                     </td>
                                 </tr>
                             @endforelse
@@ -406,6 +430,7 @@
 
                     </table>
                 </div>
+
             </div>
         </div>
 
@@ -416,7 +441,7 @@
         <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header d-flex justify-content-between align-items-center">
-                    <h5 class="modal-title mb-0">Detail Handover</h5>
+                    <h5 class="modal-title mb-0">Handover Detail</h5>
                     <div class="d-flex align-items-center gap-2">
                         @if ($canOpenApproval)
                             <button type="button" id="approvalButton" class="btn btn-sm btn-primary d-none">
@@ -434,14 +459,14 @@
                         <table class="table table-sm align-middle" id="detailItemsTable">
                             <thead>
                                 <tr>
-                                    <th style="width:30%">Produk</th>
-                                    <th class="text-end" style="width:10%">Dibawa</th>
-                                    <th class="text-end" style="width:10%">Kembali</th>
-                                    <th class="text-end" style="width:10%">Terjual</th>
-                                    <th class="text-end" style="width:13%">Harga</th>
-                                    <th class="text-end" style="width:12%">Diskon</th>
-                                    <th class="text-end" style="width:14%">Harga Setelah Diskon</th>
-                                    <th class="text-end" style="width:14%">Nilai Terjual</th>
+                                    <th style="width:30%">Product</th>
+                                    <th class="text-end" style="width:10%">Carried</th>
+                                    <th class="text-end" style="width:10%">Returned</th>
+                                    <th class="text-end" style="width:10%">Sold</th>
+                                    <th class="text-end" style="width:13%">Price</th>
+                                    <th class="text-end" style="width:12%">Discount</th>
+                                    <th class="text-end" style="width:14%">Price After Discount</th>
+                                    <th class="text-end" style="width:14%">Sold Value</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -468,6 +493,7 @@
             const sumSoldEl = document.getElementById('sumSold');
             const sumDiffEl = document.getElementById('sumDiff');
             const periodTextEl = document.getElementById('periodText');
+            const btnExportSales = document.getElementById('btnExportSales');
 
             const listUrl = @json(route($listRouteName));
             const detailUrlTemplate = @json(route($detailRoute, 0));
@@ -489,7 +515,7 @@
 
             const canSeeMargin = @json($canSeeMargin);
 
-            document.getElementById('btnExportSales').addEventListener('click', function () {
+            document.getElementById('btnExportSales').addEventListener('click', function() {
 
                 const params = new URLSearchParams(window.location.search);
 
@@ -515,13 +541,13 @@
                     headEl.innerHTML = `
         <tr>
           <th style="width:4%">#</th>
-          <th style="width:18%">Sales</th>
-          <th style="width:18%">Warehouse</th>
+          <th style="width:22%">Sales</th>
+          <th style="width:20%">Warehouse</th>
           <th class="text-end" style="width:10%">HDO</th>
-          <th class="text-end" style="width:16%">Total Dibawa</th>
-          <th class="text-end" style="width:16%">Total Terjual (Closed)</th>
-          <th class="text-end" style="width:16%">Total Setor</th>
-          <th style="width:8%"></th>
+          <th class="text-end" style="width:13%">Total Carried</th>
+          <th class="text-end" style="width:13%">Total Sold</th>
+          <th class="text-end" style="width:13%">Total Deposit</th>
+          <th style="width:5%"></th>
         </tr>
       `;
                     return;
@@ -531,11 +557,11 @@
                     headEl.innerHTML = `
         <tr>
           <th style="width:4%">#</th>
-          <th style="width:14%">Tanggal</th>
-          <th class="text-end" style="width:10%">HDO</th>
-          <th class="text-end" style="width:18%">Total Dibawa</th>
-          <th class="text-end" style="width:18%">Total Terjual (Closed)</th>
-          <th class="text-end" style="width:18%">Total Setor</th>
+          <th style="width:16%">Date</th>
+          <th class="text-end" style="width:12%">HDO</th>
+          <th class="text-end" style="width:20%">Total Carried</th>
+          <th class="text-end" style="width:20%">Total Sold</th>
+          <th class="text-end" style="width:20%">Total Deposit</th>
           <th style="width:8%"></th>
         </tr>
       `;
@@ -545,24 +571,24 @@
                 let extra = '';
                 if (canSeeMargin) {
                     extra = `
-          <th class="text-end" style="width:12%">Harga Asli</th>
-          <th class="text-end" style="width:12%">Diskon</th>
+          <th class="text-end" style="width:8%">Ori Price</th>
+          <th class="text-end" style="width:8%">Disc</th>
         `;
                 }
 
                 headEl.innerHTML = `
         <tr>
-          <th style="width:4%">#</th>
-          <th style="width:10%">Tanggal</th>
-          <th style="width:13%">Kode</th>
-          <th style="width:18%">Warehouse</th>
-          <th style="width:16%">Sales</th>
-          <th style="width:11%">Status</th>
-          <th class="text-end" style="width:12%">Nilai Dibawa</th>
-          <th class="text-end" style="width:12%">Terjual (After Disc)</th>
+          <th style="width:2%">#</th>
+          <th style="width:8%">Date</th>
+          <th style="width:11%">Code</th>
+          <th style="width:14%">Warehouse</th>
+          <th style="width:13%">Sales</th>
+          <th style="width:7%">Status</th>
+          <th class="text-end" style="width:8%">Carried Val</th>
+          <th class="text-end" style="width:8%">Sold Val</th>
           ${extra}
-          <th class="text-end" style="width:12%">Selisih (stok)</th>
-          <th style="width:8%"></th>
+          <th class="text-end" style="width:8%">Diff</th>
+          <th style="width:5%"></th>
         </tr>
       `;
             }
@@ -570,7 +596,7 @@
             function renderRows(view, rows) {
                 if (!rows || !rows.length) {
                     rowsTbody.innerHTML =
-                        `<tr><td colspan="10" class="text-center text-muted">Belum ada data pada periode ini.</td></tr>`;
+                        `<tr><td colspan="10" class="text-center text-muted">No data available for this period.</td></tr>`;
                     return;
                 }
 
@@ -578,14 +604,14 @@
                     rowsTbody.innerHTML = rows.map(r => `
         <tr>
           <td>${r.no}</td>
-          <td class="fw-semibold">${r.sales}</td>
-          <td>${r.warehouse}</td>
+          <td class="fw-semibold text-wrap-name">${r.sales}</td>
+          <td class="text-wrap-name">${r.warehouse}</td>
           <td class="text-end">${r.handover_count}</td>
           <td class="text-end">${r.amount_dispatched}</td>
           <td class="text-end">${r.amount_sold}</td>
           <td class="text-end">${r.amount_setor}</td>
           <td class="text-end">
-            <button type="button" class="btn btn-sm btn-outline-primary btn-drill-sales" data-sales-id="${r.sales_id}">Lihat</button>
+            <button type="button" class="btn btn-sm btn-outline-primary btn-drill-sales" data-sales-id="${r.sales_id}">View</button>
           </td>
         </tr>
       `).join('');
@@ -602,7 +628,7 @@
           <td class="text-end">${r.amount_sold}</td>
           <td class="text-end">${r.amount_setor}</td>
           <td class="text-end">
-            <button type="button" class="btn btn-sm btn-outline-primary btn-drill-day" data-date="${r.date}">Lihat</button>
+            <button type="button" class="btn btn-sm btn-outline-primary btn-drill-day" data-date="${r.date}">View</button>
           </td>
         </tr>
       `).join('');
@@ -624,8 +650,8 @@
       <td>${r.no}</td>
       <td>${r.date || '-'}</td>
       <td class="fw-semibold">${r.code}</td>
-      <td>${r.warehouse}</td>
-      <td>${r.sales}</td>
+      <td class="text-wrap-name">${r.warehouse}</td>
+      <td class="text-wrap-name">${r.sales}</td>
       <td><span class="badge ${r.status_badge_class}">${r.status_label}</span></td>
       <td class="text-end">${r.amount_dispatched}</td>
       <td class="text-end fw-bold">${r.amount_sold ?? '<span class="text-muted small">—</span>'}</td>
@@ -643,11 +669,10 @@
             }
 
             async function reloadList() {
-                const fd = new FormData(filterForm);
-                const params = new URLSearchParams(fd);
+                const params = new URLSearchParams(new FormData(filterForm));
 
                 try {
-                    const res = await fetch(listUrl + '?' + params.toString(), {
+                    const res = await fetch(`${filterForm.action}?${params.toString()}`, {
                         headers: {
                             'X-Requested-With': 'XMLHttpRequest'
                         }
@@ -669,7 +694,8 @@
                         const sumDiscountEl = document.querySelector('#sumDiscount');
 
                         if (sumDiscountEl) {
-                            sumDiscountEl.textContent = json.summary.total_discount || 'Rp 0';
+                            const discVal = json.summary.total_discount || 'Rp 0';
+                            sumDiscountEl.textContent = discVal !== 'Rp 0' ? '-' + discVal : discVal;
                         }
 
                     }
@@ -677,8 +703,8 @@
                     console.error(err);
                     Swal.fire({
                         icon: 'error',
-                        title: 'Gagal',
-                        text: 'Gagal memuat data report.'
+                        title: 'Failed',
+                        text: 'Failed to load report data.'
                     });
                 }
             }
@@ -686,6 +712,7 @@
             // auto reload ketika filter berubah
             const autoSelectors = [
                 '#viewFilter',
+                '#perPageFilter',
                 'input[name="date_from"]',
                 'input[name="date_to"]',
                 'select[name="status"]',
@@ -693,11 +720,26 @@
                 'select[name="sales_id"]',
             ];
             filterForm.querySelectorAll(autoSelectors.join(',')).forEach(el => el.addEventListener('change',
-                reloadList));
+                () => reloadList(1)));
+
             filterForm.addEventListener('submit', (e) => {
                 e.preventDefault();
-                reloadList();
+                reloadList(1);
             });
+
+            // Pagination Events
+            if (btnPrevPage) {
+                btnPrevPage.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    if (currentPage > 1) reloadList(currentPage - 1);
+                });
+            }
+            if (btnNextPage) {
+                btnNextPage.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    if (currentPage < lastPage) reloadList(currentPage + 1);
+                });
+            }
 
             // search navbar
             const hiddenSearch = document.getElementById('searchBox');
@@ -709,7 +751,7 @@
                     clearTimeout(timer);
                     timer = setTimeout(function() {
                         hiddenSearch.value = navbarSearch.value;
-                        reloadList();
+                        reloadList(1);
                     }, 400);
                 });
             }
@@ -747,9 +789,9 @@
 
                         const statusLabelMap = {
                             draft: 'Draft',
-                            waiting_morning_otp: 'Menunggu OTP Pagi',
+                            waiting_morning_otp: 'Waiting for Morning OTP',
                             on_sales: 'On Sales',
-                            waiting_evening_otp: 'Menunggu Closing (Legacy)',
+                            waiting_evening_otp: 'Waiting for Closing (Legacy)',
                             closed: 'Closed',
                             cancelled: 'Cancelled',
                         };
@@ -764,12 +806,11 @@
 
                         const stLabel = statusLabelMap[h.status] || h.status;
                         const badgeClass = badgeClassMap[h.status] || badgeClassMap.default;
-
                         detailHeader.innerHTML = `
           <div class="d-flex flex-column flex-md-row justify-content-between">
             <div class="mb-2 mb-md-0">
-              <div><span class="fw-semibold">Kode:</span> ${h.code}</div>
-              <div><span class="fw-semibold">Tanggal:</span> ${h.handover_date || '-'}</div>
+              <div><span class="fw-semibold">Code:</span> ${h.code}</div>
+              <div><span class="fw-semibold">Date:</span> ${h.handover_date || '-'}</div>
               <div><span class="fw-semibold">Warehouse:</span> ${h.warehouse_name || '-'}</div>
               <div><span class="fw-semibold">Sales:</span> ${h.sales_name || '-'}</div>
               <div>
@@ -778,15 +819,16 @@
               </div>
             </div>
             <div class="text-md-end small">
-              <div><span class="fw-semibold">OTP Pagi dikirim:</span> ${h.morning_otp_sent_at || '-'}</div>
-              <div><span class="fw-semibold">OTP Pagi verif:</span> ${h.morning_otp_verified_at || '-'}</div>
-              <div><span class="fw-semibold">OTP Sore dikirim:</span> ${h.evening_otp_sent_at || '-'}</div>
-              <div><span class="fw-semibold">OTP Sore verif:</span> ${h.evening_otp_verified_at || '-'}</div>
+              <div><span class="fw-semibold">Morning OTP sent:</span> ${h.morning_otp_sent_at || '-'}</div>
+              <div><span class="fw-semibold">Morning OTP verified:</span> ${h.morning_otp_verified_at || '-'}</div>
+              <div><span class="fw-semibold">Evening OTP sent:</span> ${h.evening_otp_sent_at || '-'}</div>
+              <div><span class="fw-semibold">Evening OTP verified:</span> ${h.evening_otp_verified_at || '-'}</div>
             </div>
           </div>
         `;
 
-                        if (canOpenApproval && approvalButton && approvalUrlTemplate && h.can_open_approval) {
+                        if (canOpenApproval && approvalButton && approvalUrlTemplate && h
+                            .can_open_approval) {
                             approvalButton.classList.remove('d-none');
                         }
 
@@ -827,7 +869,7 @@
             `;
                         });
                         if (!htmlItems) htmlItems =
-                            '<tr><td colspan="7" class="text-center text-muted">Tidak ada item.</td></tr>';
+                            '<tr><td colspan="7" class="text-center text-muted">No items.</td></tr>';
                         detailTbody.innerHTML = htmlItems;
 
                         // BUKTI TF (BALIKIN)
@@ -836,7 +878,7 @@
                             proofHtml = `
             <div class="mt-1">
               <img src="${h.transfer_proof_url}" class="img-thumbnail proof-thumb" style="max-width:140px;cursor:pointer;">
-              <div class="small text-muted mt-1">Klik gambar untuk memperbesar.</div>
+              <div class="small text-muted mt-1">Click image to enlarge.</div>
             </div>
           `;
                         }
@@ -844,16 +886,16 @@
                         detailSummary.innerHTML = `
           <div class="row g-2">
             <div class="col-md-4">
-              <div class="fw-semibold text-muted small">Nilai Dibawa</div>
+              <div class="fw-semibold text-muted small">Carried Value</div>
               <div>${formatRp(h.total_dispatched || 0)}</div>
             </div>
             <div class="col-md-4">
-              <div class="fw-semibold text-muted small">Nilai Terjual</div>
-              <div>${h.status === 'closed' ? formatRp(h.total_sold) : '<span class="text-muted small">— belum closed —</span>'}</div>
+              <div class="fw-semibold text-muted small">Sold Value</div>
+              <div>${h.status === 'closed' ? formatRp(h.total_sold) : '<span class="text-muted small">— not closed yet —</span>'}</div>
             </div>
             <div class="col-md-4">
-              <div class="fw-semibold text-muted small">Nilai Sisa Stok (estimasi)</div>
-              <div>${h.status === 'closed' ? formatRp(h.selisih_stock_value || 0) : '<span class="text-muted small">— belum closed —</span>'}</div>
+              <div class="fw-semibold text-muted small">Remaining Stock Value (estimated)</div>
+              <div>${h.status === 'closed' ? formatRp(h.selisih_stock_value || 0) : '<span class="text-muted small">— not closed yet —</span>'}</div>
             </div>
           </div>
 
@@ -861,18 +903,18 @@
 
           <div class="row g-2">
             <div class="col-md-4">
-              <div class="fw-semibold text-muted small">Setor Tunai</div>
+              <div class="fw-semibold text-muted small">Cash Deposit</div>
               <div>${formatRp(h.cash_amount || 0)}</div>
             </div>
             <div class="col-md-4">
-              <div class="fw-semibold text-muted small">Setor Transfer</div>
+              <div class="fw-semibold text-muted small">Transfer Deposit</div>
               <div>${formatRp(h.transfer_amount || 0)}</div>
               ${proofHtml}
             </div>
             <div class="col-md-4">
-              <div class="fw-semibold text-muted small">Total Setoran</div>
+              <div class="fw-semibold text-muted small">Total Deposit</div>
               <div>${formatRp(h.setor_total || 0)}</div>
-              <div class="small text-muted">Selisih jual vs setor: ${formatRp(h.selisih_jual_vs_setor || 0)}</div>
+              <div class="small text-muted">Sales vs Deposit Difference: ${formatRp(h.selisih_jual_vs_setor || 0)}</div>
             </div>
           </div>
         `;
@@ -882,8 +924,8 @@
                         console.error(err);
                         Swal.fire({
                             icon: 'error',
-                            title: 'Gagal',
-                            text: 'Gagal memuat detail handover.'
+                            title: 'Failed',
+                            text: 'Failed to load handover details.'
                         });
                     }
                     return;
@@ -901,7 +943,7 @@
                     if (salesSelect) salesSelect.value = salesId;
                     if (salesHidden) salesHidden.value = salesId;
 
-                    reloadList();
+                    reloadList(1);
                     return;
                 }
 
@@ -916,7 +958,7 @@
                     if (df) df.value = date;
                     if (dt) dt.value = date;
 
-                    reloadList();
+                    reloadList(1);
                     return;
                 }
             });

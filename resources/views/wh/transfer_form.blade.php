@@ -107,14 +107,14 @@
                     @endif
 
 
-                    {{-- PRINT SJ (PADANG) --}}
+                    {{-- PRINT DELIVERY NOTE --}}
                     @if ($canPrintSJ)
                         <button id="btnPrintSJ" class="btn btn-outline-primary">
-                            <i class="bx bx-printer"></i> Surat Jalan
+                            <i class="bx bx-printer"></i> Delivery Note
                         </button>
                     @endif
 
-                    {{-- GR (BUKITTINGGI) --}}
+                    {{-- GR --}}
                     @if ($canGrSource)
                         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#mdlGRTransfer">
                             <i class="bx bx-download"></i> Goods Received
@@ -222,13 +222,13 @@
                                             <small class="text-muted">{{ $item->product->name }}</small>
                                         </td>
                                         <td class="text-end col-qty">
-                                            {{ number_format($item->qty_transfer, 0, ',', '.') }}
+                                            {{ number_format($item->qty_transfer, 0, '.', ',') }}
                                         </td>
                                         <td class="text-end col-price">
-                                            {{ number_format($item->unit_cost, 0, ',', '.') }}
+                                            {{ number_format($item->unit_cost, 0, '.', ',') }}
                                         </td>
                                         <td class="text-end col-total">
-                                            {{ number_format($item->subtotal_cost, 0, ',', '.') }}
+                                            {{ number_format($item->subtotal_cost, 0, '.', ',') }}
                                         </td>
                                     </tr>
                                 @empty
@@ -243,7 +243,7 @@
                                 <tr>
                                     <th colspan="3" class="text-end">Total</th>
                                     <th class="text-end">
-                                        {{ number_format($transfer->total_cost, 0, ',', '.') }}
+                                        {{ number_format($transfer->total_cost, 0, '.', ',') }}
                                     </th>
                                 </tr>
                             </tfoot>
@@ -410,11 +410,11 @@
 
                             Swal.fire({
                                 title: 'Submit transfer?',
-                                text: 'Pastikan data sudah benar',
+                                text: 'Ensure data is correct',
                                 icon: 'question',
                                 showCancelButton: true,
-                                confirmButtonText: 'Ya, submit',
-                                cancelButtonText: 'Batal'
+                                confirmButtonText: 'Yes, submit',
+                                cancelButtonText: 'Cancel'
                             }).then(result => {
                                 if (!result.isConfirmed) return;
 
@@ -428,11 +428,11 @@
                                     .then(r => r.json())
                                     .then(res => {
                                         if (!res.id) throw {
-                                            message: 'ID transfer tidak ditemukan'
+                                            message: 'Transfer ID not found'
                                         };
 
                                         showSuccess(
-                                            'Transfer berhasil dibuat',
+                                            'Transfer successfully created',
                                             `/warehouse/transfer-forms/${res.id}`
                                         );
                                     })
@@ -506,8 +506,8 @@
                             const stock = parseInt(opt.dataset.stock || 0);
                             const price = parseInt(opt.dataset.price || 0);
 
-                            tr.querySelector('.stock').innerText = stock.toLocaleString('id-ID');
-                            tr.querySelector('.price').innerText = price.toLocaleString('id-ID');
+                            tr.querySelector('.stock').innerText = stock.toLocaleString('en-US');
+                            tr.querySelector('.price').innerText = price.toLocaleString('en-US');
 
                             calc(tr);
                         }
@@ -530,7 +530,7 @@
                     function calc(tr) {
                         const qty = parseInt(tr.querySelector('.qty').value || 0);
                         const price = parseInt(tr.querySelector('.price').innerText.replace(/\D/g, '')) || 0;
-                        tr.querySelector('.subtotal').innerText = (qty * price).toLocaleString('id-ID');
+                        tr.querySelector('.subtotal').innerText = (qty * price).toLocaleString('en-US');
                         calcGrandTotal();
                     }
 
@@ -539,7 +539,7 @@
                         document.querySelectorAll('.subtotal').forEach(td => {
                             total += parseInt(td.innerText.replace(/\D/g, '')) || 0;
                         });
-                        document.getElementById('grandTotal').innerText = total.toLocaleString('id-ID');
+                        document.getElementById('grandTotal').innerText = total.toLocaleString('en-US');
                     }
 
                 });
@@ -559,7 +559,7 @@
                             title: 'Approve Transfer?',
                             showCancelButton: true,
                             confirmButtonText: 'Approve',
-                            cancelButtonText: 'Batal'
+                            cancelButtonText: 'Cancel'
                         }).then(res => {
                             if (!res.isConfirmed) return;
 
@@ -581,11 +581,11 @@
                         Swal.fire({
                             title: 'Reject Transfer',
                             input: 'textarea',
-                            inputPlaceholder: 'Alasan wajib diisi',
+                            inputPlaceholder: 'Reason is required',
                             showCancelButton: true,
                             confirmButtonText: 'Reject',
-                            cancelButtonText: 'Batal',
-                            inputValidator: v => !v && 'Alasan wajib diisi'
+                            cancelButtonText: 'Cancel',
+                            inputValidator: v => !v && 'Reason is required'
                         }).then(res => {
                             if (!res.isConfirmed) return;
 
@@ -612,7 +612,7 @@
             window.showSuccess = function(message, redirectUrl = null, delay = 1500) {
                 Swal.fire({
                     icon: 'success',
-                    title: 'Berhasil',
+                    title: 'Success',
                     text: message,
                     timer: delay,
                     showConfirmButton: false
@@ -624,10 +624,10 @@
             };
 
             /* ================= GLOBAL ERROR ================= */
-            window.showError = function(message = 'Terjadi kesalahan') {
+            window.showError = function(message = 'An error occurred') {
                 Swal.fire({
                     icon: 'error',
-                    title: 'Gagal',
+                    title: 'Failed',
                     text: message
                 });
             };
@@ -638,7 +638,7 @@
             document.addEventListener('DOMContentLoaded', function() {
                 Swal.fire({
                     icon: 'success',
-                    title: 'Berhasil',
+                    title: 'Success',
                     text: @json(session('success')),
                     timer: 1500,
                     showConfirmButton: false

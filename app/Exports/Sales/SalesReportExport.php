@@ -40,56 +40,7 @@ class SalesReportExport implements FromArray, WithEvents, ShouldAutoSize
         $rows = [];
         $this->row = 0;
 
-       /* ===== KOP SURAT ===== */
-        if ($this->company) {
-            $c = $this->company;
-
-            $legal = (string)($c->legal_name ?? $c->name ?? '');
-            $addr  = (string)($c->address ?? '');
-
-            $cityProv = trim(
-                ((string)($c->city ?? '')) .
-                (((string)($c->city ?? '') !== '' && (string)($c->province ?? '') !== '') ? ' - ' : '') .
-                ((string)($c->province ?? ''))
-            );
-
-            $contactParts = [];
-            if (!empty($c->phone))   $contactParts[] = 'Tel: '.$c->phone;
-            if (!empty($c->email))   $contactParts[] = 'Email: '.$c->email;
-            if (!empty($c->website)) $contactParts[] = $c->website;
-            $contact = implode(' | ', $contactParts);
-
-            $npwp = !empty($c->tax_number) ? 'NPWP: '.$c->tax_number : '';
-
-            $this->companyStartRow = $this->push([$legal ?: '-'], $rows);
-            $this->push([$addr], $rows);
-            $this->push([$cityProv], $rows);
-            $this->push([$contact], $rows);
-            $this->companyEndRow = $this->push([$npwp], $rows);
-
-            $this->push([], $rows); // spasi setelah kop
-        }
-
-
-
-        /* ===== TITLE ===== */
-            $title = match ($this->view) {
-            'sales' => 'SALES REPORT (REKAP PER SALES)',
-            'daily' => 'SALES REPORT (REKAP PER HARI)',
-            default => 'SALES REPORT (DETAIL HANDOVER)',
-        };
-
-        $this->titleRow = $this->push([$title], $rows);
-
-        $this->push(['Generated at', now()->format('d/m/Y H:i')], $rows);
-
-        foreach ($this->meta['filters'] ?? [] as $k => $v) {
-            $this->push(["Filter {$k}", $v], $rows);
-        }
-
-        $this->push([], $rows);
-
-        // 🔥 SWITCH VIEW
+        // 🔥 OPSI B: LANGSUNG HEADER TABEL (BARIS 1)
         if ($this->view === 'sales') {
             return $this->buildSalesView($rows);
         }
@@ -98,158 +49,81 @@ class SalesReportExport implements FromArray, WithEvents, ShouldAutoSize
             return $this->buildDailyView($rows);
         }
 
-
         /* ===== TABLE HEADER ===== */
         $this->tableHeaderRow = $this->push([
-        'Handover Code',
-        'Tanggal',
-        'Warehouse',
-        'Sales',
-        'Status',
-        'Product Code',
-        'Product',
-        'Qty Dibawa',
-        'Qty Terjual',
-        'Qty Kembali',
-        'Harga Asli',
-        'Diskon',
-        'Harga After Disc',
-        'Nilai Dibawa',
-        'Nilai Terjual'
-    ], $rows);
+            'Handover Code',
+            'Tanggal',
+            'Warehouse',
+            'Sales',
+            'Status',
+            'Product Code',
+            'Product',
+            'Qty Dibawa',
+            'Qty Terjual',
+            'Qty Kembali',
+            'Harga Asli',
+            'Diskon',
+            'Harga After Disc',
+            'Nilai Dibawa',
+            'Nilai Terjual'
+        ], $rows);
         $this->lastColumnIndex = 15;
 
         $grandTotal = 0;
 
         foreach ($this->handovers as $h) {
 
-        $this->push([
-            "HANDOVER: {$h->code}",
-            "DATE: ".optional($h->handover_date)->format('d/m/Y'),
-            "WAREHOUSE: ".optional($h->warehouse)->warehouse_name,
-            "SALES: ".optional($h->sales)->name,
-            "STATUS: ".strtoupper($h->status),
-        ], $rows);
+            $handoverTotal = 0;
+            $nilaiDibawaTotal = 0;
 
-        $handoverTotal = 0;
-        $nilaiDibawaTotal = 0;
-        $qtyReturnTotal = 0;
+            foreach ($h->items as $it) {
 
-        foreach ($h->items as $it) {
+                $qtyStart = (int) ($it->qty_start ?? 0);
+                $qtySold  = (int) ($it->qty_sold ?? 0);
 
-            $qtyStart = (int) ($it->qty_start ?? 0);
-            $qtySold  = (int) ($it->qty_sold ?? 0);
+                $priceOri = (int) ($it->unit_price ?? 0);
+                $disc     = (int) ($it->discount_per_unit ?? 0);
+                $priceNet = max(0, $priceOri - $disc);
 
-            $priceOri = (int) ($it->unit_price ?? 0);
-            $disc     = (int) ($it->discount_per_unit ?? 0);
-            $priceNet = max(0, $priceOri - $disc);
+                $nilaiDibawa  = $qtyStart * $priceNet;
+                $nilaiTerjual = $qtySold * $priceNet;
+                $qtyReturn = max(0, $qtyStart - $qtySold);
 
-            $nilaiDibawa  = $qtyStart * $priceNet;
-            $nilaiTerjual = $qtySold * $priceNet;
-            $qtyReturn = max(0, $qtyStart - $qtySold);
+                $nilaiDibawaTotal += $nilaiDibawa;
+                $handoverTotal    += $nilaiTerjual;
 
-            $nilaiDibawaTotal += $nilaiDibawa;
-            $handoverTotal    += $nilaiTerjual;
-            $qtyReturnTotal += $qtyReturn;
+                // 🔥 REPEAT DIMENSIONS ON EACH ROW
+                $this->push([
+                    $h->code,
+                    optional($h->handover_date)->format('d/m/Y'),
+                    optional($h->warehouse)->warehouse_name ?? '-',
+                    optional($h->sales)->name ?? '-',
+                    strtoupper($h->status),
 
+                    $it->product->product_code ?? '-',
+                    $it->product->name ?? '-',
 
-            $this->push([
-                $h->code,
-                optional($h->handover_date)->format('d/m/Y'),
-                optional($h->warehouse)->warehouse_name,
-                optional($h->sales)->name,
-                strtoupper($h->status),
+                    $qtyStart,
+                    $qtySold,
+                    $qtyReturn,
+                    $priceOri,
+                    $disc,
+                    $priceNet,
+                    $nilaiDibawa,
+                    $nilaiTerjual,
+                ], $rows);
+            }
 
-                $it->product->product_code ?? '-',
-                $it->product->name ?? '-',
-
-                $qtyStart,
-                $qtySold,
-                $qtyReturn,
-                $priceOri,
-                $disc,
-                $priceNet,
-                $nilaiDibawa,
-                $nilaiTerjual,
-            ], $rows);
-        }
-
-        // =============================
-        // RINGKASAN (CUMA SEKALI PER HDO)
-        // =============================
-
-        $cash     = (int) ($h->cash_amount ?? 0);
-        $transfer = (int) ($h->transfer_amount ?? 0);
-        $totalSetor = $cash + $transfer;
-
-        $nilaiDibawa = (int) ($h->total_dispatched_amount ?? $nilaiDibawaTotal);
-        $nilaiTerjual = (int) ($h->total_sold_amount ?? $handoverTotal);
-
-        $sisaStock = max(0, $nilaiDibawa - $nilaiTerjual);
-        $selisihSetor = $nilaiTerjual - $totalSetor;
-
-        $this->push([], $rows);
-
-        $this->push(['RINGKASAN HANDOVER'], $rows);
-
-        $this->push([null,null,null,null,null,null,null,null,null,null,null,
-            'Nilai Dibawa', $nilaiDibawa
-        ], $rows);
-
-        $this->push([null,null,null,null,null,null,null,null,null,null,null,
-            'Nilai Terjual', $nilaiTerjual
-        ], $rows);
-
-        $this->push([null,null,null,null,null,null,null,null,null,null,null,
-            'Total Barang Kembali', $qtyReturnTotal
-        ], $rows);
-
-        $this->push([null,null,null,null,null,null,null,null,null,null,null,
-            'Sisa Stok (Estimasi)', $sisaStock
-        ], $rows);
-
-        $this->push([null,null,null,null,null,null,null,null,null,null,null,
-            'Setor Tunai', $cash
-        ], $rows);
-
-        $this->push([null,null,null,null,null,null,null,null,null,null,null,
-            'Setor Transfer', $transfer
-        ], $rows);
-
-        $this->push([null,null,null,null,null,null,null,null,null,null,null,
-            'Total Setoran', $totalSetor
-        ], $rows);
-
-        $this->push([null,null,null,null,null,null,null,null,null,null,null,
-            'Total Diskon', $selisihSetor
-        ], $rows);
-
-        $this->push([], $rows);
-
-            
-        $grandTotal += $handoverTotal;
-
-
-
-            // TOTAL PER HANDOVER
-            $this->push([
-            null,null,null,null,null,
-            null,null,null,null,null,null,
-            'TOTAL HANDOVER',
-            $handoverTotal,
-            null
-        ], $rows);
-
-
-            $this->push([], $rows);
+            $grandTotal += $handoverTotal;
         }
 
         /* ===== GRAND TOTAL ===== */
         $this->push([], $rows);
         $this->push([
-            'EXPORT SUMMARY',null,null,null,null,
-            null,null,null,null,
             'GRAND TOTAL',
+            null, null, null, null,
+            null, null, null, null, null,
+            null, null, null, null,
             $grandTotal
         ], $rows);
 
@@ -259,75 +133,47 @@ class SalesReportExport implements FromArray, WithEvents, ShouldAutoSize
 
 
     public function registerEvents(): array
-{
-    
-    return [
-        
-        AfterSheet::class => function (AfterSheet $e) {
-            $sheet   = $e->sheet->getDelegate();
-            $lastRow = $sheet->getHighestRow();
-            $lastColumnLetter = Coordinate::stringFromColumnIndex($this->lastColumnIndex);
+    {
+        return [
+            AfterSheet::class => function (AfterSheet $e) {
+                $sheet   = $e->sheet->getDelegate();
+                $lastRow = $sheet->getHighestRow();
+                $lastColumnLetter = Coordinate::stringFromColumnIndex($this->lastColumnIndex);
 
+                /* ================= TABLE HEADER (ROW 1) ================= */
+                if ($this->tableHeaderRow) {
+                    $hdr = $this->tableHeaderRow;
 
-            /* ================= KOP SURAT ================= */
-            if ($this->companyStartRow && $this->companyEndRow) {
-                for ($r = $this->companyStartRow; $r <= $this->companyEndRow; $r++) {
-                    $sheet->mergeCells("A{$r}:{$lastColumnLetter}{$r}");
+                    $sheet->freezePane('A' . ($hdr + 1));
+                    $sheet->setAutoFilter("A{$hdr}:{$lastColumnLetter}{$hdr}");
 
+                    $sheet->getStyle("A{$hdr}:{$lastColumnLetter}{$hdr}")
+                        ->getFont()
+                        ->setBold(true);
                 }
 
-                // center semua teks kop
-                $sheet->getStyle("A{$this->companyStartRow}:{$lastColumnLetter}{$this->companyEndRow}")
-                    ->getAlignment()
-                    ->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                /* ================= BORDER TABLE ================= */
+                if ($this->tableHeaderRow) {
+                    $sheet->getStyle("A{$this->tableHeaderRow}:{$lastColumnLetter}{$lastRow}")
+                        ->getBorders()
+                        ->getAllBorders()
+                        ->setBorderStyle(Border::BORDER_THIN);
+                }
 
-                // nama perusahaan
-                $sheet->getStyle("A{$this->companyStartRow}")
-                    ->getFont()
-                    ->setBold(true)
-                    ->setSize(14);
+                /* ================= NUMBER FORMAT ================= */
+                // K: Qty Kembali, L: Harga Asli, M: Diskon, N: Harga After Disc, O: Nilai Dibawa, P: Nilai Terjual
+                // Karena kita baris 1 header, kolom-kolom numeric kita ada di H-O (Index 8-15)
+                foreach (['H','I','J','K','L','M','N','O'] as $c) {
+                    $sheet->getStyle("{$c}1:{$c}{$lastRow}")
+                        ->getNumberFormat()
+                        ->setFormatCode('#,##0');
+                }
 
-                // 🔥 GARIS PEMISAH KOP (INI YANG TADI KURANG)
-                $sheet->getStyle("A{$this->companyEndRow}:O{$this->companyEndRow}")
-                    ->getBorders()
-                    ->getBottom()
-                    ->setBorderStyle(Border::BORDER_THIN);
-            }
-
-            /* ================= TITLE ================= */
-            if ($this->titleRow) {
-                $sheet->mergeCells("A{$this->titleRow}:{$lastColumnLetter}{$this->titleRow}");
-                $sheet->getStyle("A{$this->titleRow}")
-                    ->getFont()
-                    ->setBold(true)
-                    ->setSize(13);
-            }
-
-            /* ================= TABLE HEADER ================= */
-            if ($this->tableHeaderRow) {
-                $hdr = $this->tableHeaderRow;
-
-                $sheet->freezePane('A' . ($hdr + 1));
-                $sheet->setAutoFilter("A{$hdr}:{$lastColumnLetter}{$hdr}");
-
-                $sheet->getStyle("A{$hdr}:{$lastColumnLetter}{$hdr}")
-                    ->getFont()
-                    ->setBold(true);
-            }
-
-            /* ================= BORDER TABLE ================= */
-            if ($this->tableHeaderRow) {
-                $sheet->getStyle("A{$this->tableHeaderRow}:{$lastColumnLetter}{$lastRow}")
-                    ->getBorders()
-                    ->getAllBorders()
-                    ->setBorderStyle(Border::BORDER_THIN);
-            }
-
-            /* ================= NUMBER FORMAT ================= */
-            foreach (['J','K','L','M','N'] as $c) {
-                $sheet->getStyle("{$c}1:{$c}{$lastRow}")
-                    ->getNumberFormat()
-                    ->setFormatCode('#,##0');
+                // Center Align for Qty columns
+                foreach (['H','I','J'] as $c) {
+                    $sheet->getStyle("{$c}2:{$c}{$lastRow}")
+                        ->getAlignment()
+                        ->setHorizontal(Alignment::HORIZONTAL_CENTER);
                 }
             }
         ];
@@ -335,8 +181,6 @@ class SalesReportExport implements FromArray, WithEvents, ShouldAutoSize
 
         private function buildSalesView(array $rows): array
         {
-            $this->push([], $rows);
-
             $this->tableHeaderRow = $this->push([
                 '#',
                 'Sales',
@@ -394,8 +238,6 @@ class SalesReportExport implements FromArray, WithEvents, ShouldAutoSize
 
         private function buildDailyView(array $rows): array
         {
-            $this->push([], $rows);
-
             $this->tableHeaderRow = $this->push([
                 'No',
                 'Tanggal',

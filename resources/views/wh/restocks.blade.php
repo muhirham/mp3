@@ -228,7 +228,7 @@
                                 <tbody></tbody>
                             </table>
                             <small class="text-muted">
-                                Qty Good + Qty Damaged per baris tidak boleh lebih besar dari <strong>Qty
+                                Qty Good + Qty Damaged per row cannot exceed <strong>Qty
                                     Remaining</strong>.
                             </small>
                         </div>
@@ -460,10 +460,10 @@
                     Swal.fire({
                         icon: 'error',
                         title: 'Server error',
-                        text: 'Cek storage/logs/laravel.log buat detail.'
+                        text: 'Check storage/logs/laravel.log for details.'
                     });
                 } else {
-                    alert('Server error. Cek laravel.log');
+                    alert('Server error. Check laravel.log');
                 }
             });
 
@@ -515,17 +515,17 @@
                 if (!hasFilter) {
                     if (typeof Swal !== 'undefined') {
                         Swal.fire({
-                            title: 'Export semua data?',
-                            text: 'Kamu belum set filter. Data bisa banyak & berat.',
+                            title: 'Export all data?',
+                            text: 'You haven\'t set a filter. The data might be large and slow to process.',
                             icon: 'warning',
                             showCancelButton: true,
-                            confirmButtonText: 'Ya, Export',
-                            cancelButtonText: 'Batal'
+                            confirmButtonText: 'Yes, Export',
+                            cancelButtonText: 'Cancel'
                         }).then((res) => {
                             if (res.isConfirmed) go();
                         });
                     } else {
-                        if (confirm('Kamu belum set filter. Export semua data?')) go();
+                        if (confirm('You haven\'t set a filter. Export all data?')) go();
                     }
                     return;
                 }
@@ -538,7 +538,7 @@
                 const codeFromRow = $(this).data('code') || '-';
 
                 $.getJSON(baseUrl + '/' + id + '/items', function(res) {
-                    if (res.status !== 'ok') return alert(res.message || 'Gagal memuat detail');
+                    if (res.status !== 'ok') return alert(res.message || 'Failed to load details');
 
                     const h = res.header || {};
                     $('#detCode').text(h.code || codeFromRow);
@@ -568,7 +568,7 @@
 
                     new bootstrap.Modal(document.getElementById('mdlDetail')).show();
                 }).fail(function() {
-                    alert('Gagal memuat detail');
+                    alert('Failed to load details');
                 });
             });
 
@@ -580,7 +580,7 @@
 
                 $.getJSON(baseUrl + '/' + id + '/items', function(res) {
                     if (res.status !== 'ok') return alert(res.message ||
-                        'Gagal memuat data penerimaan');
+                        'Failed to load receiving data');
 
                     const h = res.header || {};
                     $('#rcvCode').text(h.code || codeFromRow);
@@ -618,7 +618,7 @@
             <td>
               <input type="text" name="items[${item.id}][notes]"
                      class="form-control form-control-sm"
-                     placeholder="Catatan (opsional)">
+                     placeholder="Note (optional)">
             </td>
           </tr>
         `);
@@ -629,7 +629,7 @@
 
                     new bootstrap.Modal(document.getElementById('mdlReceive')).show();
                 }).fail(function() {
-                    alert('Gagal memuat data penerimaan.');
+                    alert('Failed to load receiving data.');
                 });
             });
 
@@ -736,11 +736,11 @@ $('#formReceive').on('submit', function(e){
 
         // baru munculin confirm
         Swal.fire({
-            title: 'Simpan Goods Received?',
+            title: 'Save Goods Received?',
             icon: 'question',
             showCancelButton: true,
-            confirmButtonText: 'Ya, Simpan',
-            cancelButtonText: 'Batal'
+            confirmButtonText: 'Yes, Save',
+            cancelButtonText: 'Cancel'
         }).then((result)=>{
 
             if(!result.isConfirmed) return;
@@ -755,7 +755,7 @@ $('#formReceive').on('submit', function(e){
 
                     Swal.fire({
                         icon:'success',
-                        title:'Berhasil!',
+                        title:'Success!',
                         timer:1500,
                         showConfirmButton:false
                     });
@@ -788,11 +788,11 @@ $('#formAdd').on('submit', function(e){
 
         // baru munculin confirm
         Swal.fire({
-            title: 'Buat Request Restock?',
+            title: 'Create Restock Request?',
             icon: 'question',
             showCancelButton: true,
-            confirmButtonText: 'Ya, Simpan',
-            cancelButtonText: 'Batal'
+            confirmButtonText: 'Yes, Save',
+            cancelButtonText: 'Cancel'
         }).then((result)=>{
 
             if(!result.isConfirmed) return;
@@ -805,8 +805,8 @@ $('#formAdd').on('submit', function(e){
 
                     Swal.fire({
                         icon:'success',
-                        title:'Berhasil!',
-                        text:'Request Restock berhasil dibuat.',
+                        title:'Success!',
+                        text:'Restock request successfully created.',
                         timer:1500,
                         showConfirmButton:false
                     });

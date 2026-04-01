@@ -509,19 +509,28 @@
                 .catch(err => console.error(err));
         }
 
-        const filterForm = document.getElementById('filterForm');
         const inputs = filterForm.querySelectorAll('input, select');
 
         inputs.forEach(input => {
             input.addEventListener('change', loadFilteredData);
         });
 
+        // GLOBAL SEARCH INTEGRATION (with 300ms debounce)
+        let searchTimer;
+        $('#globalSearch').on('keyup', function() {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(loadFilteredData, 300);
+        });
+
         function loadFilteredData() {
 
             const formData = new FormData(filterForm);
-            const params = new URLSearchParams(formData).toString();
+            // Include globalSearch value
+            const searchVal = $('#globalSearch').val();
+            const params = new URLSearchParams(formData);
+            if (searchVal) params.append('search', searchVal);
 
-            fetch(`/sales/returns/filter?${params}`)
+            fetch(`/sales/returns/filter?${params.toString()}`)
                 .then(res => res.json())
                 .then(data => {
 

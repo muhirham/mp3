@@ -237,27 +237,29 @@
                 <div class="approval-summary-card">
                     <div class="approval-summary-label">Issued Qty</div>
                     <div class="approval-summary-value">{{ $summaryIssued }}</div>
-                    <div class="approval-summary-note">Total unit dibawa sales</div>
+                    <div class="approval-summary-note">Total units carried by sales</div>
                 </div>
                 <div class="approval-summary-card">
                     <div class="approval-summary-label">Returned Qty</div>
                     <div class="approval-summary-value">{{ $summaryReturned }}</div>
-                    <div class="approval-summary-note">Unit yang dikembalikan</div>
+                    <div class="approval-summary-note">Units returned</div>
                 </div>
                 <div class="approval-summary-card">
                     <div class="approval-summary-label">Sold Qty</div>
                     <div class="approval-summary-value">{{ $summarySold }}</div>
-                    <div class="approval-summary-note">Unit terjual yang diinput sales</div>
+                    <div class="approval-summary-note">Units sold entered by sales</div>
                 </div>
                 <div class="approval-summary-card">
                     <div class="approval-summary-label">Cash Total</div>
-                    <div class="approval-summary-value" style="font-size:18px">Rp {{ number_format($summaryCash, 0, ',', '.') }}</div>
-                    <div class="approval-summary-note">Akumulasi pembayaran cash</div>
+                    <div class="approval-summary-value" style="font-size:18px">Rp
+                        {{ number_format($summaryCash, 0, ',', '.') }}</div>
+                    <div class="approval-summary-note">Accumulated cash payments</div>
                 </div>
                 <div class="approval-summary-card">
                     <div class="approval-summary-label">Transfer Total</div>
-                    <div class="approval-summary-value" style="font-size:18px">Rp {{ number_format($summaryTransfer, 0, ',', '.') }}</div>
-                    <div class="approval-summary-note">Total masuk transfer</div>
+                    <div class="approval-summary-value" style="font-size:18px">Rp
+                        {{ number_format($summaryTransfer, 0, ',', '.') }}</div>
+                    <div class="approval-summary-note">Total transfer amount</div>
                 </div>
             </div>
 
@@ -317,11 +319,8 @@
 
                 <div class="card-body">
                     <div class="approval-helper">
-                        <div>
-                            <h6>Review payment breakdown dengan cepat</h6>
-                            <p>Kolom Payment Qty dan Amount sekarang menampilkan total beserta rincian cash/transfer. Bukti transfer bisa dipreview langsung dari modal.</p>
-                        </div>
-                        <span class="badge bg-label-info">Total payment: Rp {{ number_format($summaryTotal, 0, ',', '.') }}</span>
+                        <span class="badge bg-label-info">Total payment: Rp
+                            {{ number_format($summaryTotal, 0, ',', '.') }}</span>
                     </div>
 
                     <form method="POST" action="{{ route('warehouse.handovers.payments.approve', $handover) }}">
@@ -428,7 +427,8 @@
 
                                             {{-- Harga Satuan (Orig) --}}
                                             <td class="text-end">
-                                                <div class="cell-main">{{ 'Rp ' . number_format((int) $item->unit_price, 0, ',', '.') }}</div>
+                                                <div class="cell-main">
+                                                    {{ 'Rp ' . number_format((int) $item->unit_price, 0, ',', '.') }}</div>
                                             </td>
 
                                             {{-- Net Price (After Discount) --}}
@@ -477,7 +477,9 @@
                                             </td>
 
                                             <td class="text-end">
-                                                <div class="cell-main">{{ 'Rp ' . number_format((int) $item->payment_amount, 0, ',', '.') }}</div>
+                                                <div class="cell-main">
+                                                    {{ 'Rp ' . number_format((int) $item->payment_amount, 0, ',', '.') }}
+                                                </div>
                                                 @if ($cashAmount > 0 || $transferAmount > 0)
                                                     <div class="cell-sub">
                                                         Cash: Rp {{ number_format($cashAmount, 0, ',', '.') }}<br>
@@ -548,57 +550,92 @@
                                             <div class="modal-dialog modal-dialog-centered modal-lg">
                                                 <div class="modal-content">
                                                     <div class="modal-header">
-                                                        <h5 class="modal-title">Payment Detail - {{ $item->product->name ?? ($item->product->product_name ?? '-') }}</h5>
-                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                        <h5 class="modal-title">Payment Detail -
+                                                            {{ $item->product->name ?? ($item->product->product_name ?? '-') }}
+                                                        </h5>
+                                                        <button type="button" class="btn-close"
+                                                            data-bs-dismiss="modal"></button>
                                                     </div>
                                                     <div class="modal-body">
                                                         <div class="row g-3 mb-3">
                                                             <div class="col-md-6">
-                                                                <div class="small text-muted fw-semibold">Qty Breakdown</div>
-                                                                <div class="cell-main">Total: {{ (int) $item->payment_qty }}</div>
+                                                                <div class="small text-muted fw-semibold">Qty Breakdown
+                                                                </div>
+                                                                <div class="cell-main">Total:
+                                                                    {{ (int) $item->payment_qty }}</div>
                                                                 <div class="cell-sub">Cash: {{ $cashQty }}</div>
                                                                 <div class="cell-sub">Transfer: {{ $transferQty }}</div>
                                                             </div>
                                                             <div class="col-md-6">
-                                                                <div class="small text-muted fw-semibold">Amount Breakdown</div>
-                                                                <div class="cell-main">Total: Rp {{ number_format((int) $item->payment_amount, 0, ',', '.') }}</div>
-                                                                <div class="cell-sub">Cash: Rp {{ number_format($cashAmount, 0, ',', '.') }}</div>
-                                                                <div class="cell-sub">Transfer: Rp {{ number_format($transferAmount, 0, ',', '.') }}</div>
+                                                                <div class="small text-muted fw-semibold">Amount Breakdown
+                                                                </div>
+                                                                <div class="cell-main">Total: Rp
+                                                                    {{ number_format((int) $item->payment_amount, 0, ',', '.') }}
+                                                                </div>
+                                                                <div class="cell-sub">Cash: Rp
+                                                                    {{ number_format($cashAmount, 0, ',', '.') }}</div>
+                                                                <div class="cell-sub">Transfer: Rp
+                                                                    {{ number_format($transferAmount, 0, ',', '.') }}</div>
                                                             </div>
                                                         </div>
 
-                                                        <div class="small text-muted fw-semibold mb-2">Transfer Proofs</div>
+                                                        <div class="small text-muted fw-semibold mb-2">Transfer Proofs
+                                                        </div>
                                                         @if (count($proofPaths))
                                                             <div class="row g-3">
                                                                 @foreach ($proofPaths as $proofIndex => $proofMeta)
                                                                     @php
                                                                         $proofPath = $proofMeta['path'] ?? null;
-                                                                        $proofRoute = route('warehouse.handover-items.payment-proof', ['item' => $item->id, 'index' => $proofIndex]);
-                                                                        $proofExt = strtolower(pathinfo($proofPath, PATHINFO_EXTENSION));
-                                                                        $proofType = $proofExt === 'pdf' ? 'pdf' : 'image';
+                                                                        $proofRoute = route(
+                                                                            'warehouse.handover-items.payment-proof',
+                                                                            [
+                                                                                'item' => $item->id,
+                                                                                'index' => $proofIndex,
+                                                                            ],
+                                                                        );
+                                                                        $proofExt = strtolower(
+                                                                            pathinfo($proofPath, PATHINFO_EXTENSION),
+                                                                        );
+                                                                        $proofType =
+                                                                            $proofExt === 'pdf' ? 'pdf' : 'image';
                                                                         $proofQty = (int) ($proofMeta['qty'] ?? 0);
-                                                                        $proofAmount = (int) ($proofMeta['amount'] ?? 0);
+                                                                        $proofAmount =
+                                                                            (int) ($proofMeta['amount'] ?? 0);
                                                                         $proofSavedAt = $proofMeta['saved_at'] ?? null;
-                                                                        $proofLabel = $proofMeta['label'] ?? ('Transfer ' . ($proofIndex + 1));
+                                                                        $proofLabel =
+                                                                            $proofMeta['label'] ??
+                                                                            'Transfer ' . ($proofIndex + 1);
                                                                     @endphp
                                                                     <div class="col-md-4 col-6">
-                                                                        <div class="border rounded-3 p-2 h-100 text-center">
-                                                                            <div class="small fw-semibold mb-2">{{ $proofLabel }}</div>
+                                                                        <div
+                                                                            class="border rounded-3 p-2 h-100 text-center">
+                                                                            <div class="small fw-semibold mb-2">
+                                                                                {{ $proofLabel }}</div>
                                                                             @if ($proofType === 'pdf')
-                                                                                <div class="border rounded-3 d-flex align-items-center justify-content-center mb-2" style="height:96px;">
-                                                                                    <span class="fw-semibold text-muted">PDF</span>
+                                                                                <div class="border rounded-3 d-flex align-items-center justify-content-center mb-2"
+                                                                                    style="height:96px;">
+                                                                                    <span
+                                                                                        class="fw-semibold text-muted">PDF</span>
                                                                                 </div>
                                                                             @else
-                                                                                <img src="{{ $proofRoute }}?v={{ $item->updated_at?->timestamp ?? time() }}" alt="Proof {{ $proofIndex + 1 }}" class="detail-proof-thumb mb-2">
+                                                                                <img src="{{ $proofRoute }}?v={{ $item->updated_at?->timestamp ?? time() }}"
+                                                                                    alt="Proof {{ $proofIndex + 1 }}"
+                                                                                    class="detail-proof-thumb mb-2">
                                                                             @endif
-                                                                            <div class="small text-muted">Qty TF: {{ $proofQty }}</div>
-                                                                            <div class="small text-muted">Nominal: Rp {{ number_format($proofAmount, 0, ',', '.') }}</div>
+                                                                            <div class="small text-muted">Qty TF:
+                                                                                {{ $proofQty }}</div>
+                                                                            <div class="small text-muted">Nominal: Rp
+                                                                                {{ number_format($proofAmount, 0, ',', '.') }}
+                                                                            </div>
                                                                             @if ($proofSavedAt)
-                                                                                <div class="small text-muted mb-2">{{ $proofSavedAt }}</div>
+                                                                                <div class="small text-muted mb-2">
+                                                                                    {{ $proofSavedAt }}</div>
                                                                             @else
-                                                                                <div class="small text-muted mb-2">{{ strtoupper($proofExt) }}</div>
+                                                                                <div class="small text-muted mb-2">
+                                                                                    {{ strtoupper($proofExt) }}</div>
                                                                             @endif
-                                                                            <a href="{{ $proofRoute }}" target="_blank" class="btn btn-outline-primary btn-sm w-100">
+                                                                            <a href="{{ $proofRoute }}" target="_blank"
+                                                                                class="btn btn-outline-primary btn-sm w-100">
                                                                                 Open
                                                                             </a>
                                                                         </div>
@@ -673,4 +710,18 @@
             });
         </script>
     @endif
+
+    <script>
+        $(document).ready(function() {
+            // GLOBAL SEARCH FILTER
+            $('#globalSearch').on('keyup', function() {
+                const val = $(this).val().toLowerCase();
+                // Target the items table rows
+                $('.table-approval tbody tr').each(function() {
+                    const text = $(this).text().toLowerCase();
+                    $(this).toggle(text.indexOf(val) > -1);
+                });
+            });
+        });
+    </script>
 @endpush

@@ -120,8 +120,8 @@
                             <th class="text-end">MIN STOCK</th>
                             <th>STATUS</th>
                             <th>CREATED AT</th>
-                            <th class="text-end">HPP</th>
-                            <th class="text-end">SELLING</th>
+                            <th class="text-end">COGS</th>
+                            <th class="text-end">SELLING PRICE</th>
                         </tr>
                     </thead>
                     <tbody></tbody>

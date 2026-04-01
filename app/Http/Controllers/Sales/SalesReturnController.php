@@ -517,6 +517,15 @@ class SalesReturnController extends Controller
             $query->where('status', $request->status);
         }
 
+        if ($request->search) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->whereHas('handover', fn($x) => $x->where('code', 'like', "%$search%"))
+                  ->orWhereHas('sales', fn($x) => $x->where('name', 'like', "%$search%"))
+                  ->orWhereHas('product', fn($x) => $x->where('name', 'like', "%$search%"));
+            });
+        }
+
         $returns = $query->get()
             ->groupBy('handover_id')
             ->map(function ($items) {
@@ -571,6 +580,15 @@ class SalesReturnController extends Controller
 
         if ($request->status) {
             $query->where('status', $request->status);
+        }
+
+        if ($request->search) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->whereHas('handover', fn($x) => $x->where('code', 'like', "%$search%"))
+                  ->orWhereHas('sales', fn($x) => $x->where('name', 'like', "%$search%"))
+                  ->orWhereHas('product', fn($x) => $x->where('name', 'like', "%$search%"));
+            });
         }
 
         $returns = $query->get()

@@ -6,7 +6,7 @@
 
         <div class="mb-3">
             <h4 class="mb-0">Approval Sales Return</h4>
-            <small class="text-muted">Daftar retur berdasarkan HDO</small>
+            <small class="text-muted">List of returns based on HDO</small>
         </div>
 
         <div class="card shadow-sm border-0 rounded-3 mb-4">
@@ -14,19 +14,19 @@
                 <form id="filterForm" class="row g-3">
 
                     <div class="col-md-3">
-                        <label>Dari Tanggal</label>
+                        <label>From Date</label>
                         <input type="date" name="from" class="form-control" value="{{ now()->toDateString() }}">
                     </div>
 
                     <div class="col-md-3">
-                        <label>Sampai Tanggal</label>
+                        <label>To Date</label>
                         <input type="date" name="to" class="form-control" value="{{ now()->toDateString() }}">
                     </div>
 
                     <div class="col-md-3">
                         <label>Status</label>
                         <select name="status" class="form-select">
-                            <option value="">Semua Status</option>
+                            <option value="">All Statuses</option>
                             <option value="pending">Pending</option>
                             <option value="approved">Approved</option>
                             <option value="rejected">Rejected</option>
@@ -37,7 +37,7 @@
                         <div class="col-md-3">
                             <label>Warehouse</label>
                             <select name="warehouse_id" class="form-select">
-                                <option value="">Semua Warehouse</option>
+                                <option value="">All Warehouses</option>
                                     @foreach ($warehouses as $wh)
                                         <option value="{{ $wh->id }}">
                                             {{ $wh->warehouse_name }}
@@ -58,10 +58,10 @@
                             <tr>
                                 <th style="width:140px;">HDO</th>
                                 <th>Sales</th>
-                                <th style="width:120px;">Total Item</th>
+                                <th style="width:120px;">Total Items</th>
                                 <th style="width:120px;">Status</th>
-                                <th style="width:180px;">Dibuat</th>
-                                <th style="width:110px;" class="text-end pe-3">Aksi</th>
+                                <th style="width:180px;">Created</th>
+                                <th style="width:110px;" class="text-end pe-3">Action</th>
                             </tr>
                         </thead>
 
@@ -104,7 +104,7 @@
                             @empty
                                 <tr>
                                     <td colspan="6" class="text-center py-4 text-muted">
-                                        Tidak ada data return
+                                        No return data found
                                     </td>
                                 </tr>
                             @endforelse
@@ -121,7 +121,7 @@
         <div class="modal-dialog modal-xl modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Detail Return HDO</h5>
+                    <h5 class="modal-title">HDO Return Detail</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body" id="detailBody"></div>
@@ -136,11 +136,11 @@
                 @csrf
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title">Alasan Reject</h5>
+                        <h5 class="modal-title">Rejection Reason</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
-                        <textarea name="reject_reason" class="form-control" required placeholder="Masukkan alasan reject"></textarea>
+                        <textarea name="reject_reason" class="form-control" required placeholder="Enter rejection reason"></textarea>
                     </div>
                     <div class="modal-footer">
                         <button type="submit" class="btn btn-danger">
@@ -180,14 +180,14 @@
                     <table class="table table-bordered align-middle">
                         <thead class="table-light">
                             <tr>
-                                <th>Produk</th>
+                                <th>Product</th>
                                 <th>Qty</th>
-                                <th>Kondisi</th>
+                                <th>Condition</th>
                                 <th>Note</th>
                                 <th>Status</th>
                                 <th>Approved By</th>
-                                <th>Tanggal</th>
-                                <th width="130">Aksi</th>
+                                <th>Date</th>
+                                <th width="130">Action</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -248,20 +248,20 @@
             modalInstance.hide();
 
             Swal.fire({
-                title: 'Approve semua item?',
-                text: "Semua item pending akan disetujui.",
+                title: 'Approve all items?',
+                text: "All pending items will be approved.",
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonColor: '#28a745',
                 cancelButtonColor: '#d33',
-                confirmButtonText: 'Ya, approve!',
-                cancelButtonText: 'Batal'
+                confirmButtonText: 'Yes, approve!',
+                cancelButtonText: 'Cancel'
             }).then((result) => {
 
                 if (result.isConfirmed) {
 
                     Swal.fire({
-                        title: 'Memproses...',
+                        title: 'Processing...',
                         allowOutsideClick: false,
                         didOpen: () => {
                             Swal.showLoading();
@@ -282,8 +282,8 @@
 
                             Swal.fire({
                                 icon: 'success',
-                                title: 'Berhasil',
-                                text: 'Semua item berhasil di-approve.',
+                                title: 'Success',
+                                text: 'All items successfully approved.',
                                 timer: 1500,
                                 showConfirmButton: false
                             }).then(() => {
@@ -295,7 +295,7 @@
                             Swal.fire({
                                 icon: 'error',
                                 title: 'Error',
-                                text: 'Terjadi kesalahan.'
+                                text: 'An error occurred.'
                             });
                         });
                 }
@@ -307,7 +307,7 @@
         <script>
             Swal.fire({
                 icon: 'success',
-                title: 'Berhasil',
+                title: 'Success',
                 text: '{{ session('success') }}',
                 timer: 2000,
                 showConfirmButton: false
@@ -315,19 +315,28 @@
         </script>
     @endif
     <script>
-        const filterForm = document.getElementById('filterForm');
         const inputs = filterForm.querySelectorAll('input, select');
 
         inputs.forEach(input => {
             input.addEventListener('change', loadFilteredData);
         });
 
+        // GLOBAL SEARCH INTEGRATION (with 300ms debounce)
+        let searchTimer;
+        $('#globalSearch').on('keyup', function() {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(loadFilteredData, 300);
+        });
+
         function loadFilteredData() {
 
             const formData = new FormData(filterForm);
-            const params = new URLSearchParams(formData).toString();
+            // Include globalSearch value
+            const searchVal = $('#globalSearch').val();
+            const params = new URLSearchParams(formData);
+            if (searchVal) params.append('search', searchVal);
 
-            fetch(`/warehouse/returns/filter?${params}`)
+            fetch(`/warehouse/returns/filter?${params.toString()}`)
                 .then(res => res.json())
                 .then(data => {
 
@@ -338,7 +347,7 @@
                         tbody.innerHTML = `
                     <tr>
                         <td colspan="6" class="text-center text-muted">
-                            Tidak ada data return
+                            No return data found
                         </td>
                     </tr>
                 `;
