@@ -239,20 +239,22 @@
                         @endif
                     </div>
 
-                    <div class="col-md-3">
-                        <label class="form-label">Status</label>
-                        <select name="status" class="form-select">
-                            @foreach ($statusLabels as $key => $label)
-                                <option value="{{ $key }}" @selected($status === (string) $key)>{{ $label }}
-                                </option>
-                            @endforeach
+                    <div class="col-md-2">
+                        <label class="form-label">Entries</label>
+                        <select name="per_page" id="perPage" class="form-select">
+                            <option value="10" @selected(($perPage ?? 10) == 10)>10</option>
+                            <option value="30" @selected(($perPage ?? 10) == 30)>30</option>
+                            <option value="50" @selected(($perPage ?? 10) == 50)>50</option>
                         </select>
                     </div>
 
-                    <div class="col-md-3 d-flex align-items-end gap-2">
-                        <button type="button" id="btnResetFilters" class="btn btn-outline-secondary w-100">Reset
-                            Filters</button>
-                        <button type="button" id="btnExportSales" class="btn btn-success w-100">Export Excel</button>
+                    <div class="col-md-1 d-flex align-items-end gap-2" style="flex: 1;">
+                        <button type="button" id="btnExportSales" class="btn btn-success w-100 px-2" title="Export Excel">
+                            <i class="bx bx-download"></i> Export
+                        </button>
+                        <button type="button" id="btnResetFilters" class="btn btn-outline-secondary w-100 px-2" title="Reset Filters">
+                            <i class="bx bx-refresh"></i>
+                        </button>
                     </div>
                 </form>
 
@@ -433,6 +435,12 @@
                 </div>
 
             </div>
+            <div class="card-footer d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
+                <small id="pageInfo" class="text-muted">Showing 0 to 0 of 0 results</small>
+                <nav>
+                    <ul id="pgNav" class="pagination mb-0"></ul>
+                </nav>
+            </div>
         </div>
 
     </div>
@@ -513,6 +521,7 @@
             const approvalUrlTemplate = canOpenApproval ? @json(route('warehouse.handovers.payments.form', 0)) : null;
 
             let currentHandoverId = null;
+            let currentPage = 1;
 
             // 3. HELPERS
             function formatRp(num) {
@@ -611,8 +620,12 @@
             }
 
             // 5. CORE AJAX LOGIC
-            async function reloadList() {
-                const params = new URLSearchParams(new FormData(filterForm));
+            async function reloadList(page = 1) {
+                currentPage = page;
+                const formData = new FormData(filterForm);
+                formData.append('page', currentPage);
+                const params = new URLSearchParams(formData);
+
                 try {
                     const res = await fetch(`${filterForm.action}?${params.toString()}`, {
                         headers: {
@@ -626,6 +639,7 @@
                     renderHead(json.view || viewEl.value);
                     renderRows(json.view || viewEl.value, json.rows || []);
 
+                    // Update Summary
                     if (json.summary) {
                         if (sumHdoEl) sumHdoEl.textContent = json.summary.total_hdo_text;
                         if (sumSoldEl) sumSoldEl.textContent = json.summary.total_sold_formatted;
@@ -636,6 +650,10 @@
                             sumDiscountEl.textContent = (dv !== 'Rp 0') ? '-' + dv : dv;
                         }
                     }
+
+                    // Update Pagination UI
+                    renderPagination(json.pagination);
+
                 } catch (err) {
                     console.error(err);
                     Swal.fire({
@@ -646,9 +664,57 @@
                 }
             }
 
+            function renderPagination(pg) {
+                const nav = document.getElementById('pgNav');
+                const info = document.getElementById('pageInfo');
+                if (!nav || !info) return;
+
+                if (!pg || pg.total === 0) {
+                    nav.innerHTML = '';
+                    info.textContent = 'Showing 0 to 0 of 0 results';
+                    return;
+                }
+
+                info.textContent = `Showing ${pg.from} to ${pg.to} of ${pg.total} results`;
+
+                let html = '';
+                // Previous
+                html += `<li class="page-item ${pg.current_page === 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" data-page="${pg.current_page - 1}">Prev</a>
+                </li>`;
+
+                // Calculate range
+                let start = Math.max(1, pg.current_page - 2);
+                let end = Math.min(pg.last_page, start + 4);
+                if (end === pg.last_page) start = Math.max(1, end - 4);
+
+                for (let i = start; i <= end; i++) {
+                    html += `<li class="page-item ${i === pg.current_page ? 'active' : ''}">
+                        <a class="page-link" href="#" data-page="${i}">${i}</a>
+                    </li>`;
+                }
+
+                // Next
+                html += `<li class="page-item ${pg.current_page === pg.last_page ? 'disabled' : ''}">
+                    <a class="page-link" href="#" data-page="${pg.current_page + 1}">Next</a>
+                </li>`;
+
+                nav.innerHTML = html;
+            }
+
             // 6. EVENT LISTENERS
+            document.getElementById('pgNav')?.addEventListener('click', (e) => {
+                const link = e.target.closest('.page-link');
+                if (link) {
+                    e.preventDefault();
+                    const page = parseInt(link.dataset.page);
+                    if (page && page !== currentPage) reloadList(page);
+                }
+            });
+
             const autoSelectors = [
                 '#viewFilter',
+                '#perPage',
                 'input[name="date_from"]',
                 'input[name="date_to"]',
                 'select[name="status"]',
@@ -656,7 +722,7 @@
                 'select[name="sales_id"]',
             ];
             filterForm.querySelectorAll(autoSelectors.join(',')).forEach(el => el.addEventListener('change', () =>
-                reloadList()));
+                reloadList(1)));
             // Handle Excel Export
             document.getElementById('btnExportSales')?.addEventListener('click', () => {
                 const params = new URLSearchParams(new FormData(filterForm));
@@ -666,11 +732,11 @@
 
             filterForm.addEventListener('submit', (e) => {
                 e.preventDefault();
-                reloadList();
+                reloadList(1);
             });
             document.getElementById('btnResetFilters')?.addEventListener('click', () => {
                 filterForm.reset();
-                reloadList();
+                reloadList(1);
             });
 
             rowsTbody.addEventListener('click', async (e) => {
