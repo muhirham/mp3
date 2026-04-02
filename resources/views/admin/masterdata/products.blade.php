@@ -9,55 +9,81 @@
         .swal2-container {
             z-index: 20000 !important;
         }
-        /* Matikan scroll horizontal */
+
+        /* Layout tweaks agar mepet ke sidebar & fullscreen */
+        .layout-page .content-wrapper { width: 100% !important; }
+        .container-xxl, .container-fluid { max-width: 100% !important; }
+
+        /* Matikan scroll horizontal & rapikan table */
         .card-body {
-    overflow-x: auto !important;
-}
-
-
-        /* Table */
-        #tblProducts {
-            width: 100% !important;
-            table-layout: fixed;
-            font-size: 13px;
+            overflow-x: hidden !important;
         }
 
-        /* Semua cell 1 baris */
-        #tblProducts th,
+        #tblProducts {
+            width: 100% !important;
+        }
+
+        /* Isi Tabel: Balikin ke ukuran yang lebih enak dibaca */
         #tblProducts td {
             white-space: nowrap;
             vertical-align: middle;
-            padding: 6px 8px;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            padding: 2px 4px;
+            font-size: 10px; /* Balikin ke ukuran yang lebih manusiawi */
+            overflow: visible;
         }
 
-        /* Perbesar kolom penting */
-        #tblProducts th:nth-child(3),
-        #tblProducts td:nth-child(3) {
-            width: 180px;
+        /* Header Tabel: Tetep kecil sesuai request */
+        #tblProducts th {
+            text-transform: uppercase;
+            font-weight: 800;
+            font-size: 8.5px; /* Tetep kecil biar judul kolom ga makan tempat */
+            background-color: #f8f9fa;
+            white-space: nowrap;
+            padding: 3px 4px;
         }
 
-        #tblProducts th:nth-child(8),
-        #tblProducts td:nth-child(8) {
-            width: 180px;
+        /* Kecilin badge biar ga "ngebanting" */
+        #tblProducts .badge {
+            font-size: 7.5px;
+            padding: 2px 4px;
         }
 
-        /* KECILIN KOLOM ANGKA */
-        #tblProducts th:nth-child(9),
-        #tblProducts td:nth-child(9),
-        #tblProducts th:nth-child(10),
-        #tblProducts td:nth-child(10),
-        #tblProducts th:nth-child(11),
-        #tblProducts td:nth-child(11) {
-            width: 75px;
+        /* Gedein dikit tombol aksi biar enak diklik */
+        #tblProducts .btn-sm {
+            padding: 2px 5px;
+            font-size: 11px;
         }
+        #tblProducts .btn-sm i {
+            font-size: 13px;
+        }
+
+        /* Hilangkan padding yang bikin boros tempat */
+        .card-body.p-0 {
+            padding: 0 !important;
+        }
+
+        /* Penyesuaian lebar kolom agar pas 1 row tanpa scroll */
+        #tblProducts th:nth-child(1), #tblProducts td:nth-child(1) { width: 25px; } /* NO */
+        #tblProducts th:nth-child(2), #tblProducts td:nth-child(2) { width: 65px; } /* CODE */
+        #tblProducts th:nth-child(3), #tblProducts td:nth-child(3) { width: 140px; } /* NAME */
+        #tblProducts th:nth-child(4), #tblProducts td:nth-child(4) { width: 85px; } /* CATEGORY */
+        #tblProducts th:nth-child(5), #tblProducts td:nth-child(5) { width: 60px; } /* TYPE */
+        #tblProducts th:nth-child(6), #tblProducts td:nth-child(6) { width: 45px; } /* UOM */
+        #tblProducts th:nth-child(7), #tblProducts td:nth-child(7) { width: 110px; } /* SUPPLIER */
+        #tblProducts th:nth-child(8), #tblProducts td:nth-child(8) { width: 140px; } /* DESCRIPTION */
+        #tblProducts th:nth-child(9), #tblProducts td:nth-child(9) { width: 55px; } /* STOCK */
+        #tblProducts th:nth-child(10), #tblProducts td:nth-child(10) { width: 65px; } /* MIN STOCK */
+        #tblProducts th:nth-child(11), #tblProducts td:nth-child(11) { width: 55px; } /* STATUS */
+        #tblProducts th:nth-child(12), #tblProducts td:nth-child(12),
+        #tblProducts th:nth-child(13), #tblProducts td:nth-child(13),
+        #tblProducts th:nth-child(14), #tblProducts td:nth-child(14) { width: 80px; } /* PRICES */
+        #tblProducts th:nth-child(15), #tblProducts td:nth-child(15) { width: 75px; } /* ACTIONS */
     </style>
 
 
 
 
-    <div class="container-xxl flex-grow-1 container-p-y">
+    <div class="container-fluid flex-grow-1 container-p-y px-3">
 
         {{-- HEADER + BUTTON --}}
         <div class="d-flex flex-wrap align-items-center mb-3 gap-2">
@@ -132,25 +158,25 @@
         {{-- TABEL PRODUK --}}
         <div class="card">
             <div class="card-body p-0">
-                <div class="table-responsive">
+                <div>
                     <table id="tblProducts" class="table table-striped table-hover align-middle mb-0 table-bordered w-100">
                         <thead class="table-light">
                             <tr>
-                                <th style="width: 50px">NO</th>
-                                <th style="width: 80px">CODE</th>
+                                <th>NO</th>
+                                <th>CODE</th>
                                 <th>PRODUCT NAME</th>
-                                <th style="width: 110px">CATEGORY</th>
-                                <th style="width:100px">TYPE</th>
-                                <th style="width: 70px">UOM</th>
-                                <th style="width: 140px">SUPPLIER</th>
+                                <th>CATEGORY</th>
+                                <th>TYPE</th>
+                                <th>UOM</th>
+                                <th>SUPPLIER</th>
                                 <th>DESCRIPTION</th>
-                                <th class="text-end" style="width: 70px">STOCK</th>
-                                <th class="text-end" style="width: 90px">MIN STOCK</th>
-                                <th style="width: 70px">STATUS</th>
-                                <th class="text-end" style="width: 100px">PURCHASE PRICE</th>
-                                <th class="text-end" style="width: 100px">COST PRICE</th>
-                                <th class="text-end" style="width: 100px">SELLING PRICE</th>
-                                <th style="width: 110px">ACTIONS</th>
+                                <th class="text-end">STOCK</th>
+                                <th class="text-end">MIN STOCK</th>
+                                <th>STATUS</th>
+                                <th class="text-end">PURCHASE PRICE</th>
+                                <th class="text-end">COST PRICE</th>
+                                <th class="text-end">SELLING PRICE</th>
+                                <th>ACTIONS</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
