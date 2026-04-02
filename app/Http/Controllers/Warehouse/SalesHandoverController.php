@@ -1006,7 +1006,7 @@ EOT;
         $allForSummary = $summaryQuery->get();
         [ , $summary] = $this->makeReportData($allForSummary, $statusOptions, $dateFrom, $dateTo, $view);
 
-        // 2. AMBIL SEMUA DATA (Tanpa Paginasi sementara)
+        // 2. AMBIL DATA PAGINATED (Opsi B - Server-side)
         $itemsQuery = SalesHandover::with(['warehouse','sales', 'items.product'])
             ->whereBetween('handover_date', [$dateFrom, $dateTo]);
         
@@ -1032,10 +1032,10 @@ EOT;
             
         $items = $itemsQuery->orderBy('handover_date', 'desc')
             ->orderBy('code', 'desc')
-            ->get();
+            ->paginate($perPage);
 
-        // 3. Transform data
-        [$rows, ] = $this->makeReportData($items, $statusOptions, $dateFrom, $dateTo, $view);
+        // 3. Transform data (Ambil Collection dari Paginator)
+        [$rows, ] = $this->makeReportData($items->getCollection(), $statusOptions, $dateFrom, $dateTo, $view);
 
         if ($request->ajax()) {
             return response()->json([
@@ -1043,8 +1043,13 @@ EOT;
                 'view'    => $view,
                 'rows'    => $rows,
                 'summary' => $summary,
-                'meta'    => [
-                    'total' => count($rows)
+                'pagination' => [
+                    'total'        => $items->total(),
+                    'per_page'     => $items->perPage(),
+                    'current_page' => $items->currentPage(),
+                    'last_page'    => $items->lastPage(),
+                    'from'         => $items->firstItem(),
+                    'to'           => $items->lastItem(),
                 ]
             ]);
         }

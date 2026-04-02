@@ -39,49 +39,50 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
+            // CORE
+            CompanySeeder::class,
+            RoleSeeder::class,
+            WarehouseSeeder::class,
+            UserSeeder::class,
+            CategorySeeder::class,
+            SupplierSeeder::class,
+            PackageSeeder::class,
+            // ProductSeeder::class,
 
-          // CORE
-        CompanySeeder::class,
-        RoleSeeder::class,
-        WarehouseSeeder::class,
-        UserSeeder::class,
-        CategorySeeder::class,
-        SupplierSeeder::class,
-        PackageSeeder::class,
-        ProductSeeder::class,
+            // SYSTEM
+            OperationAdminSeeder::class,
+            ActivityLogSeeder::class,
 
-        // SYSTEM
-        OperationAdminSeeder::class,
-        ActivityLogSeeder::class,
+            /* 
+            // INVENTORY
+            StockLevelSeeder::class,
+            StockSnapshotSeeder::class,
+            StockMovementSeeder::class,
+            StockRequestSeeder::class,
+            RequestRestockSeeder::class,
+            StockAdjustmentSeeder::class,
 
-        // INVENTORY
-        StockLevelSeeder::class,
-        StockSnapshotSeeder::class,
-        StockMovementSeeder::class,
-        StockRequestSeeder::class,
-        RequestRestockSeeder::class,
-        StockAdjustmentSeeder::class,
+            // PURCHASE
+            PurchaseOrderSeeder::class,
+            RestockReceiptSeeder::class,
 
-        // PURCHASE
-        PurchaseOrderSeeder::class,
-        RestockReceiptSeeder::class,
+            // SALES
+            SalesHandoverSeeder::class,
+            SalesHandoverItemSeeder::class,
+            SalesReportSeeder::class,
+            SalesReturnSeeder::class,
 
-        // SALES
-        SalesHandoverSeeder::class,
-        SalesHandoverItemSeeder::class,
-        SalesReportSeeder::class,
-        SalesReturnSeeder::class,
+            // TRANSFER
+            WarehouseTransferSeeder::class,
+            WarehouseTransferItemSeeder::class,
+            WarehouseTransferLogSeeder::class,
 
-        // TRANSFER
-        WarehouseTransferSeeder::class,
-        WarehouseTransferItemSeeder::class,
-        WarehouseTransferLogSeeder::class,
-
-        // BOM
-        BomSeeder::class,
-        BomItemSeeder::class,
-        BomTransactionSeeder::class,
-        BomTransactionItemSeeder::class,
+            // BOM
+            BomSeeder::class,
+            BomItemSeeder::class,
+            BomTransactionSeeder::class,
+            BomTransactionItemSeeder::class,
+            */
         ]);
     }
 }
