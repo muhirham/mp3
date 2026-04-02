@@ -84,6 +84,9 @@ class SalesReturnController extends Controller
                 if (!$isAdmin) {
                     $handovers = SalesHandover::where('sales_id', $user->id)
                         ->where('status', 'closed')
+                        ->whereHas('items', function ($q) {
+                            $q->whereColumn('qty_start', '>', 'qty_sold');
+                        })
                         ->whereDoesntHave('salesReturns', function ($q) {
                             $q->whereIn('status', ['pending','approved']);
                         })
@@ -95,6 +98,9 @@ class SalesReturnController extends Controller
                     if ($request->sales_id) {
                         $handovers = SalesHandover::where('sales_id', $request->sales_id)
                             ->where('status', 'closed')
+                            ->whereHas('items', function ($q) {
+                                $q->whereColumn('qty_start', '>', 'qty_sold');
+                            })
                             ->whereDoesntHave('salesReturns', function ($q) {
                                 $q->whereIn('status', ['pending','approved']);
                             })
