@@ -134,7 +134,7 @@
 
         $pageTitle =
             $isSales && !$isAdminLike && !$isWarehouse
-                ? 'Daily Report Handover Saya'
+                ? 'My Daily Handover Report'
                 : ($isWarehouse
                     ? 'Sales Reports (Admin Warehouse)'
                     : 'Sales Reports');
@@ -148,7 +148,7 @@
             'total_hdo_text' => '0 HDO',
             'total_sold_formatted' => 'Rp 0',
             'total_diff_formatted' => 'Rp 0',
-            'period_text' => ($dateFrom ?? '') . ' s/d ' . ($dateTo ?? ''),
+            'period_text' => ($dateFrom ?? '') . ' to ' . ($dateTo ?? ''),
             'view' => $view,
         ];
     @endphp
@@ -460,14 +460,14 @@
                         <table class="table table-sm align-middle" id="detailItemsTable">
                             <thead>
                                 <tr>
-                                    <th style="width:30%">Produk</th>
-                                    <th class="text-end" style="width:10%">Dibawa</th>
-                                    <th class="text-end" style="width:10%">Kembali</th>
-                                    <th class="text-end" style="width:10%">Terjual</th>
-                                    <th class="text-end" style="width:13%">Harga</th>
-                                    <th class="text-end" style="width:12%">Diskon</th>
-                                    <th class="text-end" style="width:14%">Harga Setelah Diskon</th>
-                                    <th class="text-end" style="width:14%">Nilai Terjual</th>
+                                    <th style="width:30%">Product</th>
+                                    <th class="text-end" style="width:10%">Carried</th>
+                                    <th class="text-end" style="width:10%">Returned</th>
+                                    <th class="text-end" style="width:10%">Sold</th>
+                                    <th class="text-end" style="width:13%">Price</th>
+                                    <th class="text-end" style="width:12%">Discount</th>
+                                    <th class="text-end" style="width:14%">Price After Discount</th>
+                                    <th class="text-end" style="width:14%">Sold Value</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -657,6 +657,13 @@
             ];
             filterForm.querySelectorAll(autoSelectors.join(',')).forEach(el => el.addEventListener('change', () =>
                 reloadList()));
+            // Handle Excel Export
+            document.getElementById('btnExportSales')?.addEventListener('click', () => {
+                const params = new URLSearchParams(new FormData(filterForm));
+                const exportUrl = "{{ route('sales.report.export') }}";
+                window.location.href = `${exportUrl}?${params.toString()}`;
+            });
+
             filterForm.addEventListener('submit', (e) => {
                 e.preventDefault();
                 reloadList();
@@ -692,7 +699,7 @@
                         if (!res.ok) throw new Error('HTTP ' + res.status);
 
                         const json = await res.json();
-                        if (!json.success) throw new Error('Gagal load detail');
+                        if (!json.success) throw new Error('Failed to load details');
 
                         const h = json.handover;
                         const it = json.items || [];
@@ -700,9 +707,9 @@
 
                         const statusLabelMap = {
                             draft: 'Draft',
-                            waiting_morning_otp: 'Menunggu OTP Pagi',
+                            waiting_morning_otp: 'Waiting for Morning OTP',
                             on_sales: 'On Sales',
-                            waiting_evening_otp: 'Menunggu Closing (Legacy)',
+                            waiting_evening_otp: 'Waiting for Evening OTP (Closing)',
                             closed: 'Closed',
                             cancelled: 'Cancelled',
                         };
@@ -721,8 +728,8 @@
                         detailHeader.innerHTML = `
                             <div class="d-flex flex-column flex-md-row justify-content-between">
                                 <div class="mb-2 mb-md-0">
-                                    <div><span class="fw-semibold">Kode:</span> ${h.code}</div>
-                                    <div><span class="fw-semibold">Tanggal:</span> ${h.handover_date || '-'}</div>
+                                    <div><span class="fw-semibold">Code:</span> ${h.code}</div>
+                                    <div><span class="fw-semibold">Date:</span> ${h.handover_date || '-'}</div>
                                     <div><span class="fw-semibold">Warehouse:</span> ${h.warehouse_name || '-'}</div>
                                     <div><span class="fw-semibold">Sales:</span> ${h.sales_name || '-'}</div>
                                     <div>
@@ -731,10 +738,10 @@
                                     </div>
                                 </div>
                                 <div class="text-md-end small">
-                                    <div><span class="fw-semibold">OTP Pagi dikirim:</span> ${h.morning_otp_sent_at || '-'}</div>
-                                    <div><span class="fw-semibold">OTP Pagi verif:</span> ${h.morning_otp_verified_at || '-'}</div>
-                                    <div><span class="fw-semibold">OTP Sore dikirim:</span> ${h.evening_otp_sent_at || '-'}</div>
-                                    <div><span class="fw-semibold">OTP Sore verif:</span> ${h.evening_otp_verified_at || '-'}</div>
+                                    <div><span class="fw-semibold">Morning OTP sent:</span> ${h.morning_otp_sent_at || '-'}</div>
+                                    <div><span class="fw-semibold">Morning OTP verified:</span> ${h.morning_otp_verified_at || '-'}</div>
+                                    <div><span class="fw-semibold">Evening OTP sent:</span> ${h.evening_otp_sent_at || '-'}</div>
+                                    <div><span class="fw-semibold">Evening OTP verified:</span> ${h.evening_otp_verified_at || '-'}</div>
                                 </div>
                             </div>
                         `;
@@ -771,7 +778,7 @@
                                 </tr>`;
                         });
                         if (!htmlItems) htmlItems =
-                            '<tr><td colspan="8" class="text-center text-muted">Tidak ada item.</td></tr>';
+                            '<tr><td colspan="8" class="text-center text-muted">No items available.</td></tr>';
                         detailTbody.innerHTML = htmlItems;
 
                         let proofHtml = '-';
@@ -779,40 +786,40 @@
                             proofHtml = `
                                 <div class="mt-1">
                                     <img src="${h.transfer_proof_url}" class="img-thumbnail proof-thumb" style="max-width:140px;cursor:pointer;">
-                                    <div class="small text-muted mt-1">Klik gambar untuk memperbesar.</div>
+                                    <div class="small text-muted mt-1">Click image to enlarge.</div>
                                 </div>`;
                         }
 
                         detailSummary.innerHTML = `
                             <div class="row g-2">
                                 <div class="col-md-4">
-                                    <div class="fw-semibold text-muted small">Nilai Dibawa</div>
+                                    <div class="fw-semibold text-muted small">Carried Value</div>
                                     <div>${formatRp(h.total_dispatched || 0)}</div>
                                 </div>
                                 <div class="col-md-4">
-                                    <div class="fw-semibold text-muted small">Nilai Terjual</div>
-                                    <div>${h.status === 'closed' ? formatRp(h.total_sold) : '<span class="text-muted small">— belum closed —</span>'}</div>
+                                    <div class="fw-semibold text-muted small">Sold Value</div>
+                                    <div>${h.status === 'closed' ? formatRp(h.total_sold) : '<span class="text-muted small">— not closed yet —</span>'}</div>
                                 </div>
                                 <div class="col-md-4">
-                                    <div class="fw-semibold text-muted small">Nilai Sisa Stok (estimasi)</div>
-                                    <div>${h.status === 'closed' ? formatRp(h.selisih_stock_value || 0) : '<span class="text-muted small">— belum closed —</span>'}</div>
+                                    <div class="fw-semibold text-muted small">Estimated Remaining Stock Value</div>
+                                    <div>${h.status === 'closed' ? formatRp(h.selisih_stock_value || 0) : '<span class="text-muted small">— not closed yet —</span>'}</div>
                                 </div>
                             </div>
                             <hr>
                             <div class="row g-2">
                                 <div class="col-md-4">
-                                    <div class="fw-semibold text-muted small">Setor Tunai</div>
+                                    <div class="fw-semibold text-muted small">Cash Deposit</div>
                                     <div>${formatRp(h.cash_amount || 0)}</div>
                                 </div>
                                 <div class="col-md-4">
-                                    <div class="fw-semibold text-muted small">Setor Transfer</div>
+                                    <div class="fw-semibold text-muted small">Transfer Deposit</div>
                                     <div>${formatRp(h.transfer_amount || 0)}</div>
                                     ${proofHtml}
                                 </div>
                                 <div class="col-md-4">
-                                    <div class="fw-semibold text-muted small">Total Setoran</div>
+                                    <div class="fw-semibold text-muted small">Total Deposit</div>
                                     <div>${formatRp(h.setor_total || 0)}</div>
-                                    <div class="small text-muted">Selisih jual vs setor: ${formatRp(h.selisih_jual_vs_setor || 0)}</div>
+                                    <div class="small text-muted">Diff Sold vs Deposit: ${formatRp(h.selisih_jual_vs_setor || 0)}</div>
                                 </div>
                             </div>`;
 
@@ -821,8 +828,8 @@
                         console.error(err);
                         Swal.fire({
                             icon: 'error',
-                            title: 'Gagal',
-                            text: 'Gagal memuat detail handover.'
+                            title: 'Failed',
+                            text: 'Failed to load handover details.'
                         });
                     }
                     return;
