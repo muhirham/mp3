@@ -273,6 +273,14 @@
                                                         for="add_stock_adjustments_export">Export Excel</label>
                                                 </div>
 
+                                                <div class="form-check">
+                                                    <input class="form-check-input add-permission" type="checkbox"
+                                                        name="permissions[]" value="stock_adjustments.view_all"
+                                                        id="add_stock_adjustments_view_all">
+                                                    <label class="form-check-label"
+                                                        for="add_stock_adjustments_view_all">View All (Global)</label>
+                                                </div>
+
                                             </div>
                                         @endif
                                     @endforeach
@@ -741,6 +749,14 @@
                                                         id="edit_stock_adjustments_export">
                                                     <label class="form-check-label"
                                                         for="edit_stock_adjustments_export">Export Excel</label>
+                                                </div>
+
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox"
+                                                        name="permissions[]" value="stock_adjustments.view_all"
+                                                        id="edit_stock_adjustments_view_all">
+                                                    <label class="form-check-label"
+                                                        for="edit_stock_adjustments_view_all">View All (Global)</label>
                                                 </div>
 
                                             </div>
