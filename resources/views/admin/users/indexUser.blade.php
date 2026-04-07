@@ -104,9 +104,10 @@
                                 $rolesAttr = implode(',', $roleSlugs);
                                 $signatureUrl = $u->signature_path ? asset('storage/' . $u->signature_path) : null;
 
-                                // Admin WH hanya boleh manage SALES di warehouse dia
+                                // Admin WH hanya boleh manage SALES di warehouse dia, atau dirinya sendiri
                                 $canManageRow =
                                     !$isWarehouseUser ||
+                                    ($u->id === $me->id) ||
                                     (in_array('sales', $roleSlugs, true) && $u->warehouse_id === $me->warehouse_id);
                             @endphp
                             <tr>
@@ -172,6 +173,7 @@
                                                 data-phone="{{ $u->phone }}"
                                                 data-position="{{ $u->position }}"
                                                 data-roles="{{ $rolesAttr }}"
+                                                data-role_names="{{ $roleText }}"
                                                 data-status="{{ $u->status }}"
                                                 data-warehouse_id="{{ $u->warehouse_id ?? '' }}">
                                                 <i class="bx bx-edit-alt"></i>
@@ -246,15 +248,15 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Phone</label>
+                        <label class="form-label">Phone (optional)</label>
                         <input name="phone" value="{{ old('phone') }}"
-                            class="form-control bg-transparent border-secondary" required>
+                            class="form-control bg-transparent border-secondary">
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">Position (optional)</label>
                         <input name="position" value="{{ old('position') }}"
-                            class="form-control bg-transparent border-secondary" required>
+                            class="form-control bg-transparent border-secondary">
                     </div>
 
                     <div class="mb-3">
@@ -364,7 +366,7 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Phone</label>
+                        <label class="form-label">Phone (optional)</label>
                         <input id="edit_phone" name="phone" class="form-control bg-transparent border-secondary">
                     </div>
 
@@ -383,9 +385,9 @@
                         <div class="col-md-6">
                             <label class="form-label">Roles</label>
                             @if ($isWarehouseUser)
-                                {{-- Admin WH: selalu Sales --}}
-                                <input type="hidden" name="roles[]" id="edit_roles_force" value="sales">
-                                <input class="form-control bg-transparent border-secondary" value="Sales" disabled>
+                                {{-- Admin WH: dinamis via JS (Sales/Warehouse) --}}
+                                <input type="hidden" name="roles[]" id="edit_roles_input" value="sales">
+                                <input class="form-control bg-transparent border-secondary" id="edit_roles_display" value="Sales" disabled>
                             @else
                                 <select id="edit_roles" name="roles[]"
                                     class="form-select bg-transparent border-secondary" required>
@@ -640,9 +642,15 @@
                 $('#edit_phone').val(d.phone || '');
                 $('#edit_position').val(d.position || '');
 
-                @if (!$isWarehouseUser)
-                    const roles = (d.roles || '').split(',').filter(Boolean);
-                    $('#edit_roles').val(roles[0] || '');
+                @if ($isWarehouseUser)
+                    const rolesArr = (d.roles || '').split(',').filter(Boolean);
+                    const roleSlug = rolesArr[0] || 'sales';
+                    const roleName = d.role_names || (roleSlug === 'sales' ? 'Sales' : 'Admin Warehouse');
+                    $('#edit_roles_input').val(roleSlug);
+                    $('#edit_roles_display').val(roleName);
+                @else
+                    const rolesArr = (d.roles || '').split(',').filter(Boolean);
+                    $('#edit_roles').val(rolesArr[0] || '');
                 @endif
 
                 $('#edit_status').val((d.status || 'active').toLowerCase());
