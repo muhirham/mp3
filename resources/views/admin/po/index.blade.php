@@ -110,7 +110,6 @@
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
                 <div class="d-flex flex-column">
                     <h5 class="mb-0 fw-bold po-card-title">Purchase Orders</h5>
-                    <span class="text-muted po-muted">Automatic Filter (AJAX) — no apply button needed.</span>
                 </div>
 
                 <div class="d-flex flex-wrap gap-2 ms-auto po-actions justify-content-end">
@@ -208,7 +207,8 @@
                     <strong>Approval Rules:</strong>
                     <ul class="mb-0 ps-3">
                         <li>Grand total &le; Rp 1,000,000 → approved by <strong>Procurement</strong>.</li>
-                        <li>Grand total &gt; Rp 1,000,000 → requires 2-level approval: <strong>Procurement → CEO</strong>.</li>
+                        <li>Grand total &gt; Rp 1,000,000 → requires 2-level approval: <strong>Procurement → CEO</strong>.
+                        </li>
                     </ul>
                 </div>
             </div>
