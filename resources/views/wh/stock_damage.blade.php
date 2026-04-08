@@ -709,6 +709,11 @@
                     tr.find('input[name="qty_good"]').val(max - clamped);
                 }
             });
+
+            // FIX: Auto-select on focus (Same as Transfer GR)
+            $(document).on('focus', '.js-sync-gr', function() {
+                $(this).select();
+            });
         });
 
         function previewImage(src) {

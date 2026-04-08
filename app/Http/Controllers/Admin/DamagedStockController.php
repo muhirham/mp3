@@ -304,6 +304,26 @@ class DamagedStockController extends Controller
                 $auditNotes .= "\n[ALERT]: " . $qtyDamaged . " items received but still DAMAGED.";
             }
 
+            if ($qtyGood > 0 || $qtyDamaged > 0) {
+                $grCode = 'GR-DR-' . now()->format('Ymd') . '-' . strtoupper(\Str::random(5));
+                DB::table('restock_receipts')->insert([
+                    'purchase_order_id' => null,
+                    'request_id'        => $damagedStock->id, // link ke damaged_stocks
+                    'warehouse_id'      => $damagedStock->warehouse_id,
+                    'product_id'        => $damagedStock->product_id,
+                    'gr_type'           => \App\Models\RestockReceipt::TYPE_RETURN,
+                    'code'              => $grCode,
+                    'qty_requested'     => $damagedStock->quantity,
+                    'qty_good'          => $qtyGood,
+                    'qty_damaged'       => $qtyDamaged,
+                    'notes'             => "Resolution for #{$damagedStock->id}. " . ($request->notes ?? ''),
+                    'received_by'       => auth()->id(),
+                    'received_at'       => now(),
+                    'created_at'        => now(),
+                    'updated_at'        => now(),
+                ]);
+            }
+
             $damagedStock->update([
                 'status'      => 'resolved',
                 'resolved_by' => auth()->id(),
