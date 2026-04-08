@@ -107,12 +107,33 @@ class StockAdjustmentController extends Controller
                 COALESCE(ic.items_count,0) as items_count
             ');
 
-        // filter warehouse
-        if ($whFilter === 'central') {
-            $base->whereNull('sa.warehouse_id');
-        } elseif ($whFilter !== '' && ctype_digit($whFilter)) {
-            $base->where('sa.warehouse_id', (int) $whFilter);
-        }
+        // --- FILTER DATA & ISOLATION LOGIC ---
+        $user = auth()->user();
+        $canViewAll = $user->hasPermission('stock_adjustments.view_all');
+
+        $base->where(function ($qmain) use ($user, $canViewAll, $whFilter) {
+            if (!$canViewAll && !empty($user->warehouse_id)) {
+                // RESTRICTED USER: (Target WH OR My WH) AND (Price Update OR My WH)
+                // Tapi lebih simpel: Record dia sendiri ATAU record manapun yang Update Harga
+                $qmain->where(function ($qsub) use ($user, $whFilter) {
+                    if ($whFilter === 'central') {
+                        $qsub->whereNull('sa.warehouse_id');
+                    } elseif ($whFilter !== '' && ctype_digit($whFilter)) {
+                        $qsub->where('sa.warehouse_id', (int) $whFilter);
+                    } else {
+                        // Default view for restricted user (their own)
+                        $qsub->where('sa.warehouse_id', (int) $user->warehouse_id);
+                    }
+                })->orWhere('sa.price_update_mode', '!=', 'stock');
+            } else {
+                // SUPERADMIN / VIEW ALL: Respect explicit filter only
+                if ($whFilter === 'central') {
+                    $qmain->whereNull('sa.warehouse_id');
+                } elseif ($whFilter !== '' && ctype_digit($whFilter)) {
+                    $qmain->where('sa.warehouse_id', (int) $whFilter);
+                }
+            }
+        });
 
         // filter tanggal dokumen (adj_date)
         if (!empty($dateFrom)) $base->whereDate('sa.adj_date', '>=', $dateFrom);
@@ -120,16 +141,16 @@ class StockAdjustmentController extends Controller
 
         // search
         if ($search !== '') {
-            $like = '%'.$search.'%';
+            $like = '%' . $search . '%';
             $base->where(function ($w) use ($like) {
                 $w->where('sa.adj_code', 'like', $like)
-                  ->orWhere('w.warehouse_name', 'like', $like)
-                  ->orWhere('u.name', 'like', $like);
+                    ->orWhere('w.warehouse_name', 'like', $like)
+                    ->orWhere('u.name', 'like', $like);
             });
         }
 
-        $recordsTotal = DB::table('stock_adjustments')->count();
-        $recordsFiltered = (clone $base)->count();
+        $recordsTotal = (clone $base)->count();
+        $recordsFiltered = $recordsTotal;
 
         // map order
         $orderMap = [
@@ -191,13 +212,22 @@ class StockAdjustmentController extends Controller
             'items_count'  => $adjustment->items->count(),
         ];
 
-        $items = $adjustment->items->map(function (StockAdjustmentItem $it) {
+        $items = $adjustment->items->map(function (StockAdjustmentItem $it) use ($adjustment) {
+            $user = auth()->user();
+            $canViewAll = $user->hasPermission('stock_adjustments.view_all');
+            
+            // Masking Stok jika beda gudang & bukan super/global-view
+            $isOwnWarehouse = (is_null($adjustment->warehouse_id) && is_null($user->warehouse_id)) 
+                           || ($adjustment->warehouse_id == $user->warehouse_id);
+            
+            $mask = (!$canViewAll && !$isOwnWarehouse);
+
             return [
                 'product'      => $it->product?->name ?? '-',
                 'product_code' => $it->product?->product_code ?? '',
-                'qty_before'   => (int) $it->qty_before,
-                'qty_after'    => (int) $it->qty_after,
-                'qty_diff'     => (int) $it->qty_diff,
+                'qty_before'   => $mask ? null : (int) $it->qty_before,
+                'qty_after'    => $mask ? null : (int) $it->qty_after,
+                'qty_diff'     => $mask ? null : (int) $it->qty_diff,
                 'pb'           => $it->purchase_price_before,
                 'pa'           => $it->purchase_price_after,
                 'sb'           => $it->selling_price_before,
@@ -495,14 +525,30 @@ class StockAdjustmentController extends Controller
             });
         }
 
-        // filter warehouse
-        if ($warehouseId !== '') {
-            if ($warehouseId === 'central') {
-                $query->whereNull('warehouse_id');
+        // --- FILTER DATA & ISOLATION LOGIC (EXPORT) ---
+        $user = auth()->user();
+        $canViewAll = $user->hasPermission('stock_adjustments.view_all');
+        $whFilter = $request->input('warehouse_id');
+
+        $query->where(function ($qmain) use ($user, $canViewAll, $whFilter) {
+            if (!$canViewAll && !empty($user->warehouse_id)) {
+                $qmain->where(function ($qsub) use ($user, $whFilter) {
+                    if ($whFilter === 'central') {
+                        $qsub->whereNull('warehouse_id');
+                    } elseif ($whFilter !== '' && ctype_digit($whFilter)) {
+                        $qsub->where('warehouse_id', (int) $whFilter);
+                    } else {
+                        $qsub->where('warehouse_id', (int) $user->warehouse_id);
+                    }
+                })->orWhere('price_update_mode', '!=', 'stock');
             } else {
-                $query->where('warehouse_id', (int) $warehouseId);
+                if ($whFilter === 'central') {
+                    $qmain->whereNull('warehouse_id');
+                } elseif ($whFilter !== '' && ctype_digit($whFilter)) {
+                    $qmain->where('warehouse_id', (int) $whFilter);
+                }
             }
-        }
+        });
 
         // ✅ tanggal cuma diterapkan kalau user isi range/bulan
         if ($useDate) {

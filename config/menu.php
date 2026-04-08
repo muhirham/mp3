@@ -41,6 +41,13 @@ return [
             'group' => 'inventory',
             'icon'  => 'bx bx-adjust',
         ],
+                [
+            'key'   => 'approval_stock_damage',
+            'label' => 'Approval Stock Damage',
+            'route' => 'damaged-stocks.approval',
+            'group' => 'inventory',
+            'icon'  => 'bx bx-shield-quarter',
+        ],
 
         // ================== WAREHOUSE ==================
         [
@@ -98,6 +105,13 @@ return [
             'route' => 'warehouse.returns.index',
             'group' => 'warehouse',
             'icon'  => 'bx bx-check-circle',
+        ],
+        [
+            'key'   => 'wh_damaged_stocks',
+            'label' => 'Damaged & Expired Stocks',
+            'route' => 'damaged-stocks.index',
+            'group' => 'warehouse',
+            'icon'  => 'bx bx-error-alt',
         ],
         [
             'key'   => 'sales_request_approval',

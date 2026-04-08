@@ -390,6 +390,32 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->middleware('menu:wh_sales_reports');
 
 
+    /* === Damaged & Expired Stocks === */
+    // Admin WH View
+    Route::get('/admin/warehouse/damaged-stocks', [\App\Http\Controllers\Admin\DamagedStockController::class, 'index'])
+        ->name('damaged-stocks.index')
+        ->middleware('menu:wh_damaged_stocks');
+
+    // Superadmin Approval View
+    Route::get('/admin/operations/approval-stock-damage', [\App\Http\Controllers\Admin\DamagedStockController::class, 'approval'])
+        ->name('damaged-stocks.approval')
+        ->middleware('menu:approval_stock_damage');
+
+    // Shared Actions
+    Route::post('/admin/warehouse/damaged-stocks/bulk-request', [\App\Http\Controllers\Admin\DamagedStockController::class, 'bulkRequestAction'])
+        ->name('damaged-stocks.bulk-request')
+        ->middleware('menu:wh_damaged_stocks');
+
+    Route::post('/admin/warehouse/damaged-stocks/{damagedStock}/request', [\App\Http\Controllers\Admin\DamagedStockController::class, 'requestAction'])
+        ->name('damaged-stocks.request')
+        ->middleware('menu:wh_damaged_stocks');
+    Route::post('/admin/warehouse/damaged-stocks/{damagedStock}/approve', [\App\Http\Controllers\Admin\DamagedStockController::class, 'approveAction'])
+        ->name('damaged-stocks.approve')
+        ->middleware('menu:approval_stock_damage');
+    Route::post('/admin/warehouse/damaged-stocks/{damagedStock}/resolve', [\App\Http\Controllers\Admin\DamagedStockController::class, 'resolveAction'])
+        ->name('damaged-stocks.resolve')
+        ->middleware('menu:wh_damaged_stocks');
+
     /* === Warehouse Transfer === */
     Route::get('/warehouse/transfers', [WarehouseTransferController::class, 'index'])
         ->name('warehouse-transfers.index')

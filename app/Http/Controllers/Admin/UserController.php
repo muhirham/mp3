@@ -125,7 +125,7 @@ class UserController extends Controller
         $isWarehouse = $me->hasRole('warehouse');
 
         if ($isWarehouse) {
-            $canManage = $user->warehouse_id === $me->warehouse_id && $user->hasRole('sales');
+            $canManage = ($user->id === $me->id) || ($user->warehouse_id === $me->warehouse_id && $user->hasRole('sales'));
 
             if (!$canManage) {
                 abort(403);
@@ -149,7 +149,12 @@ class UserController extends Controller
         $roleSlugs = collect($data['roles'] ?? $user->roles->pluck('slug')->all());
 
         if ($isWarehouse) {
-            $roleSlugs = collect(['sales']);
+            // Admin WH can only assign 'sales' role to others, but keep their own roles if updating self
+            if ($user->id === $me->id) {
+                $roleSlugs = collect($user->roles->pluck('slug')->all());
+            } else {
+                $roleSlugs = collect(['sales']);
+            }
             $data['warehouse_id'] = $me->warehouse_id;
         } else {
             $needsWarehouse = $roleSlugs->contains(fn ($s) => in_array($s, ['warehouse','sales'], true));

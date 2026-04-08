@@ -299,7 +299,6 @@ class SalesReturnController extends Controller
             }
 
             if ($salesReturn->condition === 'good') {
-
                 $stock = DB::table('stock_levels')
                     ->where('owner_type','warehouse')
                     ->where('owner_id',$salesReturn->warehouse_id)
@@ -324,6 +323,18 @@ class SalesReturnController extends Controller
                         'updated_at' => now(),
                     ]);
                 }
+            } else {
+                // 🔥 MOVE TO DAMAGED STOCKS POOL
+                \App\Models\DamagedStock::create([
+                    'product_id'   => $salesReturn->product_id,
+                    'warehouse_id' => $salesReturn->warehouse_id,
+                    'source_type'  => 'sales_return',
+                    'source_id'    => $salesReturn->id,
+                    'quantity'     => $salesReturn->quantity,
+                    'condition'    => $salesReturn->condition, // 'damaged' or 'expired'
+                    'status'       => 'quarantine',
+                    'notes'        => "From Sales Return #{$salesReturn->id}. Reason: " . ($salesReturn->reason ?? '-'),
+                ]);
             }
 
             $salesReturn->update([
@@ -453,7 +464,6 @@ class SalesReturnController extends Controller
             foreach ($items as $salesReturn) {
 
                 if ($salesReturn->condition === 'good') {
-
                     $stock = DB::table('stock_levels')
                         ->where('owner_type','warehouse')
                         ->where('owner_id',$salesReturn->warehouse_id)
@@ -478,6 +488,18 @@ class SalesReturnController extends Controller
                             'updated_at' => now(),
                         ]);
                     }
+                } else {
+                    // 🔥 MOVE TO DAMAGED STOCKS POOL
+                    \App\Models\DamagedStock::create([
+                        'product_id'   => $salesReturn->product_id,
+                        'warehouse_id' => $salesReturn->warehouse_id,
+                        'source_type'  => 'sales_return',
+                        'source_id'    => $salesReturn->id,
+                        'quantity'     => $salesReturn->quantity,
+                        'condition'    => $salesReturn->condition,
+                        'status'       => 'quarantine',
+                        'notes'        => "From Bulk Sales Return approval. Reason: " . ($salesReturn->reason ?? '-'),
+                    ]);
                 }
 
                 $salesReturn->update([

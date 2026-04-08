@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Http\Controllers\Sales;
 
 use App\Http\Controllers\Controller;
@@ -139,102 +138,7 @@ class HandoverOtpItemsController extends Controller
         return response()->json(['success' => true]);
     }
 
-    /**
-     * Internal helper to resize and compress images using GD.
-     */
-    private function saveOptimizedImage($file, $directory): string
-    {
-        $maxDim = 1200;
-        $quality = 75;
-        $path = $file->getRealPath();
-        
-        // Get image type and dimensions
-        $info = @getimagesize($path);
-        if (!$info) return $file->store($directory, 'public');
-        
-        [$width, $height, $type] = $info;
 
-        // Handle orientation (Auto-Rotate) if JPEG
-        $rotateDeg = 0;
-        if ($type === IMAGETYPE_JPEG && function_exists('exif_read_data')) {
-            $exif = @exif_read_data($path);
-            if (!empty($exif['Orientation'])) {
-                switch ($exif['Orientation']) {
-                    case 3: $rotateDeg = 180; break;
-                    case 6: $rotateDeg = -90; break;
-                    case 8: $rotateDeg = 90; break;
-                }
-            }
-        }
-
-        // Calculate scale
-        $newWidth = $width;
-        $newHeight = $height;
-        if ($width > $maxDim || $height > $maxDim) {
-            $ratio = $width / $height;
-            if ($ratio > 1) {
-                $newWidth = $maxDim;
-                $newHeight = (int)($maxDim / $ratio);
-            } else {
-                $newHeight = $maxDim;
-                $newWidth = (int)($maxDim * $ratio);
-            }
-        }
-
-        // Create source resource
-        $src = match($type) {
-            IMAGETYPE_JPEG => @imagecreatefromjpeg($path),
-            IMAGETYPE_PNG  => @imagecreatefrompng($path),
-            IMAGETYPE_WEBP => @imagecreatefromwebp($path),
-            default        => null,
-        };
-        if (!$src) return $file->store($directory, 'public');
-
-        // Auto-Rotate if needed before resampling
-        if ($rotateDeg) {
-            $src = imagerotate($src, $rotateDeg, 0);
-            $width = imagesx($src);
-            $height = imagesy($src);
-            
-            // Recalculate new dimensions for rotated image
-            $newWidth = $width;
-            $newHeight = $height;
-            if ($width > $maxDim || $height > $maxDim) {
-                $ratio = $width / $height;
-                if ($ratio > 1) {
-                    $newWidth = $maxDim;
-                    $newHeight = (int)($maxDim / $ratio);
-                } else {
-                    $newHeight = $maxDim;
-                    $newWidth = (int)($maxDim * $ratio);
-                }
-            }
-        }
-
-        // Create destination (True Color)
-        $dst = imagecreatetruecolor($newWidth, $newHeight);
-
-        // 🔥 WHITE BACKGROUND for PNG/WebP (prevent black background on JPEG convert)
-        $white = imagecolorallocate($dst, 255, 255, 255);
-        imagefill($dst, 0, 0, $white);
-
-        imagecopyresampled($dst, $src, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
-
-        // UNIQUE FILENAME (Cache Busting)
-        $fileName = time() . '_' . bin2hex(random_bytes(4)) . '.jpg';
-        $finalPath = $directory . '/' . $fileName;
-
-        ob_start();
-        imagejpeg($dst, null, $quality);
-        $imageData = ob_get_clean();
-
-        Storage::disk('public')->put($finalPath, $imageData);
-
-        imagedestroy($src);
-        imagedestroy($dst);
-
-        return $finalPath;
-    }
 
     /**
      * Save payment data – supports split cash/transfer.
@@ -346,8 +250,8 @@ class HandoverOtpItemsController extends Controller
                     }
 
                     foreach ($proofFiles as $pf) {
-                        // 🔥 OPTIMIZED IMAGE SAVE (Resize & Compress)
-                        $stored = $this->saveOptimizedImage($pf, 'handover_item_transfer_proofs');
+                        // 🔥 OPTIMIZED IMAGE SAVE (Global Helper: Resize & Compress)
+                        $stored = save_optimized_image($pf, 'handover_item_transfer_proofs');
                         $proofPaths[] = [
                             'path'   => $stored,
                             'qty'    => $transferQty,
