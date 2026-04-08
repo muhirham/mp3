@@ -383,8 +383,11 @@ class GoodReceivedController extends Controller
                 // update stok (warehouse atau central)
                 if (Schema::hasTable('stock_levels')) {
                     if ($item->request_id && $warehouseId) {
+                        // FIX: Request Stock wajib potong pusat dan tambah cabang
                         $this->adjustWarehouseStock($warehouseId, $item->product_id, $good);
+                        $this->adjustCentralStock($item->product_id, -$good); 
                     } else {
+                        // PO Manual: barang datang dari luar, masuk ke pusat
                         $this->adjustCentralStock($item->product_id, $good);
                     }
                 }
@@ -632,12 +635,14 @@ class GoodReceivedController extends Controller
                     }
 
                     if ($requestId) {
-                        // GR dari Restock: langsung ke warehouse (tanpa mampir pusat)
+                        // FIX: GR dari Restock (Pusat ke Cabang) 
+                        // Rollback: Kurangi Cabang, Balikin ke Pusat
                         if ($warehouseId) {
                             $this->adjustWarehouseStock($warehouseId, $productId, -$qtyGood);
                         }
+                        $this->adjustCentralStock($productId, $qtyGood);
                     } else {
-                        // GR dari Supplier: masuk ke pusat
+                        // GR dari Supplier: Balikin stok pusat (kurangi karena barang batal masuk)
                         $this->adjustCentralStock($productId, -$qtyGood);
                     }
                 }
@@ -929,11 +934,12 @@ class GoodReceivedController extends Controller
                 $status     = 'received';
                 $receivedAt = $receivedAt ?: now();
             } elseif ($sumAll === 0) {
-                // Jika belum ada yang diterima, tetap status ordered (karena sudah di-PO)
-                $status     = 'ordered';
+                // FIX: Jika belum ada yang diterima (setelah rollback), balikkan ke 'approved' (REVIEW)
+                // agar tombol GR di gudang muncul kembali.
+                $status     = 'approved'; 
                 $receivedAt = null;
             } else {
-                // Partially received, tetap status ordered agar tombol GR tetap muncul
+                // Partially received, status 'ordered' agar tombol GR tetap muncul
                 $status     = 'ordered';
                 $receivedAt = null;
             }

@@ -721,17 +721,21 @@ $actions .= '</div>';
 
             $reqQty = $getReqQty($rr);
 
-            // ==== FIX: handle kalau belum pernah ada GR sama sekali ====
-            $existRow = $existing->get($reqId); // bisa null
-            $sumGood  = $existRow ? (int) $existRow->sum_good : 0;
-            $sumBad   = $existRow ? (int) $existRow->sum_bad  : 0;
-            // ===========================================================
-
+            // Ambil data real-time dari database untuk memastikan sinkronisasi
+            $existRow = DB::table('restock_receipts')
+                ->where('request_id', $reqId)
+                ->selectRaw('SUM(qty_good) as sum_good, SUM(qty_damaged) as sum_bad')
+                ->first();
+                
+            $sumGood  = (int) ($existRow->sum_good ?? 0);
+            $sumBad   = (int) ($existRow->sum_bad  ?? 0);
             $already  = $sumGood + $sumBad;
+            
             $newTotal = $already + $qtyGood + $qtyDamaged;
 
             if ($reqQty > 0 && $newTotal > $reqQty) {
-                return back()->with('error', 'Total receipt for one or more items exceeds the requested quantity.');
+                $productName = DB::table('products')->where('id', $rr->product_id)->value('name');
+                return back()->with('error', "Gagal! Total penerimaan ({$newTotal}) melebihi jumlah yang diminta ({$reqQty}) untuk produk: {$productName}");
             }
         }
 
@@ -793,6 +797,7 @@ try {
             'product_id'        => $productId,
             'warehouse_id'      => $whId,
             'supplier_id'       => $supplierId,
+            'gr_type'           => \App\Models\RestockReceipt::TYPE_REQUEST_STOCK,
             'qty_requested'     => $reqQty,
             'qty_good'          => $qtyGood,
             'qty_damaged'       => $qtyDamaged,
