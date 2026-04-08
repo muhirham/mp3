@@ -291,6 +291,9 @@ class WarehouseTransferController extends Controller
 
         DB::transaction(function () use ($request, $transfer) {
 
+            $firstReceiptId = null;
+            $grCode = 'GR-WT-' . now()->format('Ymd') . '-' . strtoupper(Str::random(5));
+
             foreach ($transfer->items as $item) {
 
                 $input = $request->items[$item->id] ?? null;
@@ -339,6 +342,49 @@ class WarehouseTransferController extends Controller
                 );
 
                 $item->save();
+
+                // ===============================
+                // SIMPAN KE restock_receipts (CENTRALIZED)
+                // ===============================
+                $receiptId = DB::table('restock_receipts')->insertGetId([
+                    'purchase_order_id' => null, // bukan dari PO
+                    'request_id'        => $transfer->id, // link ke transfer
+                    'warehouse_id'      => $transfer->source_warehouse_id,
+                    'supplier_id'       => null,
+                    'product_id'        => $item->product_id,
+                    'gr_type'           => \App\Models\RestockReceipt::TYPE_TRANSFER,
+                    'code'              => $grCode,
+                    'qty_requested'     => $item->qty_transfer,
+                    'qty_good'          => $good,
+                    'qty_damaged'       => $damaged,
+                    'notes'             => $input['note'] ?? null,
+                    'received_by'       => auth()->id(),
+                    'received_at'       => now(),
+                    'created_at'        => now(),
+                    'updated_at'        => now(),
+                ]);
+
+                if (!$firstReceiptId) $firstReceiptId = $receiptId;
+
+                // SIMPAN FOTO KE restock_receipt_photos (SINKRON)
+                if ($item->photo_good) {
+                    DB::table('restock_receipt_photos')->insert([
+                        'receipt_id' => $receiptId,
+                        'path'       => $item->photo_good,
+                        'type'       => 'good',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+                if ($item->photo_damaged) {
+                    DB::table('restock_receipt_photos')->insert([
+                        'receipt_id' => $receiptId,
+                        'path'       => $item->photo_damaged,
+                        'type'       => 'damaged',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
 
                 DB::table('stock_levels')
                     ->where('owner_type', 'warehouse')
