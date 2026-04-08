@@ -75,6 +75,7 @@ class GRController extends Controller
 
                     // manual PO → tidak punya request_id
                     'request_id'        => null,
+                    'gr_type' => RestockReceipt::TYPE_PO,
 
                     'product_id'        => $it->product_id,
                     'warehouse_id'      => $it->warehouse_id,

@@ -238,10 +238,17 @@ class GoodReceivedController extends Controller
             ->selectRaw('product_id, SUM(qty_good) as qty_good')
             ->groupBy('product_id')
             ->pluck('qty_good', 'product_id');
+        
+        $damagedByProduct = DB::table('restock_receipts')
+            ->where('purchase_order_id', $po->id)
+            ->selectRaw('product_id, SUM(qty_damaged) as qty_damaged')
+            ->groupBy('product_id')
+            ->pluck('qty_damaged', 'product_id');
 
 
-            $po->items->each(function ($item) use ($goodByProduct) {
+            $po->items->each(function ($item) use ($goodByProduct, $damagedByProduct) {
             $item->qty_received_good = $goodByProduct[$item->product_id] ?? 0;
+            $item->qty_received_damaged = $damagedByProduct[$item->product_id] ?? 0;
         });
 
 
@@ -306,9 +313,10 @@ class GoodReceivedController extends Controller
         $firstReceiptId = null;
 
         $hasCodeColumn = Schema::hasColumn('restock_receipts', 'code');
+        $grCode = $hasCodeColumn ? $this->nextReceiptCode() : null;
 
         DB::beginTransaction();
-
+        
         try {
             foreach ($rows as $itemId => $row) {
                 $item = PurchaseOrderItem::where('purchase_order_id', $po->id)
@@ -339,6 +347,9 @@ class GoodReceivedController extends Controller
                 $payload = [
                     'purchase_order_id' => $po->id,
                     'request_id'        => $item->request_id,
+                    'gr_type' => $item->request_id
+                        ? RestockReceipt::TYPE_REQUEST_STOCK
+                        : RestockReceipt::TYPE_PO,
                     'product_id'        => $item->product_id,
                     'warehouse_id'      => $warehouseId,
                     'supplier_id'       => $po->supplier_id,
@@ -353,7 +364,7 @@ class GoodReceivedController extends Controller
                 ];
 
                 if ($hasCodeColumn) {
-                    $payload['code'] = $this->nextReceiptCode();
+                    $payload['code'] = $grCode;
                 }
 
                 $receiptId = DB::table('restock_receipts')->insertGetId($payload);
@@ -361,7 +372,7 @@ class GoodReceivedController extends Controller
                 if (! $firstReceiptId) $firstReceiptId = $receiptId;
 
                 // update qty_received item
-                $newReceived = $received + $good;
+                $newReceived = $received + $good + $bad;
                 DB::table('purchase_order_items')
                     ->where('id', $item->id)
                     ->update([
