@@ -86,6 +86,36 @@ class WarehouseController extends Controller
             abort(403);
         }
 
+        // --- PROTEKSI KERAS: CEK STOK & TRANSAKSI ---
+
+        // 1. Cek Stok (stock_levels)
+        $totalStock = (int) \Illuminate\Support\Facades\DB::table('stock_levels')
+            ->where('owner_type', 'warehouse')
+            ->where('owner_id', $warehouse->id)
+            ->sum('quantity');
+
+        if ($totalStock > 0) {
+            return response()->json([
+                'message' => "Gudang tidak bisa dihapus karena masih memiliki stok aktif ({$totalStock} unit)."
+            ], 422);
+        }
+
+        // 2. Cek Transaksi Terkait (Gudang ini tidak boleh ada di histori manapun agar DB tetap clean)
+        // Kita cek tabel-tabel utama
+        $hasRestock  = \Illuminate\Support\Facades\DB::table('request_restocks')->where('warehouse_id', $warehouse->id)->exists();
+        $hasPOItem   = \Illuminate\Support\Facades\DB::table('purchase_order_items')->where('warehouse_id', $warehouse->id)->exists();
+        $hasTransfer = \Illuminate\Support\Facades\DB::table('warehouse_transfers')
+            ->where('source_warehouse_id', $warehouse->id)
+            ->orWhere('destination_warehouse_id', $warehouse->id)
+            ->exists();
+        $hasHandover = \Illuminate\Support\Facades\DB::table('sales_handovers')->where('warehouse_id', $warehouse->id)->exists();
+
+        if ($hasRestock || $hasPOItem || $hasTransfer || $hasHandover) {
+            return response()->json([
+                'message' => "Gudang tidak bisa dihapus karena sudah memiliki histori transaksi (Restock/PO/Transfer/Handover)."
+            ], 422);
+        }
+
         $warehouse->delete();
 
         return response()->noContent();
