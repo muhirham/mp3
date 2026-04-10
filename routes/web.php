@@ -264,14 +264,18 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->name('goodreceived.index')
         ->middleware('menu:goodreceived');
 
+    Route::get('/good-received/export/excel', [GoodReceivedController::class, 'exportExcel'])
+        ->name('goodreceived.export')
+        ->middleware('menu:goodreceived');
+
 
     // Ajukan permohonan delete GR untuk 1 GR (bukan PO)        
-    Route::post('/good-received/{receipt}/cancel', [GoodReceivedController::class, 'cancelFromGr'])
+    Route::post('/good-received/{code}/cancel', [GoodReceivedController::class, 'cancelFromGr'])
         ->name('good-received.cancel')
         ->middleware('menu:goodreceived');
 
 
-    Route::get('/good-received/{po}/detail', [GoodReceivedController::class, 'detail'])
+    Route::get('/good-received/{code}/detail', [GoodReceivedController::class, 'detail'])
         ->name('goodreceived.detail')
         ->middleware('menu:goodreceived');
 

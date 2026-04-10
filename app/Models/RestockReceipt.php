@@ -49,6 +49,16 @@ class RestockReceipt extends Model
         return $this->belongsTo(\App\Models\RequestRestock::class, 'request_id');
     }
 
+    public function warehouseTransfer()
+    {
+        return $this->belongsTo(\App\Models\WarehouseTransfer::class, 'request_id');
+    }
+
+    public function salesReturn()
+    {
+        return $this->belongsTo(\App\Models\SalesReturn::class, 'request_id');
+    }
+
     public function warehouse()
     {
         return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id');

@@ -1,5 +1,6 @@
     @php
-        $receipts = $po->restockReceipts->sortBy('id');
+        // $receipts, $first, $po, $displayItems, $goodByProduct, $damagedByProduct sudah dikirim dari controller
+
         $totalGood = (int) $receipts->sum('qty_good');
         $totalDamaged = (int) $receipts->sum('qty_damaged');
         $photosAll = $receipts->flatMap(fn($r) => $r->photos ?? collect());
@@ -8,10 +9,8 @@
         $damagedPhotos = collect();
 
         foreach ($photosAll as $p) {
-            $tag = strtolower(trim($p->kind ?? ($p->type ?? ($p->status ?? ($p->caption ?? '')))));
-
-            $isDamaged =
-                strpos($tag, 'dam') !== false || strpos($tag, 'bad') !== false || strpos($tag, 'rusak') !== false;
+            $tag = strtolower(trim($p->type ?? ($p->kind ?? ($p->caption ?? ''))));
+            $isDamaged = strpos($tag, 'dam') !== false || strpos($tag, 'bad') !== false || strpos($tag, 'rusak') !== false;
 
             if ($isDamaged) {
                 $damagedPhotos->push($p);
@@ -24,88 +23,43 @@
             $goodPhotos = $photosAll;
         }
 
-        $totalLines = $po->items->count();
+        $typeLabel = match($first->gr_type) {
+            'po' => ['text' => 'PURCHASE ORDER', 'color' => 'primary'],
+            'request_stock' => ['text' => 'REQUEST STOCK', 'color' => 'warning'],
+            'gr_transfer' => ['text' => 'WAREHOUSE TRANSFER', 'color' => 'info'],
+            'gr_return' => ['text' => 'SALES RETURN / DAMAGE', 'color' => 'danger'],
+            default => ['text' => 'GOODS RECEIVED', 'color' => 'secondary'],
+        };
 
-        $subtotal = (float) ($po->subtotal ?? 0);
-        $discountTotal = (float) ($po->discount_total ?? 0);
-        $grandTotal = (float) ($po->grand_total ?? $subtotal - $discountTotal);
+        $lastReceiveAt = optional($first->received_at)->format('d/m/Y H:i') ?? '-';
+        $lastReceiver = $first->receiver->name ?? '-';
 
-        $manualTotal = 0;
-        foreach ($po->items as $it) {
-            $price = $it->unit_price ?? 0;
-            $manualTotal += (int) $it->qty_ordered * (float) $price;
-        }
-        if ($grandTotal <= 0 && $manualTotal > 0) {
-            $grandTotal = $manualTotal;
-        }
-
-        $lastReceipt = $receipts->sortByDesc('received_at')->first();
-        $lastReceiveAt = optional($lastReceipt?->received_at)?->format('d/m/Y H:i') ?? '-';
-        $lastReceiver = $lastReceipt?->receiver->name ?? '-';
-
-        // Supplier summary (modal)
-        $supFromPo = optional($po->supplier)->name;
-        $itemSuppliers = $po->items->map(fn($it) => optional(optional($it->product)->supplier)->name)->filter();
-        $receiptSuppliers = $receipts->map(fn($r) => optional($r->supplier)->name)->filter();
-
-        $supplierNamesModal = collect([$supFromPo])
-            ->merge($itemSuppliers)
-            ->merge($receiptSuppliers)
-            ->filter()
-            ->unique()
-            ->values();
-
-        if ($supplierNamesModal->isEmpty()) {
-            $supplierLabelModal = '-';
-        } elseif ($supplierNamesModal->count() === 1) {
-            $supplierLabelModal = $supplierNamesModal->first();
-        } else {
-            $supplierLabelModal =
-                $supplierNamesModal->first() . ' + ' . ($supplierNamesModal->count() - 1) . ' supplier';
+        // Source Ref
+        $sourceRef = $first->code;
+        if($first->gr_type == 'po' && $po) {
+            $sourceRef = $po->po_code;
+        } elseif($first->gr_type == 'request_stock' && $first->request) {
+            $sourceRef = $first->request->code;
+        } elseif($first->gr_type == 'gr_transfer' && $first->warehouseTransfer) {
+            $sourceRef = $first->warehouseTransfer->code;
         }
 
-        // Warehouse label (modal)
-        $warehouseNamesModal = $receipts
-            ->map(function ($r) {
-                if ($r->warehouse) {
-                    return $r->warehouse->warehouse_name ?? ($r->warehouse->name ?? 'Warehouse #' . $r->warehouse_id);
-                }
-                return 'Central Stock';
-            })
-            ->filter()
-            ->unique()
-            ->values();
-
-        if ($warehouseNamesModal->isEmpty()) {
-            $warehouseLabelModal = '-';
-        } elseif ($warehouseNamesModal->count() === 1) {
-            $warehouseLabelModal = $warehouseNamesModal->first();
-        } else {
-            $hasCentralModal = $warehouseNamesModal->contains('Central Stock');
-            $otherCountModal = $warehouseNamesModal->count() - 1;
-
-            if ($hasCentralModal) {
-                $warehouseLabelModal = 'Central Stock + ' . $otherCountModal . ' wh';
-            } else {
-                $warehouseLabelModal = $warehouseNamesModal->first() . ' + ' . $otherCountModal . ' wh';
-            }
-        }
+        // Hitung Subtotal Berdasarkan Barang Bagus (Actual Payable)
+        $subtotal = $displayItems->sum(function($it) use ($goodByProduct) {
+             return (int)($goodByProduct[$it->product_id] ?? 0) * (float)($it->unit_price ?? 0);
+        });
+        $discountTotal = $po ? (float) ($po->discount_total ?? 0) : 0;
+        $grandTotal = $subtotal - $discountTotal;
 
         $notes = $receipts->pluck('notes')->filter()->unique()->implode(' | ');
-
-        $statsByProduct = $receipts->groupBy('product_id')->map(function($group) {
-            return [
-                'good' => $group->sum('qty_good'),
-                'damaged' => $group->sum('qty_damaged')
-            ];
-        });
 
         $formatRupiah = fn($v) => 'Rp ' . number_format($v, 0, ',', '.');
     @endphp
 
     <div class="modal-header border-0 pb-1">
         <h5 class="modal-title fw-bold">
-            Goods Receipt (GR) &amp; PO Detail
+            Goods Received Details
+            <span class="badge bg-label-{{ $typeLabel['color'] }} ms-2" style="font-size: 0.7rem;">{{ $typeLabel['text'] }}</span>
         </h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
     </div>
@@ -115,15 +69,15 @@
         <div class="border rounded p-3 mb-3">
             <div class="d-flex justify-content-between align-items-start">
                 <div>
-                    <div class="text-uppercase small text-muted mb-1">PO Code</div>
-                    <div class="fs-5 fw-bold">{{ $po->po_code }}</div>
-                    <div class="small text-muted">
-                        Last received: {{ $lastReceiveAt }}
+                    <div class="text-uppercase small text-muted mb-1">Source / GR Code</div>
+                    <div class="fs-5 fw-bold text-primary">{{ $sourceRef }}</div>
+                    <div class="small text-muted mt-1">
+                        GR Date: <strong>{{ $lastReceiveAt }}</strong>
                     </div>
                 </div>
                 <div class="text-end small">
-                    <div class="fw-bold">{{ $company->name ?? config('app.name', 'Inventory System') }}</div>
-                    <div>{{ $warehouseLabelModal }}</div>
+                    <div class="fw-bold fs-6">{{ $company->name ?? config('app.name', 'Inventory System') }}</div>
+                    <div class="text-muted">{{ $first->warehouse?->warehouse_name ?? 'Central Stock' }}</div>
                     <div>Received by: <strong>{{ $lastReceiver }}</strong></div>
                 </div>
             </div>
@@ -133,21 +87,20 @@
         <div class="row mb-2">
             <div class="col-md-7">
                 <table class="table table-sm table-borderless mb-0 small">
+                    @php
+                        $fallbackSupplier = $displayItems->first()?->product?->supplier?->name ?? '-';
+                    @endphp
                     <tr>
-                        <th class="ps-0" style="width:140px;">Supplier</th>
-                        <td class="ps-0">{{ $supplierLabelModal }}</td>
+                        <th class="ps-0" style="width:140px;">Supplier / Entity</th>
+                        <td class="ps-0">{{ $first->supplier?->name ?? ($po->supplier?->name ?? $fallbackSupplier) }}</td>
                     </tr>
                     <tr>
                         <th class="ps-0">Total Items</th>
-                        <td class="ps-0">{{ $totalLines }} items</td>
+                        <td class="ps-0">{{ $displayItems->count() }} items</td>
                     </tr>
                     <tr>
                         <th class="ps-0">Subtotal</th>
                         <td class="ps-0">{{ $formatRupiah($subtotal) }}</td>
-                    </tr>
-                    <tr>
-                        <th class="ps-0">Discount</th>
-                        <td class="ps-0">{{ $formatRupiah($discountTotal) }}</td>
                     </tr>
                     <tr>
                         <th class="ps-0">Total Amount</th>
@@ -158,33 +111,33 @@
             <div class="col-md-5">
                 <table class="table table-sm table-borderless mb-0 small">
                     <tr>
-                        <th class="ps-0" style="width:160px;">Total Qty Ordered</th>
-                        <td class="ps-0">{{ $po->items->sum('qty_ordered') }}</td>
+                        <th class="ps-0" style="width:160px;">Total Qty Target</th>
+                        <td class="ps-0">{{ $displayItems->sum('qty_ordered') }}</td>
                     </tr>
                     <tr>
                         <th class="ps-0">Total Qty Received</th>
-                        <td class="ps-0">{{ $po->items->sum('qty_received') }}</td>
+                        <td class="ps-0">{{ $totalGood + $totalDamaged }}</td>
                     </tr>
                     <tr>
-                        <th class="ps-0">Total Qty Good (GR)</th>
+                        <th class="ps-0">Total Qty Good</th>
                         <td class="ps-0 text-success fw-semibold">{{ $totalGood }}</td>
                     </tr>
                     <tr>
-                        <th class="ps-0">Total Qty Damaged (GR)</th>
+                        <th class="ps-0">Total Qty Damaged</th>
                         <td class="ps-0 text-danger fw-semibold">{{ $totalDamaged }}</td>
                     </tr>
                 </table>
             </div>
         </div>
 
-        {{-- ITEM PO + HARGA --}}
+        {{-- ITEM TABLE --}}
         <div class="mb-3 overflow-auto">
             <table class="table table-sm table-bordered mb-0" style="font-size: 0.82rem;">
                 <thead class="table-light">
                     <tr class="text-center text-nowrap align-middle">
                         <th style="width:40px;">No.</th>
                         <th class="text-start">Product Name / Description</th>
-                        <th style="width:80px;">Qty Ordered</th>
+                        <th style="width:80px;">Qty Target</th>
                         <th style="width:80px;">Qty Received</th>
                         <th style="width:80px;">Qty Good</th>
                         <th style="width:90px;">Qty Damaged</th>
@@ -193,12 +146,13 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach ($po->items as $idx => $item)
+                    @foreach ($displayItems as $idx => $item)
                         @php
                             $price = $item->unit_price ?? 0;
-                            $subtotalItem = (int) $item->qty_ordered * (float) $price;
-                            $itemGood = $statsByProduct[$item->product_id]['good'] ?? 0;
-                            $itemDamaged = $statsByProduct[$item->product_id]['damaged'] ?? 0;
+                            $itemGood = $goodByProduct[$item->product_id] ?? 0;
+                            $subtotalItem = (int) $itemGood * (float) $price;
+                            $itemGood = $goodByProduct[$item->product_id] ?? 0;
+                            $itemDamaged = $damagedByProduct[$item->product_id] ?? 0;
                         @endphp
                         <tr class="align-middle">
                             <td class="text-center text-muted">{{ $idx + 1 }}</td>
@@ -209,7 +163,7 @@
                                 </div>
                             </td>
                             <td class="text-center">{{ $item->qty_ordered }}</td>
-                            <td class="text-center">{{ $item->qty_received }}</td>
+                            <td class="text-center">{{ $itemGood + $itemDamaged }}</td>
                             <td class="text-center text-success fw-semibold">
                                 {{ $itemGood }}
                             </td>
@@ -291,8 +245,8 @@
             Close
         </button>
 
-        @if ($isSuperadmin && $lastReceipt)
-            <form method="POST" action="{{ route('good-received.cancel', $lastReceipt) }}"
+        @if ($isSuperadmin && $first && in_array($first->gr_type, ['po', 'request_stock']))
+            <form method="POST" action="{{ route('good-received.cancel', $first->code) }}"
                 class="form-cancel-gr d-inline">
                 @csrf
                 <button type="submit" class="btn btn-outline-danger">

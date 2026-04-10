@@ -410,9 +410,25 @@ class WarehouseTransferController extends Controller
                         'owner_type' => 'warehouse',
                         'owner_id'   => $transfer->source_warehouse_id,
                         'product_id' => $item->product_id,
-                        'quantity'  => $good,
+                        'quantity'   => $good,
                         'created_at' => now(),
                         'updated_at' => now(),
+                    ]);
+                }
+
+                // logic karantina: masukkan ke damaged_stocks jika ada yang rusak
+                if ($damaged > 0 && Schema::hasTable('damaged_stocks')) {
+                    DB::table('damaged_stocks')->insert([
+                        'product_id'   => $item->product_id,
+                        'warehouse_id' => $transfer->source_warehouse_id, // gudang penerima
+                        'source_type'  => 'warehouse_transfer',
+                        'source_id'    => $transfer->id,
+                        'quantity'     => $damaged,
+                        'condition'    => 'damaged',
+                        'status'       => 'quarantine',
+                        'notes'        => "Auto-created from Transfer GR: {$grCode}. " . ($input['note'] ?? ''),
+                        'created_at'   => now(),
+                        'updated_at'   => now(),
                     ]);
                 }
             }

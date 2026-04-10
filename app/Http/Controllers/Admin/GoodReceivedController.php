@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Exports\Restocks\GoodReceivedIndexExport;
 use App\Http\Controllers\Controller;
 use App\Models\RestockReceipt;
 use App\Models\Warehouse;
@@ -14,15 +15,20 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use App\Models\Company;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Traits\RestockSyncTrait;
 
 
 class GoodReceivedController extends Controller
 {
+    use RestockSyncTrait;
+
     public function index(Request $request)
     {
         $q           = trim($request->get('q', ''));
         $supplierId  = $request->get('supplier_id');
         $warehouseId = $request->get('warehouse_id');
+        $grType      = $request->get('gr_type'); // Tipe Baru: po, request_stock, gr_transfer, gr_return
         $dateFrom    = $request->get('date_from');
         $dateTo      = $request->get('date_to');
 
@@ -30,166 +36,99 @@ class GoodReceivedController extends Controller
         $roles = $me?->roles ?? collect();
 
         $isWarehouseUser = $roles->contains('slug', 'warehouse');
-        $isSuperadmin    = $roles->contains('slug', 'superadmin'); // kalau kepake nanti
+        $isSuperadmin    = $roles->contains('slug', 'superadmin');
 
-        // ===== helper filter untuk GR yang masih aktif (qty > 0) =====
-        $onlyActiveGr = function ($q) {
-            $q->where(function ($qq) {
-                $qq->where('qty_good', '>', 0)
-                    ->orWhere('qty_damaged', '>', 0);
-            });
-        };
+        // Query Utama dari RestockReceipt
+        $query = RestockReceipt::with(['purchaseOrder', 'supplier', 'warehouse', 'product', 'photos', 'receiver'])
+            ->select('code', 'gr_type', 'purchase_order_id', 'warehouse_id', 'supplier_id', 'received_by', 'received_at')
+            ->selectRaw('MAX(request_id) as request_id, SUM(qty_good) as total_good, SUM(qty_damaged) as total_damaged, COUNT(id) as total_items')
+            ->groupBy('code', 'gr_type', 'purchase_order_id', 'warehouse_id', 'supplier_id', 'received_by', 'received_at');
 
-        // ====== QUERY PO YANG SUDAH PUNYA GR (masih aktif) ======
-        $poQuery = PurchaseOrder::with([
-            'supplier',
-            'items.product',
-            // restockReceipts yg di-load juga cuma yang masih punya qty
-            'restockReceipts' => function ($rr) use (
-                $me,
-                $isWarehouseUser,
-                $warehouseId,
-                $dateFrom,
-                $dateTo,
-                $onlyActiveGr
-            ) {
-                // USER WAREHOUSE: hanya GR di gudang & oleh user itu sendiri
-                if ($isWarehouseUser && $me) {
-                    if ($me->warehouse_id) {
-                        $rr->where('warehouse_id', $me->warehouse_id);
-                    }
-                    $rr->where('received_by', $me->id);
-                } else {
-                    // ADMIN / SUPERADMIN bisa filter warehouse bebas
-                    if ($warehouseId) {
-                        $rr->where('warehouse_id', $warehouseId);
-                    }
-                }
-
-                if ($dateFrom && $dateTo) {
-                    $rr->whereBetween('received_at', [
-                        $dateFrom,
-                        $dateTo . ' 23:59:59',
-                    ]);
-                }
-
-                // hanya GR yang qty_good + qty_damaged > 0
-                $onlyActiveGr($rr);
-
-                // load relasi lain
-                $rr->with(['photos', 'receiver', 'warehouse', 'supplier']);
-            },
-        ]);
-
-        // PO wajib punya restockReceipts (yang masih aktif)
-        $poQuery->whereHas('restockReceipts', function ($rr) use (
-            $me,
-            $isWarehouseUser,
-            $warehouseId,
-            $dateFrom,
-            $dateTo,
-            $onlyActiveGr
-        ) {
-            if ($isWarehouseUser && $me) {
-                if ($me->warehouse_id) {
-                    $rr->where('warehouse_id', $me->warehouse_id);
-                }
-                $rr->where('received_by', $me->id);
-            } else {
-                if ($warehouseId) {
-                    $rr->where('warehouse_id', $warehouseId);
-                }
+        // Filter User Warehouse: Warehouse Admin hanya bisa lihat gudang mereka sendiri
+        if ($isWarehouseUser && $me) {
+            $query->where('warehouse_id', $me->warehouse_id);
+        } else {
+            if ($warehouseId) {
+                $query->where('warehouse_id', $warehouseId);
             }
-
-            if ($dateFrom && $dateTo) {
-                $rr->whereBetween('received_at', [
-                    $dateFrom,
-                    $dateTo . ' 23:59:59',
-                ]);
-            }
-
-            // hanya GR aktif
-            $onlyActiveGr($rr);
-        });
-
-        // ===== Filter search q (PO code / GR code) =====
-        if ($q !== '') {
-            $poQuery->where(function ($qq) use ($q, $onlyActiveGr) {
-                $qq->where('po_code', 'like', "%{$q}%")
-                    ->orWhereHas('restockReceipts', function ($rr) use ($q, $onlyActiveGr) {
-                        $rr->where('code', 'like', "%{$q}%");
-
-                        // pastikan search juga cuma ke GR yang masih punya qty
-                        $onlyActiveGr($rr);
-                    });
-            });
         }
 
-        // ===== Filter supplier =====
+        // Filter Tipe GR
+        if ($grType) {
+            $query->where('gr_type', $grType);
+        }
+
+        // Filter Supplier
         if ($supplierId) {
-            $poQuery->where('supplier_id', $supplierId);
+            $query->where('supplier_id', $supplierId);
         }
 
-        $pos = $poQuery
-            ->orderByDesc('id')
-            ->paginate(8);
-
-        $pos->appends($request->all());
-
-        // group delete request per PO (log tetap ada, nggak dihapus)
-        $deleteRequests = GrDeleteRequest::whereIn('purchase_order_id', $pos->pluck('id')->all())
-            ->latest()
-            ->get()
-            ->groupBy('purchase_order_id');
-
-        // === AJAX RESPONSE (untuk search/filter/pagination tanpa reload) ===
-        if ($request->ajax()) {
-            $html = view('admin.masterdata.partials.goodReceivedTable', compact(
-                'pos',
-                'deleteRequests'
-            ))->render();
-
-            return response()->json([
-                'html' => $html,
+        // Filter Tanggal
+        if ($dateFrom && $dateTo) {
+            $query->whereBetween('received_at', [
+                $dateFrom . ' 00:00:00',
+                $dateTo . ' 23:59:59',
             ]);
         }
 
-        // ====== LIST WAREHOUSE UNTUK FILTER (full page pertama saja) ======
-        $whQuery = Warehouse::query();
-        if (Schema::hasColumn('warehouses', 'warehouse_name')) {
-            $whQuery->orderBy('warehouse_name');
-            $warehouses = $whQuery->get(['id', DB::raw('warehouse_name as name')]);
-        } elseif (Schema::hasColumn('warehouses', 'name')) {
-            $whQuery->orderBy('name');
-            $warehouses = $whQuery->get(['id', 'name']);
-        } else {
-            $warehouses = $whQuery->get(['id'])->map(function ($w) {
-                return (object) [
-                    'id'   => $w->id,
-                    'name' => 'Warehouse #' . $w->id,
-                ];
+        // Filter Search (Code atau PO Code)
+        if ($q !== '') {
+            $query->where(function ($qq) use ($q) {
+                $qq->where('code', 'like', "%{$q}%")
+                  ->orWhereHas('purchaseOrder', function($p) use ($q) {
+                      $p->where('po_code', 'like', "%{$q}%");
+                  });
             });
         }
 
-        $suppliers = Supplier::orderBy('name')->get(['id', 'name']);
+        $perPage  = (int) $request->get('per_page', 10);
+        $receipts = $query->orderByDesc('received_at')->paginate($perPage);
+        $receipts->appends($request->all());
 
-        $company = Company::where('is_default', true)
-        ->where('is_active', true)
-        ->first();
-
+        // Untuk Dropdown Filter
+        $suppliers  = Supplier::orderBy('name')->get(['id', 'name']);
+        $warehouses = Warehouse::orderBy('warehouse_name')->get(['id', 'warehouse_name as name']);
 
         return view('admin.masterdata.goodReceived', compact(
-            'pos',
-            'q',
-            'warehouses',
-            'suppliers',
-            'supplierId',
-            'warehouseId',
-            'dateFrom',
+            'receipts', 
+            'suppliers', 
+            'warehouses', 
+            'q', 
+            'supplierId', 
+            'warehouseId', 
+            'grType',
+            'dateFrom', 
             'dateTo',
-            'deleteRequests',
-            'company'   
+            'isWarehouseUser',
+            'isSuperadmin',
+            'perPage'
         ));
+    }
+
+    /**
+     * Export Excel raw data Goods Received
+     */
+    public function exportExcel(Request $r)
+    {
+        $filters = [
+            'q'            => $r->query('q', ''),
+            'supplier_id'  => $r->query('supplier_id', ''),
+            'warehouse_id' => $r->query('warehouse_id', ''),
+            'gr_type'      => $r->query('gr_type', ''),
+            'date_from'    => $r->query('date_from', ''),
+            'date_to'      => $r->query('date_to', ''),
+        ];
+
+        // Security: Lock warehouse_id for non-superadmins
+        $me = auth()->user();
+        if ($me && $me->hasRole('warehouse')) {
+            $filters['warehouse_id'] = $me->warehouse_id;
+        }
+
+        return Excel::download(
+            new GoodReceivedIndexExport($filters),
+            'GOOD_RECEIVED_RAW_DATA_' . now()->format('Ymd_His') . '.xlsx'
+        );
     }
 
     /** Generator kode GR unik: GR-YYMMDD-0001 */
@@ -211,51 +150,129 @@ class GoodReceivedController extends Controller
         return $prefix . str_pad($n, 4, '0', STR_PAD_LEFT);
     }
 
-    public function detail(PurchaseOrder $po)
+    public function detail($code)
     {
         $me    = auth()->user();
         $roles = $me?->roles ?? collect();
-
         $isSuperadmin = $roles->contains('slug', 'superadmin');
 
-        // Load relasi yang dibutuhin di modal
-        $po->load([
-            'supplier',
-            'items.product',
-            'restockReceipts.photos',
-            'restockReceipts.receiver',
-            'restockReceipts.warehouse',
-            'restockReceipts.supplier',
-        ]);
+        // Coba cari pake KODE dulu, kalau zonk coba cari pake ID (buat handle data lama/error)
+        $receipts = RestockReceipt::with([
+                'purchaseOrder.supplier', 
+                'purchaseOrder.items.product', 
+                'supplier', 
+                'warehouse', 
+                'product', 
+                'photos', 
+                'receiver', 
+                'request.product',
+                'warehouseTransfer.items.product',
+                'salesReturn.product'
+            ])
+            ->where('code', $code)
+            ->get();
+
+        if ($receipts->isEmpty() && is_numeric($code)) {
+            // Jika pencarian kode gagal, coba cari pake ID as fallback
+            $fallback = RestockReceipt::find($code);
+            if ($fallback) {
+                $realCode = $fallback->code;
+                // Ambil semua row yang punya kode yang sama dengan ID yang ditemukan
+                $receipts = RestockReceipt::with([
+                    'purchaseOrder.supplier', 
+                    'purchaseOrder.items.product', 
+                    'supplier', 
+                    'warehouse', 
+                    'product', 
+                    'photos', 
+                    'receiver', 
+                    'request.product', 
+                    'salesReturn.product',
+                    'warehouseTransfer.items.product'
+                ])
+                ->where('code', $realCode ?: 'NONE') // handle if code is null
+                ->orWhere('id', $code)
+                ->get();
+            }
+        }
+
+        if ($receipts->isEmpty()) {
+            abort(404, 'Goods Received records not found.');
+        }
+
+        $first = $receipts->first();
+
+        // Security Audit: Pastikan orang gudang gak bisa ngintip gudang orang lewat URL
+        $isWarehouse = $roles->contains('slug', 'warehouse');
+        if ($isWarehouse && !$isSuperadmin) {
+            if ($first->warehouse_id != $me->warehouse_id) {
+                abort(403, 'Unauthorized. You cannot view Goods Received records from another warehouse.');
+            }
+        }
+
+        // Re-eager load to ensure we have all data for the detail modal
+        $receipts->loadMissing(['product.supplier', 'supplier', 'receiver', 'request.product.supplier', 'warehouseTransfer.items.product.supplier', 'salesReturn.product.supplier']);
+
+        $first = $receipts->first();
+        $po    = $first->purchaseOrder; 
 
         $company = Company::where('is_default', true)
             ->where('is_active', true)
             ->first();
 
+        $displayItems = collect();
         
-        $goodByProduct = DB::table('restock_receipts')
-            ->where('purchase_order_id', $po->id)
-            ->selectRaw('product_id, SUM(qty_good) as qty_good')
-            ->groupBy('product_id')
-            ->pluck('qty_good', 'product_id');
-        
-        $damagedByProduct = DB::table('restock_receipts')
-            ->where('purchase_order_id', $po->id)
-            ->selectRaw('product_id, SUM(qty_damaged) as qty_damaged')
-            ->groupBy('product_id')
-            ->pluck('qty_damaged', 'product_id');
+        if ($po) {
+            $po->load(['items.product.supplier', 'supplier']);
+            $displayItems = $po->items;
+        } elseif ($first->gr_type == 'gr_transfer' && $first->warehouseTransfer) {
+            // Mapping WarehouseTransfer items biar polanya sama kayak PO item
+            foreach($first->warehouseTransfer->items as $it) {
+                $displayItems->push((object)[
+                    'product_id'   => $it->product_id,
+                    'product'      => $it->product,
+                    'qty_ordered'  => $it->qty_transfer, // Target transfer
+                    'unit_price'   => $it->unit_cost ?? 0,
+                ]);
+            }
+        } elseif (in_array($first->gr_type, ['request_stock', 'gr_return'])) {
+            // Karena Request & Return itu per item, kita mapping dari koleksi receipts-nya
+            $grouped = $receipts->groupBy('product_id');
+            foreach ($grouped as $productId => $rows) {
+                $pRow = $rows->first();
+                $displayItems->push((object)[
+                    'product_id'   => $productId,
+                    'product'      => $pRow->product,
+                    'qty_ordered'  => $rows->sum('qty_requested'), 
+                    'unit_price'   => $pRow->cost_per_item ?? 0,
+                ]);
+            }
+        } else {
+            // Fallback: ambil dari receipts langsung kalau sumbernya gak ketemu
+            $grouped = $receipts->groupBy('product_id');
+            foreach ($grouped as $productId => $rows) {
+                $pRow = $rows->first();
+                $displayItems->push((object)[
+                    'product_id'   => $productId,
+                    'product'      => $pRow->product,
+                    'qty_ordered'  => $rows->sum('qty_requested'),
+                    'unit_price'   => $pRow->cost_per_item ?? 0,
+                ]);
+            }
+        }
 
-
-            $po->items->each(function ($item) use ($goodByProduct, $damagedByProduct) {
-            $item->qty_received_good = $goodByProduct[$item->product_id] ?? 0;
-            $item->qty_received_damaged = $damagedByProduct[$item->product_id] ?? 0;
-        });
-
+        $goodByProduct = $receipts->groupBy('product_id')->map(fn($g) => $g->sum('qty_good'));
+        $damagedByProduct = $receipts->groupBy('product_id')->map(fn($g) => $g->sum('qty_damaged'));
 
         return view('admin.masterdata.partials.goodReceivedDetail', compact(
+            'receipts',
+            'first',
             'po',
+            'displayItems',
             'company',
-            'isSuperadmin'
+            'isSuperadmin',
+            'goodByProduct',
+            'damagedByProduct'
         ));
     }
 
@@ -315,6 +332,7 @@ class GoodReceivedController extends Controller
         $hasCodeColumn = Schema::hasColumn('restock_receipts', 'code');
         $grCode = $hasCodeColumn ? $this->nextReceiptCode() : null;
 
+        $touchedRrIds   = [];
         DB::beginTransaction();
         
         try {
@@ -352,7 +370,7 @@ class GoodReceivedController extends Controller
                         : RestockReceipt::TYPE_PO,
                     'product_id'        => $item->product_id,
                     'warehouse_id'      => $warehouseId,
-                    'supplier_id'       => $po->supplier_id,
+                    'supplier_id'       => $po->supplier_id ?? DB::table('suppliers')->orderBy('id')->value('id'),
                     'qty_requested'     => $ordered,
                     'qty_good'          => $good,
                     'qty_damaged'       => $bad,
@@ -380,16 +398,37 @@ class GoodReceivedController extends Controller
                         'updated_at'   => $now,
                     ]);
 
+                if ($item->request_id) {
+                    $touchedRrIds[$item->request_id] = (int) $item->request_id;
+                }
+
                 // update stok (warehouse atau central)
                 if (Schema::hasTable('stock_levels')) {
                     if ($item->request_id && $warehouseId) {
-                        // FIX: Request Stock wajib potong pusat dan tambah cabang
+                        // FIX: Request Stock wajib potong pusat sejumlah TOTAL (Bagus + Rusak)
+                        // dan tambah cabang hanya yang Bagus
                         $this->adjustWarehouseStock($warehouseId, $item->product_id, $good);
-                        $this->adjustCentralStock($item->product_id, -$good); 
+                        $this->adjustCentralStock($item->product_id, -($good + $bad)); 
                     } else {
                         // PO Manual: barang datang dari luar, masuk ke pusat
                         $this->adjustCentralStock($item->product_id, $good);
                     }
+                }
+
+                // logic karantina (Opsi A): masukkan ke damaged_stocks jika ada yang rusak
+                if ($bad > 0 && Schema::hasTable('damaged_stocks')) {
+                    DB::table('damaged_stocks')->insert([
+                        'product_id'   => $item->product_id,
+                        'warehouse_id' => $warehouseId ?? 0, // 0 = pusat/central
+                        'source_type'  => $item->request_id ? 'request_stock' : 'purchase_order',
+                        'source_id'    => $item->request_id ?: $po->id,
+                        'quantity'     => $bad,
+                        'condition'    => 'damaged',
+                        'status'       => 'quarantine',
+                        'notes'        => "Auto-created from GR: " . ($grCode ?? '-') . ". " . ($row['notes'] ?? ''),
+                        'created_at'   => $now,
+                        'updated_at'   => $now,
+                    ]);
                 }
             }
 
@@ -404,25 +443,12 @@ class GoodReceivedController extends Controller
                 $this->storeReceiptPhotos($request->file('photos_damaged') ?? [], $firstReceiptId, 'damaged');
             }
 
-            // ✅ UPDATE STATUS PO BERDASARKAN QTY_RECEIVED TERBARU
-            $items = DB::table('purchase_order_items')
-                ->where('purchase_order_id', $po->id)
-                ->get(['qty_ordered', 'qty_received']);
+            // ✅ UPDATE STATUS PO & RR BERDASARKAN DATA TERBARU (Satu Pintu via Trait)
+            $this->recalcPoFromReceipts($po->id);
 
-            $allDone = $items->every(function ($it) {
-                return (int)($it->qty_received ?? 0) >= (int)($it->qty_ordered ?? 0);
-            });
-
-            $anyDone = $items->sum(function ($it) {
-                return (int)($it->qty_received ?? 0);
-            }) > 0;
-
-            $newStatus = $allDone ? 'completed' : ($anyDone ? 'partially_received' : 'ordered');
-
-            DB::table('purchase_orders')->where('id', $po->id)->update([
-                'status'     => $newStatus,
-                'updated_at' => $now,
-            ]);
+            foreach ($touchedRrIds as $rrId) {
+                $this->recalcRequestRestock($rrId);
+            }
 
             DB::commit();
 
@@ -489,34 +515,138 @@ class GoodReceivedController extends Controller
      * - Kalau GR dari supplier → pusat dikurangi, PO direcalc
      * - Kalau GR dari restock (warehouse) → stok warehouse dikurangi, stok pusat dikembalikan, PO & Request direcalc
      */
-    public function cancelFromGr(Request $request, RestockReceipt $receipt)
+    public function cancelFromGr(Request $request, $code)
     {
-        // Dari 1 GR terakhir, kita cuma butuh info PO-nya
-        $poId = (int) $receipt->purchase_order_id;
+        // Security Audit: Hanya Superadmin yang boleh Rollback/Cancel GR
+        if (!auth()->user()->hasRole('superadmin')) {
+            abort(403, 'Unauthorized. Only Superadmins can cancel Goods Received records.');
+        }
 
-        if (! $poId) {
-            // Safety: kalau entah kenapa GR ini nggak punya PO
-            return back()->with(
-                'error',
-                'GR ini tidak terhubung ke Purchase Order, tidak bisa cancel massal.'
-            );
+        $receipts = RestockReceipt::where('code', $code)->get();
+
+        if ($receipts->isEmpty()) {
+            return back()->with('error', 'Data Goods Received tidak ditemukan.');
         }
 
         try {
-            // rollback SEMUA GR untuk PO ini
-            $this->rollbackGoodsReceivedForPo($poId);
+            DB::beginTransaction();
 
-            return back()->with(
-                'success',
-                'Semua Goods Received untuk PO ini sudah dicancel dan stok sudah di-rollback.'
-            );
+            $this->rollbackByCode($code);
+
+            DB::commit();
+
+            return back()->with('success', 'Goods Received ' . $code . ' berhasil dibatalkan dan stok telah di-rollback.');
         } catch (\Throwable $e) {
+            DB::rollBack();
             report($e);
+            return back()->with('error', 'Gagal membatalkan GR: ' . $e->getMessage());
+        }
+    }
 
-            return back()->with(
-                'error',
-                'Gagal membatalkan GR: ' . $e->getMessage()
-            );
+    /**
+     * Logic rollback cerdas berdasarkan KODE GR tunggal.
+     * Mendukung PO, Warehouse Transfer, dan Sales Return.
+     */
+    protected function rollbackByCode(string $code): void
+    {
+        $receipts = RestockReceipt::where('code', $code)->lockForUpdate()->get();
+        if ($receipts->isEmpty()) return;
+
+        $now = now();
+        $first = $receipts->first();
+        $grType = $first->gr_type;
+
+        // 1. ROLLBACK STOK & UPDATE MODEL ASAL
+        foreach ($receipts as $rr) {
+            $qtyGood = (int) $rr->qty_good;
+            $productId = (int) $rr->product_id;
+            if ($qtyGood <= 0 && (int)$rr->qty_damaged <= 0) continue;
+
+            // --- TIPE PO / REQUEST STOCK (RR) ---
+            if (in_array($grType, [RestockReceipt::TYPE_PO, RestockReceipt::TYPE_REQUEST_STOCK])) {
+                if ($rr->request_id) {
+                    // Update Request Restocks (RR) - decrement manual (optional but safe)
+                    $totalDeduction = $qtyGood + (int)$rr->qty_damaged;
+                    
+                    DB::table('request_restocks')
+                        ->where('id', $rr->request_id)
+                        ->decrement('quantity_received', $qtyGood);
+                    
+                    // recal akan diproses di akhir setelah delete receipt
+
+                    // 2) Balikkan stok: Kurangi Cabang (Warehouse), Balikin ke Pusat (Central)
+                    if ($rr->warehouse_id) {
+                        $this->adjustWarehouseStock($rr->warehouse_id, $productId, -$qtyGood);
+                    }
+                    $this->adjustCentralStock($productId, $qtyGood);
+                } else {
+                    // Balikkan stok PO Pusat: Kurangi Pusat
+                    $this->adjustCentralStock($productId, -$qtyGood);
+                }
+
+                // 3) Kurangi qty_received di PO Item
+                DB::table('purchase_order_items')
+                    ->where('purchase_order_id', $rr->purchase_order_id)
+                    ->where('product_id', $productId)
+                    ->decrement('qty_received', $qtyGood + (int)$rr->qty_damaged);
+
+                // recalc status PO akan diproses di akhir
+            } 
+            
+            // --- TIPE TRANSFER ---
+            elseif ($grType == RestockReceipt::TYPE_TRANSFER) {
+                $transfer = \App\Models\WarehouseTransfer::find($rr->request_id);
+                if ($transfer) {
+                    // Balikkan stok: Kurangi Penerima (Source), Balikin ke Pengirim (Destination)
+                    $this->adjustWarehouseStock($transfer->source_warehouse_id, $productId, -$qtyGood);
+                    $this->adjustWarehouseStock($transfer->destination_warehouse_id, $productId, (int)$rr->qty_requested);
+                    
+                    // Kembalikan status transfer agar bisa di-GR ulang oleh source warehouse
+                    $transfer->update(['status' => 'approved']);
+                }
+            }
+
+            // --- TIPE RETURN ---
+            elseif ($grType == RestockReceipt::TYPE_RETURN) {
+                // Balikkan stok good
+                if ($qtyGood > 0 && $rr->warehouse_id) {
+                    $this->adjustWarehouseStock($rr->warehouse_id, $productId, -$qtyGood);
+                }
+                
+                // PEMBERSIHAN DAMAGED STOCK (Semua Tipe)
+                // Jika saat GR ada barang rusak yang masuk karantina, hapus juga saat rollback
+                DB::table('damaged_stocks')
+                    ->where('source_id', $rr->purchase_order_id ?: $rr->request_id)
+                    ->whereIn('source_type', ['purchase_order', 'request_stock', 'warehouse_transfer', 'sales_return'])
+                    ->where('status', 'quarantine')
+                    ->delete();
+
+                // Kembalikan status SalesReturn
+                DB::table('sales_returns')
+                    ->where('id', $rr->request_id)
+                    ->update(['status' => 'pending', 'approved_at' => null, 'approved_by' => null]);
+            }
+        }
+
+        // 2. HAPUS FOTO & FILE
+        $ids = $receipts->pluck('id')->all();
+        $photos = DB::table('restock_receipt_photos')->whereIn('receipt_id', $ids)->get();
+        foreach ($photos as $p) {
+            if (!empty($p->path)) \Storage::disk('public')->delete($p->path);
+        }
+        DB::table('restock_receipt_photos')->whereIn('receipt_id', $ids)->delete();
+
+        // 3. HAPUS DATA RECEIPT
+        RestockReceipt::whereIn('id', $ids)->delete();
+
+        // 4. RECALC STATUS (RS & PO) - Harus sesudah delete agar sum() akurat
+        $touchedRrIds = $receipts->pluck('request_id')->filter()->unique();
+        foreach ($touchedRrIds as $rrId) {
+            $this->recalcRequestRestock((int) $rrId);
+        }
+
+        if ($first->purchase_order_id) {
+            $this->recalcPoFromReceipts($first->purchase_order_id);
         }
     }
 
@@ -738,220 +868,4 @@ class GoodReceivedController extends Controller
 
     // ================== HELPER STOK ==================
 
-    /**
-     * Update stock_levels untuk warehouse (owner_type = 'warehouse')
-     */
-    protected function adjustWarehouseStock(int $warehouseId, int $productId, int $deltaQty): void
-    {
-        if (! $warehouseId || ! $productId || $deltaQty === 0) {
-            return;
-        }
-
-        if (! Schema::hasTable('stock_levels')) {
-            return;
-        }
-
-        $row = DB::table('stock_levels')
-            ->where('owner_type', 'warehouse')
-            ->where('owner_id', $warehouseId)
-            ->where('product_id', $productId)
-            ->lockForUpdate()
-            ->first();
-
-        if ($row) {
-            $newQty = max(0, (int) $row->quantity + $deltaQty);
-
-            DB::table('stock_levels')
-                ->where('id', $row->id)
-                ->update([
-                    'quantity'   => $newQty,
-                    'updated_at' => now(),
-                ]);
-        } elseif ($deltaQty > 0) {
-            DB::table('stock_levels')->insert([
-                'owner_type' => 'warehouse',
-                'owner_id'   => $warehouseId,
-                'product_id' => $productId,
-                'quantity'   => $deltaQty,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        }
-    }
-
-    /**
-     * Update stock_levels untuk pusat (owner_type = 'pusat', owner_id = 0)
-     */
-    protected function adjustCentralStock(int $productId, int $deltaQty): void
-    {
-        if (! $productId || $deltaQty === 0) {
-            return;
-        }
-
-        if (! Schema::hasTable('stock_levels')) {
-            return;
-        }
-
-        $row = DB::table('stock_levels')
-            ->where('owner_type', 'pusat')
-            ->where('owner_id', 0)
-            ->where('product_id', $productId)
-            ->lockForUpdate()
-            ->first();
-
-        if ($row) {
-            $newQty = max(0, (int) $row->quantity + $deltaQty);
-
-            DB::table('stock_levels')
-                ->where('id', $row->id)
-                ->update([
-                    'quantity'   => $newQty,
-                    'updated_at' => now(),
-                ]);
-        } elseif ($deltaQty > 0) {
-            DB::table('stock_levels')->insert([
-                'owner_type' => 'pusat',
-                'owner_id'   => 0,
-                'product_id' => $productId,
-                'quantity'   => $deltaQty,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        }
-    }
-
-    /**
-     * Hitung ulang qty_received per item + status PO
-     * berdasarkan restock_receipts.
-     */
-    protected function recalcPoFromReceipts(int $poId): void
-    {
-        if (
-            ! Schema::hasTable('restock_receipts') ||
-            ! Schema::hasTable('purchase_order_items') ||
-            ! Schema::hasTable('purchase_orders')
-        ) {
-            return;
-        }
-
-        $hasWhCol = Schema::hasColumn('restock_receipts', 'warehouse_id');
-
-        $rcvQuery = DB::table('restock_receipts')
-            ->where('purchase_order_id', $poId)
-            ->selectRaw(
-                'product_id' .
-                ($hasWhCol ? ', warehouse_id' : '') .
-                ', SUM(qty_good + qty_damaged) as qty_rcv'
-            )
-            ->groupBy('product_id');
-
-        if ($hasWhCol) {
-            $rcvQuery->groupBy('warehouse_id');
-        }
-
-        $rcvRows  = $rcvQuery->get();
-        $rcvIndex = [];
-        foreach ($rcvRows as $row) {
-            $key = $row->product_id . '-' . ($hasWhCol ? ($row->warehouse_id ?? 0) : 0);
-            $rcvIndex[$key] = (int) $row->qty_rcv;
-        }
-
-        $items = DB::table('purchase_order_items')
-            ->where('purchase_order_id', $poId)
-            ->get(['id', 'product_id', 'warehouse_id', 'qty_ordered']);
-
-        $allFull     = true;
-        $anyReceived = false;
-
-        foreach ($items as $it) {
-            $key     = $it->product_id . '-' . ($hasWhCol ? ($it->warehouse_id ?? 0) : 0);
-            $qtyRcv  = $rcvIndex[$key] ?? 0;
-            $ordered = (int) $it->qty_ordered;
-
-            DB::table('purchase_order_items')
-                ->where('id', $it->id)
-                ->update([
-                    'qty_received' => $qtyRcv,
-                    'updated_at'   => now(),
-                ]);
-
-            if ($qtyRcv > 0) {
-                $anyReceived = true;
-            }
-            if ($qtyRcv < $ordered) {
-                $allFull = false;
-            }
-        }
-
-        $updatePo = ['updated_at' => now()];
-
-        if ($allFull && $anyReceived) {
-            $updatePo['status'] = 'completed';
-            if (Schema::hasColumn('purchase_orders', 'received_at')) {
-                $updatePo['received_at'] = now();
-            }
-        } elseif ($anyReceived) {
-            $updatePo['status'] = 'partially_received';
-        } else {
-            $updatePo['status'] = 'ordered';
-        }
-
-        DB::table('purchase_orders')
-            ->where('id', $poId)
-            ->update($updatePo);
-    }
-
-    /**
-     * Hitung ulang quantity_received & status untuk satu request_restocks.
-     */
-    protected function recalcRequestRestock(int $requestId): void
-    {
-        $req = DB::table('request_restocks')->where('id', $requestId)->first();
-        if (! $req) {
-            return;
-        }
-
-        $reqQty = (int) ($req->quantity_requested
-            ?? $req->qty_requested
-            ?? $req->qty
-            ?? 0);
-
-        $sumGood = (int) DB::table('restock_receipts')
-            ->where('request_id', $requestId)
-            ->sum('qty_good');
-
-        $sumBad = (int) DB::table('restock_receipts')
-            ->where('request_id', $requestId)
-            ->sum('qty_damaged');
-
-        $sumAll = $sumGood + $sumBad;
-
-        $status     = $req->status ?? 'approved';
-        $receivedAt = $req->received_at;
-
-        if ($reqQty > 0) {
-            if ($sumAll >= $reqQty) {
-                $status     = 'received';
-                $receivedAt = $receivedAt ?: now();
-            } elseif ($sumAll === 0) {
-                // FIX: Jika belum ada yang diterima (setelah rollback), balikkan ke 'approved' (REVIEW)
-                // agar tombol GR di gudang muncul kembali.
-                $status     = 'approved'; 
-                $receivedAt = null;
-            } else {
-                // Partially received, status 'ordered' agar tombol GR tetap muncul
-                $status     = 'ordered';
-                $receivedAt = null;
-            }
-        }
-
-        DB::table('request_restocks')
-            ->where('id', $requestId)
-            ->update([
-                'quantity_received' => $sumGood,
-                'status'            => $status,
-                'received_at'       => $receivedAt,
-                'updated_at'        => now(),
-            ]);
-    }
 }

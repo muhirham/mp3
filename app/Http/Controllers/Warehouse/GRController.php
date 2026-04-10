@@ -42,31 +42,9 @@ class GRController extends Controller
                 ->get()
                 ->keyBy('id');
 
+            $grCode = 'GR-' . now()->format('Ymd') . '-' . str_pad(mt_rand(1, 9999), 4, '0', STR_PAD_LEFT);
+
             foreach ($request->receives as $itemId => $rcv) {
-                /** @var PurchaseOrderItem|null $it */
-                $it = $items->get($itemId);
-                if (! $it) {
-                    continue;
-                }
-
-                $good = (int) ($rcv['qty_good'] ?? 0);
-                $bad  = (int) ($rcv['qty_damaged'] ?? 0);
-                $qty  = $good + $bad;
-
-                if ($qty === 0) {
-                    continue;
-                }
-
-                $ordered   = (int) ($it->qty_ordered ?? 0);
-                $received  = (int) ($it->qty_received ?? 0);
-                $remaining = max(0, $ordered - $received);
-
-                // ===== VALIDASI: good + bad ≤ remaining =====
-                if ($qty > $remaining) {
-                    abort(422, "Receive quantity exceeds remaining for item #{$it->id}");
-                }
-
-                $grCode = 'GR-' . now()->format('Ymd') . '-' . str_pad(mt_rand(1, 9999), 4, '0', STR_PAD_LEFT);
 
                 // simpan ke restock_receipts (1 baris per item)
                 $receipt = RestockReceipt::create([
