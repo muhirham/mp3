@@ -483,6 +483,9 @@ class WarehouseTransferController extends Controller
             $query = DB::table('warehouse_transfers as wt')
                 ->leftJoin('warehouses as wf', 'wf.id', '=', 'wt.source_warehouse_id')
                 ->leftJoin('warehouses as wtg', 'wtg.id', '=', 'wt.destination_warehouse_id')
+                // Join items & products buat ambil list & qty sekaligus (anti N+1)
+                ->leftJoin('warehouse_transfer_items as wti', 'wti.warehouse_transfer_id', '=', 'wt.id')
+                ->leftJoin('products as p', 'p.id', '=', 'wti.product_id')
                 ->select(
                     'wt.id',
                     'wt.transfer_code',
@@ -490,7 +493,18 @@ class WarehouseTransferController extends Controller
                     'wtg.warehouse_name as to_warehouse',
                     'wt.total_cost',
                     'wt.status',
-                    DB::raw("DATE_FORMAT(wt.created_at,'%d/%m/%Y') as created_at")
+                    DB::raw("DATE_FORMAT(wt.created_at,'%d/%m/%Y') as created_at"),
+                    DB::raw("SUM(COALESCE(wti.qty_transfer, 0)) as total_qty"),
+                    DB::raw("GROUP_CONCAT(DISTINCT CONCAT(p.product_code, ' - ', p.name) SEPARATOR '<br>') as product_list")
+                )
+                ->groupBy(
+                    'wt.id',
+                    'wt.transfer_code',
+                    'wf.warehouse_name',
+                    'wtg.warehouse_name',
+                    'wt.total_cost',
+                    'wt.status',
+                    'wt.created_at'
                 )
                 ->orderByDesc('wt.id');
 
@@ -521,17 +535,6 @@ class WarehouseTransferController extends Controller
 
             foreach ($rows as $row) {
 
-                $totalQty = DB::table('warehouse_transfer_items')
-                    ->where('warehouse_transfer_id', $row->id)
-                    ->sum('qty_transfer');
-                $productList = DB::table('warehouse_transfer_items as wti')
-                    ->join('products as p', 'p.id', '=', 'wti.product_id')
-                    ->where('wti.warehouse_transfer_id', $row->id)
-                    ->select('p.product_code', 'p.name')
-                    ->get()
-                    ->map(fn($p) => "{$p->product_code} - {$p->name}")
-                    ->implode('<br>');
-
                 $badge = match ($row->status) {
                     'draft'               => 'secondary',
                     'pending_source'      => 'warning',
@@ -546,10 +549,10 @@ class WarehouseTransferController extends Controller
 
                 $data[] = [
                     'code'           => $row->transfer_code ?? '-',
-                    'products'       => $productList ?: '-',
+                    'products'       => $row->product_list ?: '-',
                     'from_warehouse' => $row->from_warehouse ?? '-',
                     'to_warehouse'   => $row->to_warehouse ?? '-',
-                    'total_qty'      => $totalQty,
+                    'total_qty'      => (int) $row->total_qty,
                     'total_cost'     => number_format($row->total_cost, 0, ',', '.'),
                     'status_badge'   => '<span class="badge bg-label-' . $badge . '">' . strtoupper($row->status) . '</span>',
                     'created_at'     => $row->created_at,
