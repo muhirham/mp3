@@ -136,12 +136,18 @@
     <div class="card mb-3">
       <div class="card-body row g-3">
         <div class="col-md-4">
-          <label class="form-label">Supplier Information</label>
-          <input type="text"
-                 id="poHeaderSupplier"
-                 class="form-control text-truncate"
-                 value="-"
-                 disabled>
+          <label class="form-label">Supplier</label>
+          <select name="supplier_id" class="form-select @error('supplier_id') is-invalid @enderror" @disabled($poLocked)>
+            <option value="">— Select Supplier —</option>
+            @foreach($suppliers as $s)
+              <option value="{{ $s->id }}" @selected($s->id == old('supplier_id', $po->supplier_id) || $suppliers->count() === 1)>
+                {{ $s->name }}
+              </option>
+            @endforeach
+          </select>
+          @error('supplier_id')
+            <div class="invalid-feedback">{{ $message }}</div>
+          @enderror
         </div>
         <div class="col-md-8">
           <label class="form-label">Notes</label>
@@ -507,7 +513,7 @@
     document.getElementById('ftDiscount').innerText = discount.toLocaleString('id-ID');
     document.getElementById('ftGrand').innerText    = (subtotal - discount).toLocaleString('id-ID');
     
-    // Update Header Supplier dynamically
+    /* 
     const supCol = new Set();
     document.querySelectorAll('#tblItems tbody tr').forEach(tr => {
       const supLabel = tr.querySelector('.js-supplier-label');
@@ -519,6 +525,7 @@
     if (supHeader) {
       supHeader.value = supCol.size > 0 ? Array.from(supCol).join(', ') : '-';
     }
+    */
   }
 
   function attachProductAutoPrice(tr) {

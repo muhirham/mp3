@@ -264,14 +264,18 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->name('goodreceived.index')
         ->middleware('menu:goodreceived');
 
+    Route::get('/good-received/export/excel', [GoodReceivedController::class, 'exportExcel'])
+        ->name('goodreceived.export')
+        ->middleware('menu:goodreceived');
+
 
     // Ajukan permohonan delete GR untuk 1 GR (bukan PO)        
-    Route::post('/good-received/{receipt}/cancel', [GoodReceivedController::class, 'cancelFromGr'])
+    Route::post('/good-received/{code}/cancel', [GoodReceivedController::class, 'cancelFromGr'])
         ->name('good-received.cancel')
         ->middleware('menu:goodreceived');
 
 
-    Route::get('/good-received/{po}/detail', [GoodReceivedController::class, 'detail'])
+    Route::get('/good-received/{code}/detail', [GoodReceivedController::class, 'detail'])
         ->name('goodreceived.detail')
         ->middleware('menu:goodreceived');
 
@@ -396,9 +400,17 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->name('damaged-stocks.index')
         ->middleware('menu:wh_damaged_stocks');
 
+    Route::match(['get', 'post'], '/admin/warehouse/damaged-stocks/data', [\App\Http\Controllers\Admin\DamagedStockController::class, 'indexData'])
+        ->name('damaged-stocks.data')
+        ->middleware('menu:wh_damaged_stocks');
+
     // Superadmin Approval View
     Route::get('/admin/operations/approval-stock-damage', [\App\Http\Controllers\Admin\DamagedStockController::class, 'approval'])
         ->name('damaged-stocks.approval')
+        ->middleware('menu:approval_stock_damage');
+
+    Route::match(['get', 'post'], '/admin/operations/approval-stock-damage/data', [\App\Http\Controllers\Admin\DamagedStockController::class, 'approvalData'])
+        ->name('damaged-stocks.approval-data')
         ->middleware('menu:approval_stock_damage');
 
     // Shared Actions

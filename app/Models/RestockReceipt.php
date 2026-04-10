@@ -6,6 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 
 class RestockReceipt extends Model
 {
+    const TYPE_PO = 'po';
+    const TYPE_REQUEST_STOCK = 'request_stock';
+    const TYPE_TRANSFER = 'gr_transfer';
+    const TYPE_RETURN = 'gr_return';
+
     protected $table = 'restock_receipts';
 
     protected $fillable = [
@@ -14,6 +19,7 @@ class RestockReceipt extends Model
         'warehouse_id',
         'supplier_id',
         'product_id',
+        'gr_type',
         'code',
         'qty_requested',
         'qty_good',
@@ -30,6 +36,7 @@ class RestockReceipt extends Model
         'qty_damaged'   => 'int',
         'cost_per_item' => 'int',
         'received_at'   => 'datetime',
+        'gr_type'       => 'string',
     ];
 
     public function purchaseOrder()
@@ -40,6 +47,16 @@ class RestockReceipt extends Model
     public function request()
     {
         return $this->belongsTo(\App\Models\RequestRestock::class, 'request_id');
+    }
+
+    public function warehouseTransfer()
+    {
+        return $this->belongsTo(\App\Models\WarehouseTransfer::class, 'request_id');
+    }
+
+    public function salesReturn()
+    {
+        return $this->belongsTo(\App\Models\SalesReturn::class, 'request_id');
     }
 
     public function warehouse()

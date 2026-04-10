@@ -3,7 +3,8 @@
 @section('title', 'Damaged Stock Management')
 
 @section('content')
-    <div class="container-xxl flex-grow-1 container-p-y">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css" />
+    <div class="container-xxl flex-grow-1 container-p-y text-sm">
         {{-- Header --}}
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
@@ -19,6 +20,15 @@
                     <input type="hidden" name="keyword" id="hiddenKeyword" value="{{ request('keyword') }}">
 
                     <div class="row g-3 align-items-end">
+                        <div class="col-md-1">
+                            <label class="form-label small fw-bold">Show</label>
+                            <select id="pageLength" class="form-select">
+                                <option value="10" selected>10</option>
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
                         <div class="col-md-3">
                             <label class="form-label small fw-bold">Warehouse</label>
                             @if ($isWarehouse && !$isSuperadmin)
@@ -26,7 +36,7 @@
                                     value="{{ auth()->user()->warehouse?->warehouse_name ?? 'My Warehouse' }}" readonly>
                                 <input type="hidden" name="warehouse_id" value="{{ auth()->user()->warehouse_id }}">
                             @else
-                                <select name="warehouse_id" class="form-select" onchange="this.form.submit()">
+                                <select name="warehouse_id" class="form-select">
                                     <option value="">-- All Warehouses --</option>
                                     @foreach ($warehouses as $w)
                                         <option value="{{ $w->id }}"
@@ -38,8 +48,8 @@
                             @endif
                         </div>
                         <div class="col-md-2">
-                            <label class="form-label small fw-bold">Status</label>
-                            <select name="status" class="form-select" onchange="this.form.submit()">
+                            <label class="form-label small fw-bold">Status Filter</label>
+                            <select name="status" class="form-select">
                                 <option value="">-- All History --</option>
                                 <option value="pending_approval"
                                     {{ request('status') == 'pending_approval' ? 'selected' : '' }}>Pending Decision
@@ -55,114 +65,63 @@
                         <div class="col-md-2">
                             <label class="form-label small fw-bold">From Date</label>
                             <input type="date" name="start_date" class="form-control"
-                                value="{{ request('start_date') }}" onchange="this.form.submit()">
+                                value="{{ request('start_date') }}">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small fw-bold">To Date</label>
-                            <input type="date" name="end_date" class="form-control" value="{{ request('end_date') }}"
-                                onchange="this.form.submit()">
+                            <input type="date" name="end_date" class="form-control" value="{{ request('end_date') }}">
                         </div>
-
                     </div>
                 </form>
             </div>
         </div>
 
         {{-- Table Card --}}
+        <style>
+            .table-tiny {
+                font-size: 0.775rem !important; /* Slightly larger base */
+            }
+            .table-tiny th, .table-tiny td {
+                padding: 4px 8px !important; /* Tighter padding */
+            }
+            .table-tiny th {
+                font-weight: 700;
+                text-transform: uppercase;
+                background-color: #f8f9fa;
+            }
+            .table-tiny td {
+                vertical-align: middle !important;
+            }
+            /* Specific column adjustments */
+            .col-no { width: 35px !important; }
+            .col-warehouse { width: 120px !important; }
+            .col-product { 
+                max-width: 200px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .text-xs { font-size: 0.65rem !important; }
+        </style>
         <div class="card shadow-sm border-0">
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-striped table-hover align-middle mb-0 table-bordered w-100">
-                        <thead class="table-light">
+                    <table class="table table-striped table-hover align-middle mb-0 table-bordered w-100 table-tiny" id="approvalTable">
+                        <thead>
                             <tr>
-                                <th style="width: 40px" class="text-center">NO</th>
-                                <th style="width: 150px">WAREHOUSE</th>
-                                <th>PRODUCT</th>
-                                <th style="width: 60px" class="text-center">QTY</th>
-                                <th style="width: 130px">REPORTED</th>
-                                <th style="width: 120px" class="text-center">STATUS</th>
-                                <th style="width: 100px" class="text-center">RESOLVED</th>
-                                <th style="width: 150px" class="text-center">ACTIONS</th>
+                                <th class="text-center no-sort col-no">NO</th>
+                                <th class="col-warehouse">WAREHOUSE</th>
+                                <th class="col-product">PRODUCT</th>
+                                <th style="width: 50px" class="text-center">QTY</th>
+                                <th>REPORTED</th>
+                                <th class="text-center" style="width: 100px;">STATUS</th>
+                                <th class="text-center" style="width: 100px;">RESOLVED</th>
+                                <th class="text-center no-sort" style="width: 120px;">ACTIONS</th>
                             </tr>
                         </thead>
                         <tbody>
-                            @forelse($items as $index => $item)
-                                <tr>
-                                    <td class="text-center small py-2">{{ $items->firstItem() + $index }}</td>
-                                    <td class="py-2"><span
-                                            class="badge bg-label-primary text-xs">{{ $item->warehouse->warehouse_name }}</span>
-                                    </td>
-                                    <td class="py-2">
-                                        <div class="fw-bold text-dark small">{{ $item->product->name }}</div>
-                                        <div class="text-muted text-xs">{{ $item->product->product_code }} |
-                                            {{ ucfirst($item->condition) }}</div>
-                                    </td>
-                                    <td class="text-center fw-bold py-2 small">{{ $item->quantity }}</td>
-                                    <td class="py-2">
-                                        <div class="small fw-medium">{{ $item->created_at->format('d/m/Y') }}</div>
-                                        <div class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">
-                                            {{ str_replace('_', ' ', $item->source_type) }}
-                                        </div>
-                                    </td>
-                                    <td class="text-center py-2">
-                                        @php
-                                            $st = $item->status;
-                                            $cls = match ($st) {
-                                                'quarantine' => 'bg-label-secondary',
-                                                'pending_approval' => 'bg-label-warning',
-                                                'in_progress' => 'bg-label-info',
-                                                'resolved' => 'bg-label-success',
-                                                'rejected' => 'bg-label-danger',
-                                                default => 'bg-label-secondary',
-                                            };
-                                        @endphp
-                                        <span class="badge {{ $cls }} rounded-pill" style="font-size: 0.65rem;">
-                                            {{ strtoupper(str_replace('_', ' ', $st)) }}
-                                        </span>
-                                    </td>
-                                    <td class="text-center py-2">
-                                        @if ($item->resolved_at)
-                                            <div class="fw-medium text-success text-xs">
-                                                {{ $item->resolved_at->format('d/m/Y') }}</div>
-                                            <div class="text-muted" style="font-size: 0.6rem;">Appr: {{ $item->approver?->name ?? 'System' }}</div>
-                                        @elseif($item->approved_at)
-                                            <div class="fw-medium text-info text-xs">Approved</div>
-                                            <div class="text-muted" style="font-size: 0.6rem;">By {{ $item->approver?->name ?? 'System' }}</div>
-                                        @else
-                                            <span class="text-muted text-xs italic">Waiting...</span>
-                                        @endif
-                                    </td>
-                                    <td class="text-center py-2">
-                                        <div class="d-flex gap-1 justify-content-center">
-                                            <button class="btn btn-outline-info btn-xs px-2 btn-detail"
-                                                data-item='@json($item)'
-                                                data-photos='@json($item->photos)'>
-                                                <i class="bx bx-show"></i>
-                                            </button>
-
-                                            @if ($item->status == 'pending_approval')
-                                                <button class="btn btn-warning btn-xs px-2 btn-approve"
-                                                    data-id="{{ $item->id }}" data-action="{{ $item->action }}">
-                                                    <i class="bx bx-cog me-1"></i> Handle
-                                                </button>
-                                            @endif
-                                        </div>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="8" class="text-center py-5 text-muted">No records found.</td>
-                                </tr>
-                            @endforelse
+                            {{-- Handled by DataTables AJAX --}}
                         </tbody>
                     </table>
-                </div>
-            </div>
-            <div class="card-footer py-2">
-                <div class="d-flex justify-content-between align-items-center">
-                    <small class="text-muted">Showing {{ $items->firstItem() }} to {{ $items->lastItem() }} of
-                        {{ $items->total() }} entries</small>
-                    <div>{{ $items->appends(request()->query())->links() }}</div>
                 </div>
             </div>
         </div>
@@ -278,8 +237,16 @@
 
 @push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
     <script>
         $(function() {
+            const isWarehouse = {{ $isWarehouse ? 'true' : 'false' }};
+            const isSuperadmin = {{ $isSuperadmin ? 'true' : 'false' }};
+
             const Alert = Swal.mixin({
                 buttonsStyling: false,
                 customClass: {
@@ -288,66 +255,133 @@
                 }
             });
 
-            @if (session('success'))
-                Alert.fire({
-                    icon: 'success',
-                    title: 'Success!',
-                    text: "{{ session('success') }}",
-                    timer: 3000,
-                    showConfirmButton: false
-                });
-            @endif
-
-            @if (session('error'))
-                Alert.fire({
-                    icon: 'error',
-                    title: 'Oops!',
-                    text: "{{ session('error') }}"
-                });
-            @endif
-
-            @if ($errors->any())
-                let errList = '';
-                @foreach ($errors->all() as $error)
-                    errList += '<li>{{ $error }}</li>';
-                @endforeach
-                Alert.fire({
-                    icon: 'error',
-                    title: 'Input Error!',
-                    html: '<ul class="text-start small mb-0">' + errList + '</ul>',
-                });
-            @endif
-            // 1. Navbar Search Sync
-            const globalSearch = $('#globalSearch');
-            if (globalSearch.length) {
-                const currentKeyword = $('#hiddenKeyword').val();
-                if (currentKeyword) globalSearch.val(currentKeyword);
-
-                globalSearch.on('keypress', function(e) {
-                    if (e.which === 13) {
-                        $('#hiddenKeyword').val($(this).val());
-                        $('#filterForm').submit();
+            // DataTables AJAX init
+            const table = $('#approvalTable').DataTable({
+                processing: true,
+                serverSide: true,
+                ajax: {
+                    url: "{{ route('damaged-stocks.approval-data') }}",
+                    type: "GET",
+                    data: function(d) {
+                        d.warehouse_id = $('select[name="warehouse_id"]').val();
+                        d.status = $('select[name="status"]').val();
+                        d.start_date = $('input[name="start_date"]').val();
+                        d.end_date = $('input[name="end_date"]').val();
                     }
+                },
+                columns: [
+                    { data: null, orderable: false, className: 'text-center', render: (data, type, row, meta) => meta.row + meta.settings._iDisplayStart + 1 },
+                    { data: 'warehouse.warehouse_name', render: function(data) {
+                        return `<span class="badge bg-label-primary text-xs">${data}</span>`;
+                    }},
+                    { data: 'product.name', render: function(data, type, row) {
+                        return `<div>
+                            <div class="fw-bold text-dark small">${data}</div>
+                            <div class="text-muted text-xs">${row.product.product_code} | ${row.condition.charAt(0).toUpperCase() + row.condition.slice(1)}</div>
+                        </div>`;
+                    }},
+                    { data: 'quantity', className: 'text-center fw-bold small' },
+                    { data: 'created_at', render: function(data, type, row) {
+                        const date = new Date(data).toLocaleDateString('id-ID');
+                        const source = (row.source_type || 'Manual').toUpperCase().replace(/_/g, ' ');
+                        return `<div style="line-height: 1.1;">
+                            <div class="small fw-medium">${date}</div>
+                            <div class="text-muted italic" style="font-size: 0.65rem;">${source}</div>
+                        </div>`;
+                    }},
+                    { data: 'status', className: 'text-center', render: function(data) {
+                        let cls = 'bg-label-secondary';
+                        switch(data) {
+                            case 'quarantine': cls = 'bg-label-secondary'; break;
+                            case 'pending_approval': cls = 'bg-label-warning'; break;
+                            case 'in_progress': cls = 'bg-label-info'; break;
+                            case 'resolved': cls = 'bg-label-success'; break;
+                            case 'rejected': cls = 'bg-label-danger'; break;
+                        }
+                        return `<span class="badge ${cls} rounded-pill" style="font-size: 0.65rem;">${data.toUpperCase().replace(/_/g, ' ')}</span>`;
+                    }},
+                    { data: 'resolved_at', className: 'text-center', render: function(data, type, row) {
+                        const approverName = row.approver ? row.approver.name : 'System';
+                        if (data) {
+                            const date = new Date(data).toLocaleDateString('id-ID');
+                            return `<div style="line-height: 1.1;">
+                                <div class="fw-medium text-success text-xs">${date}</div>
+                                <div class="text-muted italic" style="font-size: 0.65rem;">By: ${approverName}</div>
+                            </div>`;
+                        } else if (row.approved_at) {
+                            return `<div style="line-height: 1.1;">
+                                <div class="fw-medium text-info text-xs">Approved</div>
+                                <div class="text-muted italic" style="font-size: 0.65rem;">By: ${approverName}</div>
+                            </div>`;
+                        }
+                        return `<span class="text-muted text-xs italic" style="font-size: 0.65rem;">Waiting...</span>`;
+                    }},
+                    { data: null, orderable: false, className: 'text-center', render: function(data, type, row) {
+                        let btns = `<div class="d-flex gap-1 justify-content-center">
+                            <button class="btn btn-outline-info btn-xs px-2 btn-detail" data-id="${row.id}">
+                                <i class="bx bx-show"></i>
+                            </button>`;
+                        
+                        if (row.status === 'pending_approval') {
+                            const action = row.action.toUpperCase().replace(/_/g, ' ');
+                            btns += `<button class="btn btn-warning btn-xs px-2 btn-approve" data-id="${row.id}" data-action="${action}">
+                                <i class="bx bx-cog me-1"></i> Handle
+                            </button>`;
+                        }
+                        btns += `</div>`;
+                        return btns;
+                    }}
+                ],
+                order: [[4, 'desc']], 
+                pageLength: 10,
+                pagingType: "simple_numbers",
+                dom: 'rt<"d-flex justify-content-between align-items-center p-2"ip>',
+                language: {
+                    paginate: {
+                        next: '<i class="bx bx-chevron-right"></i>',
+                        previous: '<i class="bx bx-chevron-left"></i>'
+                    }
+                }
+            });
+
+            // Sync Navbar Search
+            const $globalSearch = $('#globalSearch');
+            if ($globalSearch.length) {
+                $globalSearch.off().on('keyup change', function() {
+                    table.search(this.value).draw();
                 });
             }
 
-            $('.btn-detail').on('click', function() {
-                const item = $(this).data('item');
-                const photos = $(this).data('photos');
+            // Sync Page Length
+            $('#pageLength').on('change', function() {
+                table.page.len(parseInt(this.value || 10, 10)).draw();
+            });
 
-                $('#detWarehouse').html(`${item.warehouse.warehouse_name} <span class="badge bg-label-secondary ms-2 text-xs">${item.source_type.toUpperCase().replace('_', ' ')}</span>`);
+            // Filter reloads
+            $('select[name="warehouse_id"], select[name="status"], input[name="start_date"], input[name="end_date"]').on('change', function() {
+                table.ajax.reload();
+            });
+
+            @if (session('success')) Alert.fire({ icon: 'success', title: 'Success!', text: "{{ session('success') }}", timer: 3000, showConfirmButton: false }); @endif
+            @if (session('error')) Alert.fire({ icon: 'error', title: 'Oops!', text: "{{ session('error') }}" }); @endif
+
+            $(document).on('click', '.btn-detail', function() {
+                const tr = $(this).closest('tr');
+                const rowData = table.row(tr).data();
+                const item = rowData;
+                const photos = rowData.photos || [];
+
+                $('#detWarehouse').html(`${item.warehouse.warehouse_name} <span class="badge bg-label-secondary ms-2 text-xs">${item.source_type.toUpperCase().replace(/_/g, ' ')}</span>`);
                 $('#detRequester').html(`Reported by <b>${item.requester ? item.requester.name : 'System'}</b>`);
                 $('#detProductName').text(item.product.name);
                 $('#detProductCode').text(item.product.product_code + ' | ' + item.condition.toUpperCase());
                 $('#detQty').text(item.quantity);
                 $('#detCreated').text(new Date(item.created_at).toLocaleDateString('id-ID'));
 
-                const st = item.status.toUpperCase().replace('_', ' ');
+                const st = item.status.toUpperCase().replace(/_/g, ' ');
                 $('#detStatusBadge').html(`<span class="badge bg-label-info text-xs">${st}</span>`);
-                $('#detAction').text(item.action ? item.action.toUpperCase().replace('_', ' ') :
-                    'NOT ANALYZED');
-                $('#detNotes').html(item.notes ? item.notes :
-                    '<span class="text-muted italic">No notes.</span>');
+                $('#detAction').text(item.action ? item.action.toUpperCase().replace(/_/g, ' ') : 'NOT ANALYZED');
+                $('#detNotes').html(item.notes ? item.notes : '<span class="text-muted italic">No notes.</span>');
 
                 let approverHtml = item.approver ? `<div class="mt-2 text-xs border-top pt-2">Approved by <b>${item.approver.name}</b></div>` : '';
                 if (item.resolver) {
@@ -366,18 +400,16 @@
                         </div>`;
                     });
                 } else {
-                    photoHtml =
-                        '<div class="col-12 text-center text-muted small py-3 bg-light rounded border-dashed">No evidence photos.</div>';
+                    photoHtml = '<div class="col-12 text-center text-muted small py-3 bg-light rounded border-dashed">No evidence photos.</div>';
                 }
                 $('#divPhotos').html(photoHtml);
                 $('#mdlDetail').modal('show');
             });
 
-            $('.btn-approve').on('click', function() {
+            $(document).on('click', '.btn-approve', function() {
                 const id = $(this).data('id');
-                const action = $(this).data('action').toUpperCase().replace('_', ' ');
-                $('#frmApprove').attr('action',
-                    `{{ url('admin/warehouse/damaged-stocks') }}/${id}/approve`);
+                const action = $(this).data('action');
+                $('#frmApprove').attr('action', `{{ url('admin/warehouse/damaged-stocks') }}/${id}/approve`);
                 $('#txtProposedAction').text(action);
                 $('#mdlApprove').modal('show');
             });

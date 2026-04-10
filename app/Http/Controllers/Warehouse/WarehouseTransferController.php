@@ -291,6 +291,9 @@ class WarehouseTransferController extends Controller
 
         DB::transaction(function () use ($request, $transfer) {
 
+            $firstReceiptId = null;
+            $grCode = 'GR-WT-' . now()->format('Ymd') . '-' . strtoupper(Str::random(5));
+
             foreach ($transfer->items as $item) {
 
                 $input = $request->items[$item->id] ?? null;
@@ -340,6 +343,49 @@ class WarehouseTransferController extends Controller
 
                 $item->save();
 
+                // ===============================
+                // SIMPAN KE restock_receipts (CENTRALIZED)
+                // ===============================
+                $receiptId = DB::table('restock_receipts')->insertGetId([
+                    'purchase_order_id' => null, // bukan dari PO
+                    'request_id'        => $transfer->id, // link ke transfer
+                    'warehouse_id'      => $transfer->source_warehouse_id,
+                    'supplier_id'       => null,
+                    'product_id'        => $item->product_id,
+                    'gr_type'           => \App\Models\RestockReceipt::TYPE_TRANSFER,
+                    'code'              => $grCode,
+                    'qty_requested'     => $item->qty_transfer,
+                    'qty_good'          => $good,
+                    'qty_damaged'       => $damaged,
+                    'notes'             => $input['note'] ?? null,
+                    'received_by'       => auth()->id(),
+                    'received_at'       => now(),
+                    'created_at'        => now(),
+                    'updated_at'        => now(),
+                ]);
+
+                if (!$firstReceiptId) $firstReceiptId = $receiptId;
+
+                // SIMPAN FOTO KE restock_receipt_photos (SINKRON)
+                if ($item->photo_good) {
+                    DB::table('restock_receipt_photos')->insert([
+                        'receipt_id' => $receiptId,
+                        'path'       => $item->photo_good,
+                        'type'       => 'good',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+                if ($item->photo_damaged) {
+                    DB::table('restock_receipt_photos')->insert([
+                        'receipt_id' => $receiptId,
+                        'path'       => $item->photo_damaged,
+                        'type'       => 'damaged',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+
                 DB::table('stock_levels')
                     ->where('owner_type', 'warehouse')
                     ->where('owner_id', $transfer->destination_warehouse_id)
@@ -364,9 +410,25 @@ class WarehouseTransferController extends Controller
                         'owner_type' => 'warehouse',
                         'owner_id'   => $transfer->source_warehouse_id,
                         'product_id' => $item->product_id,
-                        'quantity'  => $good,
+                        'quantity'   => $good,
                         'created_at' => now(),
                         'updated_at' => now(),
+                    ]);
+                }
+
+                // logic karantina: masukkan ke damaged_stocks jika ada yang rusak
+                if ($damaged > 0 && Schema::hasTable('damaged_stocks')) {
+                    DB::table('damaged_stocks')->insert([
+                        'product_id'   => $item->product_id,
+                        'warehouse_id' => $transfer->source_warehouse_id, // gudang penerima
+                        'source_type'  => 'warehouse_transfer',
+                        'source_id'    => $transfer->id,
+                        'quantity'     => $damaged,
+                        'condition'    => 'damaged',
+                        'status'       => 'quarantine',
+                        'notes'        => "Auto-created from Transfer GR: {$grCode}. " . ($input['note'] ?? ''),
+                        'created_at'   => now(),
+                        'updated_at'   => now(),
                     ]);
                 }
             }
@@ -421,6 +483,9 @@ class WarehouseTransferController extends Controller
             $query = DB::table('warehouse_transfers as wt')
                 ->leftJoin('warehouses as wf', 'wf.id', '=', 'wt.source_warehouse_id')
                 ->leftJoin('warehouses as wtg', 'wtg.id', '=', 'wt.destination_warehouse_id')
+                // Join items & products buat ambil list & qty sekaligus (anti N+1)
+                ->leftJoin('warehouse_transfer_items as wti', 'wti.warehouse_transfer_id', '=', 'wt.id')
+                ->leftJoin('products as p', 'p.id', '=', 'wti.product_id')
                 ->select(
                     'wt.id',
                     'wt.transfer_code',
@@ -428,7 +493,18 @@ class WarehouseTransferController extends Controller
                     'wtg.warehouse_name as to_warehouse',
                     'wt.total_cost',
                     'wt.status',
-                    DB::raw("DATE_FORMAT(wt.created_at,'%d/%m/%Y') as created_at")
+                    DB::raw("DATE_FORMAT(wt.created_at,'%d/%m/%Y') as created_at"),
+                    DB::raw("SUM(COALESCE(wti.qty_transfer, 0)) as total_qty"),
+                    DB::raw("GROUP_CONCAT(DISTINCT CONCAT(p.product_code, ' - ', p.name) SEPARATOR '<br>') as product_list")
+                )
+                ->groupBy(
+                    'wt.id',
+                    'wt.transfer_code',
+                    'wf.warehouse_name',
+                    'wtg.warehouse_name',
+                    'wt.total_cost',
+                    'wt.status',
+                    'wt.created_at'
                 )
                 ->orderByDesc('wt.id');
 
@@ -459,17 +535,6 @@ class WarehouseTransferController extends Controller
 
             foreach ($rows as $row) {
 
-                $totalQty = DB::table('warehouse_transfer_items')
-                    ->where('warehouse_transfer_id', $row->id)
-                    ->sum('qty_transfer');
-                $productList = DB::table('warehouse_transfer_items as wti')
-                    ->join('products as p', 'p.id', '=', 'wti.product_id')
-                    ->where('wti.warehouse_transfer_id', $row->id)
-                    ->select('p.product_code', 'p.name')
-                    ->get()
-                    ->map(fn($p) => "{$p->product_code} - {$p->name}")
-                    ->implode('<br>');
-
                 $badge = match ($row->status) {
                     'draft'               => 'secondary',
                     'pending_source'      => 'warning',
@@ -484,10 +549,10 @@ class WarehouseTransferController extends Controller
 
                 $data[] = [
                     'code'           => $row->transfer_code ?? '-',
-                    'products'       => $productList ?: '-',
+                    'products'       => $row->product_list ?: '-',
                     'from_warehouse' => $row->from_warehouse ?? '-',
                     'to_warehouse'   => $row->to_warehouse ?? '-',
-                    'total_qty'      => $totalQty,
+                    'total_qty'      => (int) $row->total_qty,
                     'total_cost'     => number_format($row->total_cost, 0, ',', '.'),
                     'status_badge'   => '<span class="badge bg-label-' . $badge . '">' . strtoupper($row->status) . '</span>',
                     'created_at'     => $row->created_at,

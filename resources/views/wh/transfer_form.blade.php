@@ -209,13 +209,25 @@
                             <thead>
                                 <tr>
                                     <th class="col-product">Product</th>
-                                    <th class="col-qty text-end">Qty</th>
+                                    <th class="col-qty text-end">Qty Plan</th>
+                                    @if($transfer->status === 'completed')
+                                        <th class="text-end" style="width:100px;">Good</th>
+                                        <th class="text-end" style="width:100px;">Damaged</th>
+                                    @endif
                                     <th class="col-price text-end">Unit Price</th>
-                                    <th class="col-total text-end">Subtotal</th>
+                                    <th class="col-total text-end">Subtotal (Good)</th>
                                 </tr>
                             </thead>
                             <tbody>
+                                @php $totalGoodCost = 0; @endphp
                                 @forelse ($transfer->items as $item)
+                                    @php
+                                        // Jika sudah completed, subtotal dihitung dari qty_good.
+                                        // Jika belum, pakai qty_transfer asumsikan semua good dulu.
+                                        $qtyForSubtotal = ($transfer->status === 'completed') ? $item->qty_good : $item->qty_transfer;
+                                        $subtotalGood = $qtyForSubtotal * $item->unit_cost;
+                                        $totalGoodCost += $subtotalGood;
+                                    @endphp
                                     <tr>
                                         <td class="col-product">
                                             {{ $item->product->product_code }} <br>
@@ -224,11 +236,19 @@
                                         <td class="text-end col-qty">
                                             {{ number_format($item->qty_transfer, 0, '.', ',') }}
                                         </td>
+                                        @if($transfer->status === 'completed')
+                                            <td class="text-end text-success fw-bold">
+                                                {{ number_format($item->qty_good, 0, '.', ',') }}
+                                            </td>
+                                            <td class="text-end text-danger">
+                                                {{ number_format($item->qty_damaged, 0, '.', ',') }}
+                                            </td>
+                                        @endif
                                         <td class="text-end col-price">
                                             {{ number_format($item->unit_cost, 0, '.', ',') }}
                                         </td>
-                                        <td class="text-end col-total">
-                                            {{ number_format($item->subtotal_cost, 0, '.', ',') }}
+                                        <td class="text-end col-total fw-bold">
+                                            {{ number_format($subtotalGood, 0, '.', ',') }}
                                         </td>
                                     </tr>
                                 @empty
@@ -240,10 +260,20 @@
                                 @endforelse
                             </tbody>
                             <tfoot>
-                                <tr>
-                                    <th colspan="3" class="text-end">Total</th>
-                                    <th class="text-end">
-                                        {{ number_format($transfer->total_cost, 0, '.', ',') }}
+                                @if($transfer->status === 'completed')
+                                    <tr class="table-light">
+                                        <th colspan="{{ $transfer->status === 'completed' ? 5 : 3 }}" class="text-end">Total Plan Value (Full Qty)</th>
+                                        <th class="text-end text-muted">
+                                            {{ number_format($transfer->total_cost, 0, '.', ',') }}
+                                        </th>
+                                    </tr>
+                                @endif
+                                <tr class="table-primary">
+                                    <th colspan="{{ $transfer->status === 'completed' ? 5 : 3 }}" class="text-end">
+                                        {{ $transfer->status === 'completed' ? 'Total Received Value (Good Only)' : 'Estimated Total Value' }}
+                                    </th>
+                                    <th class="text-end fs-5">
+                                        {{ number_format($totalGoodCost, 0, '.', ',') }}
                                     </th>
                                 </tr>
                             </tfoot>
@@ -602,6 +632,53 @@
                     });
                 });
 
+                /* ================= VALIDASI GR MODAL ================= */
+                const mdlGr = document.getElementById('mdlGRTransfer');
+                if (mdlGr) {
+                    mdlGr.addEventListener('input', function(e) {
+                        if (e.target.classList.contains('js-good') || e.target.classList.contains('js-damaged')) {
+                            const tr = e.target.closest('tr');
+                            const total = parseInt(tr.querySelector('.js-remaining').dataset.remaining || 0);
+                            const inputGood = tr.querySelector('.js-good');
+                            const inputDamaged = tr.querySelector('.js-damaged');
+
+                            let good = parseInt(inputGood.value || 0);
+                            let damaged = parseInt(inputDamaged.value || 0);
+
+                            if (e.target.classList.contains('js-good')) {
+                                // Jika input good berubah, damage = sisanya
+                                if (good > total) {
+                                    good = total;
+                                    inputGood.value = total;
+                                }
+                                if (good < 0) {
+                                    good = 0;
+                                    inputGood.value = 0;
+                                }
+                                inputDamaged.value = total - good;
+                            } else {
+                                // Jika input damaged berubah, good = sisanya
+                                if (damaged > total) {
+                                    damaged = total;
+                                    inputDamaged.value = total;
+                                }
+                                if (damaged < 0) {
+                                    damaged = 0;
+                                    inputDamaged.value = 0;
+                                }
+                                inputGood.value = total - damaged;
+                            }
+                        }
+                    });
+
+                    // Auto-select text saat diklik (biar nol nggak nyangkut)
+                    mdlGr.addEventListener('focus', function(e) {
+                        if (e.target.classList.contains('js-good') || e.target.classList.contains('js-damaged')) {
+                            e.target.select();
+                        }
+                    }, true); // use capture to catch event from bubbled inputs
+                }
+
             });
         </script>
     @endpush
@@ -633,19 +710,21 @@
             };
         </script>
     @endpush
-    @if (session('success'))
-        <script>
-            document.addEventListener('DOMContentLoaded', function() {
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Success',
-                    text: @json(session('success')),
-                    timer: 1500,
-                    showConfirmButton: false
+    @push('scripts')
+        @if (session('success'))
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success',
+                        text: @json(session('success')),
+                        timer: 1500,
+                        showConfirmButton: false
+                    });
                 });
-            });
-        </script>
-    @endif
+            </script>
+        @endif
+    @endpush
 
     @if ($transfer->exists && $canPrintSJ)
         @push('scripts')

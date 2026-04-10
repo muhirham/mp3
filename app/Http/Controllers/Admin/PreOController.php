@@ -299,7 +299,7 @@ class PreOController extends Controller
 
             DB::transaction(function () use ($validated, $po, $wasFromRequest) {
 
-                $po->supplier_id = $validated['supplier_id'] ?? null;
+                $po->supplier_id = $validated['supplier_id'] ?? Supplier::orderBy('id')->value('id');
 
                 // ✅ RULE: kalau status REJECTED -> notes (alasan) gak boleh berubah dari form update
                 if (($po->approval_status ?? 'draft') !== 'rejected') {
@@ -428,6 +428,7 @@ class PreOController extends Controller
             $po->load('items');
 
             $this->syncRequestsFromPo($po, $wasFromRequest, $oldRequestIds);
+            $this->syncLogisticsStatusToRequests($po);
 
             return back()->with('success', 'PO berhasil disimpan.');
         }
@@ -499,6 +500,7 @@ class PreOController extends Controller
 
             // ✅ notes (alasan reject) JANGAN dihapus di sini
             $po->save();
+            $this->syncLogisticsStatusToRequests($po);
 
             return redirect()->route('po.edit', $po->id)
                 ->with('success', 'PO berhasil diajukan ke Procurement untuk approval.');
@@ -531,6 +533,7 @@ class PreOController extends Controller
                     $po->cancelled_at = now();
                 }
                 $po->save();
+                $this->syncLogisticsStatusToRequests($po);
 
                 if (
                     Schema::hasTable('purchase_order_items') &&
@@ -624,6 +627,7 @@ class PreOController extends Controller
             }
 
             $po->save();
+            $this->syncLogisticsStatusToRequests($po);
 
             return back()->with('success', 'Approval Procurement berhasil disimpan.');
         }
@@ -699,6 +703,7 @@ class PreOController extends Controller
             }
 
             $po->save();
+            $this->syncLogisticsStatusToRequests($po);
 
             return back()->with('success', 'PO disetujui CEO dan status di-set ORDERED.');
         }
@@ -779,11 +784,13 @@ class PreOController extends Controller
 
             $code = $this->generateManualPoCode();
 
+            $supplierId = Supplier::orderBy('id')->value('id');
+
             $po = PurchaseOrder::create([
                 'po_code'         => $code,
-                'supplier_id'     => null,
+                'supplier_id'     => $supplierId,
                 'ordered_by'      => auth()->id(),
-                'status'          => 'draft',      // status logistik = DRAFT        // <== BELUM MASUK FLOW APPROVAL
+                'status'          => 'draft',
                 'subtotal'        => 0,
                 'discount_total'  => 0,
                 'grand_total'     => 0,
@@ -1107,7 +1114,7 @@ class PreOController extends Controller
             }
 
             $level = DB::table('stock_levels')
-                ->where('owner_type', 'central')
+                ->where('owner_type', 'pusat')
                 ->where('product_id', $productId)
                 ->first();
 
@@ -1120,7 +1127,7 @@ class PreOController extends Controller
                     ]);
             } else {
                 DB::table('stock_levels')->insert([
-                    'owner_type' => 'central',
+                    'owner_type' => 'pusat',
                     'owner_id'   => 0,
                     'product_id' => $productId,
                     'quantity'   => $qty,
@@ -1128,6 +1135,9 @@ class PreOController extends Controller
                     'updated_at' => now(),
                 ]);
             }
+
+            // SINKRONISASI KE TABEL products (Superadmin Dashboard)
+            DB::table('products')->where('id', $productId)->increment('stock', $qty);
         }
     }
 
@@ -1158,9 +1168,9 @@ class PreOController extends Controller
                 continue;
             }
 
-            // Kurangi CENTRAL
+            // Kurangi PUSAT
             $central = DB::table('stock_levels')
-                ->where('owner_type', 'central')
+                ->where('owner_type', 'pusat')
                 ->where('product_id', $productId)
                 ->first();
 
@@ -1173,6 +1183,9 @@ class PreOController extends Controller
                         'updated_at' => now(),
                     ]);
             }
+
+            // SINKRONISASI KE TABEL products (Superadmin Dashboard)
+            DB::table('products')->where('id', $productId)->decrement('stock', $qty);
 
             // Tambah ke WAREHOUSE
             $levelWh = DB::table('stock_levels')
@@ -1407,6 +1420,38 @@ public function exportIndexExcel(Request $request)
         }
 
         return [$fromC, $toC, $fromC->format('Y-m'), true];
+    }
+
+    protected function syncLogisticsStatusToRequests(PurchaseOrder $po): void
+    {
+        if (!Schema::hasTable('request_restocks')) return;
+
+        $requestIds = $po->items()
+            ->whereNotNull('request_id')
+            ->pluck('request_id')
+            ->unique()
+            ->all();
+
+        if (empty($requestIds)) return;
+
+        // Tentukan status target RR berdasarkan status PO
+        // PO: ordered, partially_received, completed -> RR: ordered
+        // PO: cancelled -> RR: cancelled
+        // PO: draft/waiting... -> RR: approved (reviewed)
+        
+        $targetStatus = 'approved'; 
+        if (in_array($po->status, ['ordered', 'partially_received', 'completed'])) {
+            $targetStatus = 'ordered';
+        } elseif ($po->status === 'cancelled') {
+            $targetStatus = 'cancelled';
+        }
+
+        DB::table('request_restocks')
+            ->whereIn('id', $requestIds)
+            ->update([
+                'status' => $targetStatus,
+                'updated_at' => now()
+            ]);
     }
 
 

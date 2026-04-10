@@ -23,7 +23,26 @@ class DamagedStockController extends Controller
         $isWarehouse = $user->hasRole('warehouse');
         $isSuperadmin = $user->hasRole('superadmin');
 
+        $warehouses = Warehouse::orderBy('warehouse_name')->get();
+
+        return view('wh.stock_damage', compact('warehouses', 'isWarehouse', 'isSuperadmin'));
+    }
+
+    public function indexData(Request $request)
+    {
+        $user = auth()->user();
+        $isWarehouse = $user->hasRole('warehouse');
+        $isSuperadmin = $user->hasRole('superadmin');
+
+        $draw = (int) $request->input('draw', 1);
+        $start = (int) $request->input('start', 0);
+        $length = (int) $request->input('length', 10);
+        $search = trim((string) $request->input('search.value', ''));
+
         $query = DamagedStock::with(['product.supplier', 'warehouse', 'requester', 'approver', 'resolver', 'photos']);
+
+        // Base total count
+        $recordsTotal = DamagedStock::count();
 
         // WH filter
         if ($isWarehouse && !$isSuperadmin) {
@@ -32,28 +51,30 @@ class DamagedStockController extends Controller
             $query->where('warehouse_id', $request->warehouse_id);
         }
 
-        // Status Filter
-        if ($request->status) {
-            $query->where('status', $request->status);
-        }
+        if ($request->status) $query->where('status', $request->status);
+        if ($request->condition) $query->where('condition', $request->condition);
 
-        // Condition Filter
-        if ($request->condition) {
-            $query->where('condition', $request->condition);
-        }
-
-        // Keyword Search (from Navbar)
-        if ($request->keyword) {
-            $query->whereHas('product', function($q) use ($request) {
-                $q->where('name', 'like', "%{$request->keyword}%")
-                  ->orWhere('product_code', 'like', "%{$request->keyword}%");
+        if ($request->keyword || $search) {
+            $kw = $request->keyword ?: $search;
+            $query->whereHas('product', function($q) use ($kw) {
+                $q->where('name', 'like', "%{$kw}%")
+                  ->orWhere('product_code', 'like', "%{$kw}%");
             });
         }
 
-        $items = $query->orderByDesc('created_at')->paginate(15);
-        $warehouses = Warehouse::orderBy('warehouse_name')->get();
+        $recordsFiltered = (clone $query)->count();
 
-        return view('wh.stock_damage', compact('items', 'warehouses', 'isWarehouse', 'isSuperadmin'));
+        $items = $query->orderByDesc('created_at')
+                       ->offset($start)
+                       ->limit($length)
+                       ->get();
+
+        return response()->json([
+            'draw' => $draw,
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $recordsFiltered,
+            'data' => $items
+        ]);
     }
 
     /**
@@ -66,42 +87,58 @@ class DamagedStockController extends Controller
         $isWarehouse = $user->hasRole('warehouse');
         $isSuperadmin = $user->hasRole('superadmin');
 
+        $warehouses = Warehouse::orderBy('warehouse_name')->get();
+
+        return view('admin.operations.approval_stock_damage', compact('warehouses', 'isWarehouse', 'isSuperadmin'));
+    }
+
+    public function approvalData(Request $request)
+    {
+        $user = auth()->user();
+        $isWarehouse = $user->hasRole('warehouse');
+        $isSuperadmin = $user->hasRole('superadmin');
+
+        $draw = (int) $request->input('draw', 1);
+        $start = (int) $request->input('start', 0);
+        $length = (int) $request->input('length', 10);
+        $search = trim((string) $request->input('search.value', ''));
+
         $query = DamagedStock::with(['product.supplier', 'warehouse', 'requester', 'approver', 'resolver', 'photos']);
 
-        // Warehouse Filter: Lock for WH Admin, allow all for Superadmin
+        $recordsTotal = DamagedStock::count();
+
         if ($isWarehouse && !$isSuperadmin) {
             $query->where('warehouse_id', $user->warehouse_id);
         } elseif ($request->warehouse_id) {
             $query->where('warehouse_id', $request->warehouse_id);
         }
 
-        // Status Filter
-        if ($request->status) {
-            $query->where('status', $request->status);
-        }
+        if ($request->status) $query->where('status', $request->status);
+        if ($request->start_date) $query->whereDate('created_at', '>=', $request->start_date);
+        if ($request->end_date) $query->whereDate('created_at', '<=', $request->end_date);
 
-        // Date Range Filters
-        if ($request->start_date) {
-            $query->whereDate('created_at', '>=', $request->start_date);
-        }
-        if ($request->end_date) {
-            $query->whereDate('created_at', '<=', $request->end_date);
-        }
-
-        // Keyword Search (from Navbar)
-        if ($request->keyword) {
-            $query->whereHas('product', function($q) use ($request) {
-                $q->where('name', 'like', "%{$request->keyword}%")
-                  ->orWhere('product_code', 'like', "%{$request->keyword}%");
+        if ($request->keyword || $search) {
+            $kw = $request->keyword ?: $search;
+            $query->whereHas('product', function($q) use ($kw) {
+                $q->where('name', 'like', "%{$kw}%")
+                  ->orWhere('product_code', 'like', "%{$kw}%");
             });
         }
 
-        $items = $query->orderByRaw("status = 'pending_approval' DESC")
-                      ->orderByDesc('created_at')
-                      ->paginate(15);
-        $warehouses = Warehouse::orderBy('warehouse_name')->get();
+        $recordsFiltered = (clone $query)->count();
 
-        return view('admin.operations.approval_stock_damage', compact('items', 'warehouses', 'isWarehouse', 'isSuperadmin'));
+        $items = $query->orderByRaw("status = 'pending_approval' DESC")
+                       ->orderByDesc('created_at')
+                       ->offset($start)
+                       ->limit($length)
+                       ->get();
+
+        return response()->json([
+            'draw' => $draw,
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $recordsFiltered,
+            'data' => $items
+        ]);
     }
 
     /**
@@ -302,6 +339,26 @@ class DamagedStockController extends Controller
             }
             if ($qtyDamaged > 0) {
                 $auditNotes .= "\n[ALERT]: " . $qtyDamaged . " items received but still DAMAGED.";
+            }
+
+            if ($qtyGood > 0 || $qtyDamaged > 0) {
+                $grCode = 'GR-DR-' . now()->format('Ymd') . '-' . strtoupper(\Str::random(5));
+                DB::table('restock_receipts')->insert([
+                    'purchase_order_id' => null,
+                    'request_id'        => $damagedStock->id, // link ke damaged_stocks
+                    'warehouse_id'      => $damagedStock->warehouse_id,
+                    'product_id'        => $damagedStock->product_id,
+                    'gr_type'           => \App\Models\RestockReceipt::TYPE_RETURN,
+                    'code'              => $grCode,
+                    'qty_requested'     => $damagedStock->quantity,
+                    'qty_good'          => $qtyGood,
+                    'qty_damaged'       => $qtyDamaged,
+                    'notes'             => "Resolution for #{$damagedStock->id}. " . ($request->notes ?? ''),
+                    'received_by'       => auth()->id(),
+                    'received_at'       => now(),
+                    'created_at'        => now(),
+                    'updated_at'        => now(),
+                ]);
             }
 
             $damagedStock->update([

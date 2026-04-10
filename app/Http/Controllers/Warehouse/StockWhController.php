@@ -14,10 +14,13 @@ use App\Models\StockAdjustment;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Validation\ValidationException;
 use App\Exports\Restocks\RestockIndexWithItemsExport;
+use App\Traits\RestockSyncTrait;
 
 
 class StockWhController extends Controller
 {
+    use RestockSyncTrait;
+
     /* ================== INDEX (HALAMAN) ================== */
 
     public function index(Request $r)
@@ -684,14 +687,6 @@ $actions .= '</div>';
 
         $rrIds = $rrRows->pluck('id')->all();
 
-        // cek total existing receipt per request_id (buat validasi tidak melebihi qty request)
-        $existing = DB::table('restock_receipts')
-            ->whereIn('request_id', $rrIds)
-            ->selectRaw('request_id, COALESCE(SUM(qty_good),0) as sum_good, COALESCE(SUM(qty_damaged),0) as sum_bad')
-            ->groupBy('request_id')
-            ->get()
-            ->keyBy('request_id');
-
         // helper untuk baca qty request dari berbagai nama kolom
         $getReqQty = function ($row) {
             if (isset($row->quantity_requested)) return (int) $row->quantity_requested;
@@ -704,34 +699,30 @@ $actions .= '</div>';
         // VALIDASI: jangan sampai total melebihi qty request per item
         foreach ($rrRows as $rr) {
             $reqId = (int) $rr->id;
-
-            // kalau item ini tidak dikirim dari form, lewati
-            if (! isset($itemsInput[$reqId])) {
-                continue;
-            }
+            if (! isset($itemsInput[$reqId])) continue;
 
             $input      = $itemsInput[$reqId];
             $qtyGood    = (int) ($input['qty_good'] ?? 0);
             $qtyDamaged = (int) ($input['qty_damaged'] ?? 0);
 
-            // kalau dua-duanya 0, lewati
-            if ($qtyGood === 0 && $qtyDamaged === 0) {
-                continue;
-            }
+            if ($qtyGood === 0 && $qtyDamaged === 0) continue;
 
             $reqQty = $getReqQty($rr);
 
-            // ==== FIX: handle kalau belum pernah ada GR sama sekali ====
-            $existRow = $existing->get($reqId); // bisa null
-            $sumGood  = $existRow ? (int) $existRow->sum_good : 0;
-            $sumBad   = $existRow ? (int) $existRow->sum_bad  : 0;
-            // ===========================================================
-
+            $existRow = DB::table('restock_receipts')
+                ->where('request_id', $reqId)
+                ->selectRaw('SUM(qty_good) as sum_good, SUM(qty_damaged) as sum_bad')
+                ->first();
+                
+            $sumGood  = (int) ($existRow->sum_good ?? 0);
+            $sumBad   = (int) ($existRow->sum_bad  ?? 0);
             $already  = $sumGood + $sumBad;
+            
             $newTotal = $already + $qtyGood + $qtyDamaged;
 
             if ($reqQty > 0 && $newTotal > $reqQty) {
-                return back()->with('error', 'Total receipt for one or more items exceeds the requested quantity.');
+                $productName = DB::table('products')->where('id', $rr->product_id)->value('name');
+                return back()->with('error', "Gagal! Total penerimaan ({$newTotal}) melebihi jumlah yang diminta ({$reqQty}) untuk produk: {$productName}");
             }
         }
 
@@ -742,49 +733,34 @@ try {
     $now         = now();
     $warehouseId = $user->warehouse_id ?? ($header->warehouse_id ?? null);
 
-    // ❌ TIDAK LAGI generate 1 kode untuk semua item
-    // $grCode = null;
-    // if (Schema::hasColumn('restock_receipts', 'code')) {
-    //     $grCode = $this->nextReceiptCode();
-    // }
-
     $mainReceiptId = null;
     $touchedPoIds  = [];
 
+    $grCode = null;
+    if (Schema::hasColumn('restock_receipts', 'code')) {
+        $grCode = $this->nextReceiptCode();
+    }
+
     foreach ($rrRows as $rr) {
         $reqId = (int) $rr->id;
-
-        if (! isset($itemsInput[$reqId])) {
-            continue;
-        }
+        if (! isset($itemsInput[$reqId])) continue;
 
         $input      = $itemsInput[$reqId];
         $qtyGood    = (int) ($input['qty_good'] ?? 0);
         $qtyDamaged = (int) ($input['qty_damaged'] ?? 0);
         $noteItem   = $input['notes'] ?? null;
 
-        if ($qtyGood === 0 && $qtyDamaged === 0) {
-            continue;
-        }
+        if ($qtyGood === 0 && $qtyDamaged === 0) continue;
 
         $reqQty     = $getReqQty($rr);
         $productId  = (int) ($rr->product_id ?? 0);
         $supplierId = $rr->supplier_id ?? null;
         $whId       = $warehouseId ?: ($rr->warehouse_id ?? null);
 
-        // cari PO yang terkait dengan request_id ini
         $poId = null;
-        if (
-            Schema::hasTable('purchase_order_items') &&
-            Schema::hasColumn('purchase_order_items', 'request_id')
-        ) {
-            $poId = DB::table('purchase_order_items')
-                ->where('request_id', $reqId)
-                ->value('purchase_order_id');
-
-            if ($poId) {
-                $touchedPoIds[$poId] = true;
-            }
+        if (Schema::hasTable('purchase_order_items') && Schema::hasColumn('purchase_order_items', 'request_id')) {
+            $poId = DB::table('purchase_order_items')->where('request_id', $reqId)->value('purchase_order_id');
+            if ($poId) $touchedPoIds[$poId] = true;
         }
 
         $payload = [
@@ -793,283 +769,161 @@ try {
             'product_id'        => $productId,
             'warehouse_id'      => $whId,
             'supplier_id'       => $supplierId,
+            'gr_type'           => \App\Models\RestockReceipt::TYPE_REQUEST_STOCK,
             'qty_requested'     => $reqQty,
             'qty_good'          => $qtyGood,
             'qty_damaged'       => $qtyDamaged,
             'notes'             => $noteItem,
+            'code'              => $grCode,
             'received_by'       => $user->id ?? null,
             'received_at'       => $now,
             'created_at'        => $now,
             'updated_at'        => $now,
         ];
 
-        // ✅ KODE GR UNIK PER ROW (aman kalau kolom `code` unique)
-        if (Schema::hasColumn('restock_receipts', 'code')) {
-            $payload['code'] = $this->nextReceiptCode();
-        }
-
         $receiptId = DB::table('restock_receipts')->insertGetId($payload);
+        if (! $mainReceiptId) $mainReceiptId = $receiptId;
 
-        if (! $mainReceiptId) {
-            $mainReceiptId = $receiptId;
+        $this->adjustWarehouseStock((int)$whId, (int)$productId, (int)$qtyGood);
+        $this->adjustCentralStock((int)$productId, -(int)($qtyGood + $qtyDamaged));
+        
+        // logic karantina: masukkan ke damaged_stocks jika ada yang rusak
+        if ($qtyDamaged > 0 && Schema::hasTable('damaged_stocks')) {
+            DB::table('damaged_stocks')->insert([
+                'product_id'   => $productId,
+                'warehouse_id' => $whId ?? 0,
+                'source_type'  => 'request_stock',
+                'source_id'    => $reqId,
+                'quantity'     => $qtyDamaged,
+                'condition'    => 'damaged',
+                'status'       => 'quarantine',
+                'notes'        => "Auto-created from WH Restock GR: " . ($grCode ?? '-') . ". " . ($noteItem ?? ''),
+                'created_at'   => $now,
+                'updated_at'   => $now,
+            ]);
         }
 
-        // ... (lanjutan update status request_restocks, stok, dll TETAP SAMA)
+        $this->recalcRequestRestock($reqId);
+    } 
 
+    if ($mainReceiptId && Schema::hasTable('restock_receipt_photos')) {
+        $hasType    = Schema::hasColumn('restock_receipt_photos', 'type');
+        $hasCaption = Schema::hasColumn('restock_receipt_photos', 'caption');
 
-                // UPDATE STATUS request_restocks untuk item ini
-                $nowGood = (int) DB::table('restock_receipts')->where('request_id', $reqId)->sum('qty_good');
-                $nowBad  = (int) DB::table('restock_receipts')->where('request_id', $reqId)->sum('qty_damaged');
-                $nowAll  = $nowGood + $nowBad;
-
-                $status = ($reqQty > 0 && $nowAll >= $reqQty)
-                    ? 'received'
-                    : ($rr->status ?? 'ordered');
-
-                DB::table('request_restocks')->where('id', $reqId)->update([
-                    'quantity_received' => $nowGood,
-                    'status'            => $status,
-                    'received_at'       => $status === 'received'
-                        ? $now
-                        : ($rr->received_at ?? null),
-                    'updated_at'        => $now,
-                ]);
-
-                // UPDATE STOCK LEVELS
-                if (Schema::hasTable('stock_levels') && $productId && $qtyGood > 0) {
-
-                    // 1) Kurangi stok di CENTRAL (pusat)
-                    $centralQ = DB::table('stock_levels')
-                        ->where('owner_type', 'pusat')
-                        ->where('owner_id', 0)
-                        ->where('product_id', $productId)
-                        ->lockForUpdate();
-
-                    if ($central = $centralQ->first()) {
-                        $centralQ->update([
-                            'quantity'   => max(0, (int) $central->quantity - $qtyGood),
-                            'updated_at' => $now,
-                        ]);
-                    }
-
-                    // 2) Tambah stok di warehouse penerima
-                    if ($whId) {
-                        $q = DB::table('stock_levels')
-                            ->where('owner_type', 'warehouse')
-                            ->where('owner_id', $whId)
-                            ->where('product_id', $productId)
-                            ->lockForUpdate();
-
-                        if ($existing = $q->first()) {
-                            $qtyNow = (int) ($existing->quantity ?? 0);
-                            $q->update([
-                                'quantity'   => $qtyNow + $qtyGood,
-                                'updated_at' => $now,
-                            ]);
-                        } else {
-                            DB::table('stock_levels')->insert([
-                                'owner_type' => 'warehouse',
-                                'owner_id'   => $whId,
-                                'product_id' => $productId,
-                                'quantity'   => $qtyGood,
-                                'created_at' => $now,
-                                'updated_at' => $now,
-                            ]);
-                        }
-                    }
-                }
-            } // end foreach item RR
-
-            // SIMPAN FOTO ke receipt utama (kalau ada)
-            if ($mainReceiptId && Schema::hasTable('restock_receipt_photos')) {
-                $hasType    = Schema::hasColumn('restock_receipt_photos', 'type');
-                $hasCaption = Schema::hasColumn('restock_receipt_photos', 'caption');
-
-                $storePhotos = function ($files, string $kind) use ($mainReceiptId, $now, $hasType, $hasCaption) {
-                    if (empty($files)) return;
-
-                    if (! is_array($files)) {
-                        $files = [$files];
-                    }
-
-                    foreach ($files as $file) {
-                        if (! $file || ! $file->isValid()) continue;
-
-                        $dir  = $kind === 'good' ? 'gr_photos/good' : 'gr_photos/damaged';
-                        $path = $file->store($dir, 'public');
-
-                        $row = [
-                            'receipt_id' => $mainReceiptId,
-                            'path'       => $path,
-                            'created_at' => $now,
-                            'updated_at' => $now,
-                        ];
-
-                        if ($hasType) {
-                            $row['type'] = $kind;
-                        }
-                        if ($hasCaption) {
-                            $row['caption'] = $kind;
-                        }
-
-                        DB::table('restock_receipt_photos')->insert($row);
-                    }
-                };
-
-                $storePhotos($r->file('photos_good')    ?? [], 'good');
-                $storePhotos($r->file('photos_damaged') ?? [], 'damaged');
-            }
-
-            // UPDATE STATUS PO (untuk semua PO yang tersentuh)
-            if (! empty($touchedPoIds)
-                && Schema::hasTable('purchase_orders')
-                && Schema::hasTable('purchase_order_items')
-            ) {
-                $hasWhCol = Schema::hasColumn('restock_receipts', 'warehouse_id');
-
-                        foreach (array_keys($touchedPoIds) as $poId) {
-
-                // 🔥 hitung berdasarkan request_id (BUKAN product_id)
-                $rcvRows = DB::table('restock_receipts')
-                    ->where('purchase_order_id', $poId)
-                    ->selectRaw('request_id, SUM(qty_good) as qty_rcv')
-                    ->groupBy('request_id')
-                    ->get()
-                    ->keyBy('request_id');
-
-                $items = DB::table('purchase_order_items')
-                    ->where('purchase_order_id', $poId)
-                    ->get(['id', 'request_id', 'qty_ordered', 'qty_received']);
-
-                $allFull     = true;
-                $anyReceived = false;
-
-                foreach ($items as $it) {
-
-                    // ambil berdasarkan request_id (fix utama)
-                    $qtyRcv  = $rcvRows[$it->request_id]->qty_rcv ?? 0;
-                    $ordered = (int) $it->qty_ordered;
-
-                    DB::table('purchase_order_items')
-                        ->where('id', $it->id)
-                        ->update([
-                            'qty_received' => $qtyRcv,
-                            'updated_at'   => $now,
-                        ]);
-
-                    if ($qtyRcv > 0)        $anyReceived = true;
-                    if ($qtyRcv < $ordered) $allFull    = false;
-                }
-
-                $updatePo = [];
-
-                if ($allFull && $anyReceived) {
-                    $updatePo['status'] = 'completed';
-                    if (Schema::hasColumn('purchase_orders', 'received_at')) {
-                        $updatePo['received_at'] = $now;
-                    }
-                } elseif ($anyReceived) {
-                    $updatePo['status'] = 'partially_received';
-                }
-
-                if (! empty($updatePo)) {
-                    $updatePo['updated_at'] = $now;
-                    DB::table('purchase_orders')
-                        ->where('id', $poId)
-                        ->update($updatePo);
-                }
-            }
-
-            }
-
-            DB::commit();
-            return back()->with('success', 'Multi-item receipt saved successfully. Central & warehouse stocks have been updated.');
-        } catch (\Throwable $e) {
-            DB::rollBack();
-            report($e);
-            return back()->with('error', 'Failed to save receipt: ' . $e->getMessage());
-        }
-    }
-
-
-    /* ================== DETAIL SEMUA ITEM DALAM 1 RR ================== */
-
-    public function items($id)
-    {
-        $row = DB::table('request_restocks as rr')
-            ->leftJoin('warehouses as w', 'w.id', '=', 'rr.warehouse_id')
-            ->leftJoin('users as u', 'u.id', '=', 'rr.requested_by')
-            ->where('rr.id', $id)
-            ->select('rr.*', 'w.warehouse_name', 'u.name as requester_name')
-            ->first();
-
-        if (! $row) {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Restock request not found.',
-            ], 404);
-        }
-
-        $hasCode = Schema::hasColumn('request_restocks', 'code');
-
-        $q = DB::table('request_restocks as rr')
-            ->leftJoin('products as p', 'p.id', '=', 'rr.product_id')
-            ->leftJoin('suppliers as s', 's.id', '=', 'rr.supplier_id')
-            ->where(function ($w) use ($row, $hasCode) {
-                if ($hasCode && ! empty($row->code)) {
-                    $w->where('rr.code', $row->code);
-                } else {
-                    $w->where('rr.id', $row->id);
-                }
-            })
-            ->orderBy('rr.id');
-
-        $items = $q->get([
-                'rr.id',
-                'rr.quantity_requested',
-                'rr.quantity_received',
-                'rr.status',
-                'rr.note',
-                'p.product_code',
-                'p.name as product_name',
-                's.name as supplier_name',
-            ])
-            ->map(function ($it) {
-                $qtyReq = (int) ($it->quantity_requested ?? 0);
-                $qtyRcv = (int) ($it->quantity_received ?? 0);
-                $remaining = max($qtyReq - $qtyRcv, 0);
-
-                return [
-                    'id'            => $it->id,
-                    'product'       => $it->product_name,
-                    'product_code'  => $it->product_code,
-                    'supplier'      => $it->supplier_name,
-                    'qty_req'       => $qtyReq,
-                    'qty_rcv'       => $qtyRcv,
-                    'qty_remaining' => $remaining,
-                    'status'        => $it->status ?? 'pending',
-                    'note'          => $it->note,
+        $storePhotos = function ($files, string $kind) use ($mainReceiptId, $now, $hasType, $hasCaption) {
+            if (empty($files)) return;
+            if (! is_array($files)) $files = [$files];
+            foreach ($files as $file) {
+                if (! $file || ! $file->isValid()) continue;
+                $dir  = $kind === 'good' ? 'gr_photos/good' : 'gr_photos/damaged';
+                $path = $file->store($dir, 'public');
+                $row = [
+                    'receipt_id' => $mainReceiptId,
+                    'path'       => $path,
+                    'created_at' => $now,
+                    'updated_at' => $now,
                 ];
-            });
-
-        $createdAt = $row->created_at
-            ? Carbon::parse($row->created_at)->format('Y-m-d')
-            : null;
-
-        $header = [
-            'code'        => $hasCode ? ($row->code ?? ('RR-'.$row->id)) : ('RR-'.$row->id),
-            'request_date'=> $createdAt,
-            'warehouse'   => $row->warehouse_name ?? '-',
-            'requester'   => $row->requester_name ?? '-',
-            'status'      => $row->status ?? 'pending',
-            'total_items' => $items->count(),
-            'total_qty'   => $items->sum('qty_req'),
-        ];
-
-        return response()->json([
-            'status' => 'ok',
-            'header' => $header,
-            'items'  => $items,
-        ]);
+                if ($hasType) $row['type'] = $kind;
+                if ($hasCaption) $row['caption'] = $kind;
+                DB::table('restock_receipt_photos')->insert($row);
+            }
+        };
+        $storePhotos($r->file('photos_good')    ?? [], 'good');
+        $storePhotos($r->file('photos_damaged') ?? [], 'damaged');
     }
+
+    if (! empty($touchedPoIds)) {
+        foreach (array_keys($touchedPoIds) as $poId) {
+            $this->recalcPoFromReceipts($poId);
+        }
+    }
+
+    DB::commit();
+    return back()->with('success', 'Multi-item receipt saved successfully. Central & warehouse stocks have been updated.');
+} catch (\Throwable $e) {
+    DB::rollBack();
+    report($e);
+    return back()->with('error', 'Failed to save receipt: ' . $e->getMessage());
+}
+}
+
+
+/* ================== DETAIL SEMUA ITEM DALAM 1 RR ================== */
+
+public function items($id)
+{
+$row = DB::table('request_restocks as rr')
+    ->leftJoin('warehouses as w', 'w.id', '=', 'rr.warehouse_id')
+    ->leftJoin('users as u', 'u.id', '=', 'rr.requested_by')
+    ->where('rr.id', $id)
+    ->select('rr.*', 'w.warehouse_name', 'u.name as requester_name')
+    ->first();
+
+if (! $row) {
+    return response()->json([
+        'status'  => 'error',
+        'message' => 'Restock request not found.',
+    ], 404);
+}
+
+$hasCode = Schema::hasColumn('request_restocks', 'code');
+
+$q = DB::table('request_restocks as rr')
+    ->leftJoin('products as p', 'p.id', '=', 'rr.product_id')
+    ->leftJoin('suppliers as s', 's.id', '=', 'rr.supplier_id')
+    ->where(function ($w) use ($row, $hasCode) {
+        if ($hasCode && ! empty($row->code)) {
+            $w->where('rr.code', $row->code);
+        } else {
+            $w->where('rr.id', $row->id);
+        }
+    })
+    ->orderBy('rr.id');
+
+$items = $q->get([
+        'rr.id',
+        'rr.quantity_requested',
+        'rr.quantity_received',
+        'rr.status',
+        'rr.note',
+        'p.product_code',
+        'p.name as product_name',
+        's.name as supplier_name',
+    ])
+    ->map(function ($it) {
+        $qtyReq = (int) ($it->quantity_requested ?? 0);
+        $qtyRcv = (int) ($it->quantity_received ?? 0);
+        $remaining = max($qtyReq - $qtyRcv, 0);
+
+        return [
+            'id'            => $it->id,
+            'product'       => $it->product_name,
+            'product_code'  => $it->product_code,
+            'supplier'      => $it->supplier_name,
+            'qty_req'       => $qtyReq,
+            'qty_rcv'       => $qtyRcv,
+            'qty_remaining' => $remaining,
+            'status'        => $it->status ?? 'pending',
+            'note'          => $it->note,
+        ];
+    });
+
+$createdAt = $row->created_at ? Carbon::parse($row->created_at)->format('Y-m-d') : null;
+
+$header = [
+    'code'        => $hasCode ? ($row->code ?? ('RR-'.$row->id)) : ('RR-'.$row->id),
+    'request_date'=> $createdAt,
+    'warehouse'   => $row->warehouse_name ?? '-',
+    'requester'   => $row->requester_name ?? '-',
+    'status'      => $row->status ?? 'pending',
+    'total_items' => $items->count(),
+    'total_qty'   => $items->sum('qty_req'),
+];
+
+return response()->json([
+    'status' => 'ok',
+    'header' => $header,
+    'items'  => $items,
+]);
+}
 }

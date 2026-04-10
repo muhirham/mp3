@@ -3,6 +3,7 @@
 @section('title', 'Warehouse Stock Damage')
 
 @section('content')
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css" />
     <div class="container-xxl flex-grow-1 container-p-y text-sm">
         {{-- Header Ala Modul Master --}}
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -25,6 +26,15 @@
                     <input type="hidden" name="keyword" id="hiddenKeyword" value="{{ request('keyword') }}">
 
                     <div class="row g-3 align-items-end">
+                        <div class="col-md-1">
+                            <label class="form-label small fw-bold">Show</label>
+                            <select id="pageLength" class="form-select">
+                                <option value="10" selected>10</option>
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
                         <div class="col-md-3">
                             <label class="form-label small fw-bold">Warehouse</label>
                             @if ($isWarehouse && !$isSuperadmin)
@@ -32,7 +42,7 @@
                                     value="{{ auth()->user()->warehouse?->warehouse_name ?? 'My Warehouse' }}" readonly>
                                 <input type="hidden" name="warehouse_id" value="{{ auth()->user()->warehouse_id }}">
                             @else
-                                <select name="warehouse_id" class="form-select" onchange="this.form.submit()">
+                                <select name="warehouse_id" class="form-select">
                                     <option value="">-- All Warehouses --</option>
                                     @foreach ($warehouses as $w)
                                         <option value="{{ $w->id }}"
@@ -45,7 +55,7 @@
                         </div>
                         <div class="col-md-3">
                             <label class="form-label small fw-bold">Status Filter</label>
-                            <select name="status" class="form-select status-select" onchange="this.form.submit()">
+                            <select name="status" class="form-select status-select">
                                 <option value="">-- All Status --</option>
                                 <option value="quarantine" {{ request('status') == 'quarantine' ? 'selected' : '' }}>
                                     Quarantine</option>
@@ -60,9 +70,9 @@
                                 </option>
                             </select>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <label class="form-label small fw-bold">Condition</label>
-                            <select name="condition" class="form-select" onchange="this.form.submit()">
+                            <select name="condition" class="form-select">
                                 <option value="">-- All Conditions --</option>
                                 <option value="damaged" {{ request('condition') == 'damaged' ? 'selected' : '' }}>Damaged
                                 </option>
@@ -70,130 +80,59 @@
                                 </option>
                             </select>
                         </div>
-
                     </div>
                 </form>
             </div>
         </div>
 
         {{-- Table Card --}}
+        <style>
+            .table-tiny {
+                font-size: 0.775rem !important; /* Slightly larger base */
+            }
+            .table-tiny th, .table-tiny td {
+                padding: 4px 8px !important; /* Tighter padding */
+            }
+            .table-tiny th {
+                font-weight: 700;
+                text-transform: uppercase;
+                background-color: #f8f9fa;
+            }
+            .table-tiny td {
+                vertical-align: middle !important;
+            }
+            /* Specific column adjustments */
+            .col-checkbox { width: 30px !important; padding-right: 0 !important; }
+            .col-no { width: 35px !important; }
+            .col-product { 
+                max-width: 250px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .text-xs { font-size: 0.65rem !important; }
+        </style>
         <div class="card shadow-sm border-0">
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-striped table-hover align-middle mb-0 table-bordered w-100">
-                        <thead class="table-light">
+                    <table class="table table-striped table-hover align-middle mb-0 table-bordered w-100 table-tiny" id="mainTable">
+                        <thead>
                             <tr>
-                                <th style="width: 40px" class="text-center">
+                                <th class="text-center no-sort col-checkbox">
                                     <input type="checkbox" class="form-check-input" id="checkAll">
                                 </th>
-                                <th style="width: 50px" class="text-center">NO</th>
-                                <th>PRODUCT</th>
+                                <th class="text-center col-no">NO</th>
+                                <th class="col-product">PRODUCT</th>
                                 <th>REPORTED</th>
-                                <th class="text-center">QTY</th>
+                                <th class="text-center" style="width: 50px;">QTY</th>
                                 <th>STATUS</th>
                                 <th>RESOLVED</th>
-                                <th style="width: 200px" class="text-center">ACTIONS</th>
+                                <th class="text-center no-sort" style="width: 150px;">ACTIONS</th>
                             </tr>
                         </thead>
                         <tbody>
-                            @forelse($items as $index => $item)
-                                <tr>
-                                    <td class="text-center">
-                                        @if (in_array($item->status, ['quarantine', 'rejected']))
-                                            <input type="checkbox" class="form-check-input check-item"
-                                                value="{{ $item->id }}" data-name="{{ $item->product->name }}"
-                                                data-code="{{ $item->product->product_code }}">
-                                        @else
-                                            <i class="bx bx-lock-alt text-muted small"></i>
-                                        @endif
-                                    </td>
-                                    <td class="text-center small">{{ $items->firstItem() + $index }}</td>
-                                    <td>
-                                        <div class="fw-bold text-dark">{{ $item->product->name }}</div>
-                                        <small class="text-muted">{{ $item->product->product_code }} |
-                                            {{ strtoupper($item->condition) }}</small>
-                                    </td>
-                                    <td class="py-2">
-                                        <div class="small fw-medium">{{ $item->created_at->format('d/m/Y') }}</div>
-                                        <div class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">
-                                            {{ str_replace('_', ' ', $item->source_type) }}</div>
-                                    </td>
-                                    <td class="text-center fw-bold">{{ $item->quantity }}</td>
-                                    <td>
-                                        @php
-                                            $st = $item->status;
-                                            $cls = match ($st) {
-                                                'quarantine' => 'bg-label-secondary',
-                                                'pending_approval' => 'bg-label-warning',
-                                                'in_progress' => 'bg-label-info',
-                                                'resolved' => 'bg-label-success',
-                                                'rejected' => 'bg-label-danger',
-                                                default => 'bg-label-secondary',
-                                            };
-                                        @endphp
-                                        <span class="badge {{ $cls }} rounded-pill small">
-                                            {{ strtoupper(str_replace('_', ' ', $st)) }}
-                                        </span>
-                                        @if ($st == 'rejected' && $item->notes)
-                                            <div class="text-danger mb-0 mt-1 fw-bold"
-                                                style="font-size: 0.65rem; cursor: help;" title="{{ $item->notes }}">
-                                                <i class="bx bx-info-circle me-1"></i> REASON ATTACHED
-                                            </div>
-                                        @endif
-                                    </td>
-                                    <td>
-                                        @if ($item->resolved_at)
-                                            <div class="small fw-medium text-success">
-                                                {{ $item->resolved_at->format('d/m/Y') }}</div>
-                                            <small class="text-muted" style="font-size: 0.6rem;">Appr by:
-                                                {{ $item->approver?->name ?? 'System' }}</small>
-                                        @elseif($item->approved_at)
-                                            <div class="small fw-medium text-info">Approved</div>
-                                            <small class="text-muted" style="font-size: 0.6rem;">By
-                                                {{ $item->approver?->name ?? 'System' }}</small>
-                                        @else
-                                            <span class="text-muted small italic">Waiting...</span>
-                                        @endif
-                                    </td>
-                                    <td class="text-center">
-                                        <div class="d-flex gap-1 justify-content-center">
-                                            <button class="btn btn-outline-primary btn-sm px-2 btn-detail"
-                                                data-item='@json($item)'
-                                                data-photos='@json($item->photos)'>
-                                                <i class="bx bx-show me-1"></i> Detail
-                                            </button>
-
-                                            @if (in_array($item->status, ['quarantine', 'rejected']))
-                                                <button class="btn btn-primary btn-sm px-2 btn-request"
-                                                    data-id="{{ $item->id }}" data-notes="{{ $item->notes }}">
-                                                    <i class="bx bx-paper-plane me-1"></i> Request
-                                                </button>
-                                            @endif
-
-                                            @if ($item->status == 'in_progress' && auth()->user()->hasRole('warehouse'))
-                                                <button class="btn btn-success btn-sm px-2 btn-resolve"
-                                                    data-id="{{ $item->id }}" data-action="{{ $item->action }}">
-                                                    <i class="bx bx-check-square me-1"></i>
-                                                    {{ $item->action == 'dispose' ? 'Confirm' : 'Receive' }}
-                                                </button>
-                                            @endif
-                                        </div>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="8" class="text-center py-5 text-muted">No records found.</td>
-                                </tr>
-                            @endforelse
+                            {{-- Handled by DataTables AJAX --}}
                         </tbody>
                     </table>
-                </div>
-            </div>
-            <div class="card-footer py-2">
-                <div class="d-flex justify-content-between align-items-center">
-                    <small class="text-muted">Showing {{ $items->firstItem() }} to {{ $items->lastItem() }} of
-                        {{ $items->total() }} entries</small>
-                    <div>{{ $items->appends(request()->query())->links() }}</div>
                 </div>
             </div>
         </div>
@@ -386,6 +325,9 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         $(function() {
+            const isWarehouse = {{ $isWarehouse ? 'true' : 'false' }};
+            const isSuperadmin = {{ $isSuperadmin ? 'true' : 'false' }};
+
             const Alert = Swal.mixin({
                 buttonsStyling: false,
                 customClass: {
@@ -394,135 +336,163 @@
                 }
             });
 
-            @if (session('success'))
-                Alert.fire({
-                    icon: 'success',
-                    title: 'Success!',
-                    text: "{{ session('success') }}",
-                    timer: 3000,
-                    showConfirmButton: false
-                });
-            @endif
+            // DataTables AJAX init
+            const table = $('#mainTable').DataTable({
+                processing: true,
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-            @if (session('error'))
-                Alert.fire({
-                    icon: 'error',
-                    title: 'Oops!',
-                    text: "{{ session('error') }}"
-                });
-            @endif
+    <script>
+        $(function() {
+            const isWarehouse = @json($isWarehouse);
+            const Alert = Swal.mixin({
+                customClass: {
+                    confirmButton: 'btn btn-primary',
+                    cancelButton: 'btn btn-outline-secondary ms-2'
+                },
+                buttonsStyling: false
+            });
 
-            @if ($errors->any())
-                let errList = '';
-                @foreach ($errors->all() as $error)
-                    errList += '<li>{{ $error }}</li>';
-                @endforeach
-                Alert.fire({
-                    icon: 'error',
-                    title: 'Input Error!',
-                    html: '<ul class="text-start small mb-0">' + errList + '</ul>',
-                });
-            @endif
-
-            // 1. Navbar Search Sync
-            const globalSearch = $('#globalSearch');
-            if (globalSearch.length) {
-                const currentKeyword = $('#hiddenKeyword').val();
-                if (currentKeyword) globalSearch.val(currentKeyword);
-
-                globalSearch.on('keypress', function(e) {
-                    if (e.which === 13) {
-                        $('#hiddenKeyword').val($(this).val());
-                        $('#filterForm').submit();
+            // DataTables AJAX init
+            const table = $('#mainTable').DataTable({
+                processing: true,
+                serverSide: true,
+                ajax: {
+                    url: "{{ route('damaged-stocks.data') }}",
+                    type: "GET",
+                    data: function(d) {
+                        d.warehouse_id = $('select[name="warehouse_id"]').val();
+                        d.status = $('select[name="status"]').val();
+                        d.condition = $('select[name="condition"]').val();
                     }
-                });
-            }
+                },
+                columns: [
+                    { data: null, orderable: false, className: 'text-center', render: function(data, type, row) {
+                        if (['quarantine', 'rejected'].includes(row.status)) {
+                            return `<input type="checkbox" class="form-check-input check-item" value="${row.id}" data-name="${row.product.name}" data-code="${row.product.product_code}">`;
+                        }
+                        return '';
+                    }},
+                    { data: null, orderable: false, className: 'text-center', render: (data, type, row, meta) => meta.row + meta.settings._iDisplayStart + 1 },
+                    { data: 'product.name', render: function(data, type, row) {
+                        return `<div style="line-height: 1.1;">
+                            <div class="fw-bold text-dark">${data}</div>
+                            <div class="text-muted italic" style="font-size: 0.65rem;">${row.product.product_code} | ${row.condition.toUpperCase()}</div>
+                        </div>`;
+                    }},
+                    { data: 'created_at', render: function(data, type, row) {
+                        const date = new Date(data).toLocaleDateString('id-ID');
+                        const source = (row.source_type || 'Manual').toUpperCase().replace(/_/g, ' ');
+                        return `<div style="line-height: 1.1;">
+                            <div class="fw-medium">${date}</div>
+                            <div class="text-muted italic" style="font-size: 0.65rem;">${source}</div>
+                        </div>`;
+                    }},
+                    { data: 'quantity', className: 'text-center fw-bold' },
+                    { data: 'status', render: function(data) {
+                        const colors = { quarantine: 'warning', pending_approval: 'info', in_progress: 'primary', resolved: 'success', rejected: 'danger' };
+                        const label = data.toUpperCase().replace(/_/g, ' ');
+                        return `<span class="badge bg-label-${colors[data] || 'secondary'}">${label}</span>`;
+                    }},
+                    { data: 'resolved_at', render: function(data, type, row) {
+                        const approverName = row.approver ? row.approver.name : 'System';
+                        if (data) {
+                            const date = new Date(data).toLocaleDateString('id-ID');
+                            return `<div style="line-height: 1.1;">
+                                <div class="text-success fw-medium">${date}</div>
+                                <div class="text-muted italic" style="font-size: 0.65rem;">By: ${approverName}</div>
+                            </div>`;
+                        } else if (row.approved_at) {
+                            return `<div style="line-height: 1.1;">
+                                <div class="text-info fw-medium">Approved</div>
+                                <div class="text-muted italic" style="font-size: 0.65rem;">By: ${approverName}</div>
+                            </div>`;
+                        }
+                        return `<span class="text-muted italic" style="font-size: 0.65rem;">Waiting...</span>`;
+                    }},
+                    { data: null, orderable: false, className: 'text-center', render: function(data, type, row) {
+                        let btns = `<div class="d-flex gap-1 justify-content-center">
+                            <button class="btn btn-outline-primary btn-sm px-2 btn-detail" data-id="${row.id}">
+                                <i class="bx bx-show me-1"></i> Detail
+                            </button>`;
+                        
+                        if (['quarantine', 'rejected'].includes(row.status)) {
+                            btns += `<button class="btn btn-primary btn-sm px-2 btn-request" data-id="${row.id}" data-notes="${row.notes || ''}">
+                                <i class="bx bx-paper-plane me-1"></i> Request
+                            </button>`;
+                        }
 
-            // 2. Bulk Selection Logic
-            const btnBulk = $('#btnBulkRequest');
-            const bulkCount = $('#bulkCount');
-            const checkAll = $('#checkAll');
-            const checkItems = $('.check-item');
-
-            function updateBulkUI() {
-                const checked = $('.check-item:checked');
-                bulkCount.text(checked.length);
-                if (checked.length > 0) {
-                    btnBulk.removeClass('d-none');
-                } else {
-                    btnBulk.addClass('d-none');
+                        if (row.status === 'in_progress' && isWarehouse) {
+                            btns += `<button class="btn btn-success btn-sm px-2 btn-resolve" data-id="${row.id}" data-action="${row.action}">
+                                <i class="bx bx-check-square me-1"></i> ${row.action === 'dispose' ? 'Confirm' : 'Receive'}
+                            </button>`;
+                        }
+                        btns += `</div>`;
+                        return btns;
+                    }}
+                ],
+                order: [[3, 'desc']],
+                pageLength: 10,
+                pagingType: "simple_numbers",
+                dom: 'rt<"d-flex justify-content-between align-items-center p-2"ip>',
+                language: {
+                    paginate: {
+                        next: '<i class="bx bx-chevron-right"></i>',
+                        previous: '<i class="bx bx-chevron-left"></i>'
+                    }
                 }
+            });
+
+            // Sync Navbar Search
+            const $globalSearch = $('#globalSearch');
+            if ($globalSearch.length) {
+                $globalSearch.off().on('keyup change', function() {
+                    table.search(this.value).draw();
+                });
             }
 
-            checkAll.on('change', function() {
-                checkItems.prop('checked', $(this).prop('checked'));
-                updateBulkUI();
+            // Sync Page Length
+            $('#pageLength').on('change', function() {
+                table.page.len(parseInt(this.value || 10, 10)).draw();
             });
 
-            checkItems.on('change', function() {
-                updateBulkUI();
+            // Filters reload
+            $('select[name="warehouse_id"], select[name="status"], select[name="condition"]').on('change', function() {
+                table.ajax.reload();
             });
 
-            // 3. Bulk Request Sidebar (Offcanvas)
-            btnBulk.on('click', function() {
+            // Update bulk when clicking checks
+            $(document).on('change', '.check-item, #checkAll', function() {
+                if ($(this).attr('id') === 'checkAll') {
+                    $('.check-item').prop('checked', $(this).prop('checked'));
+                }
                 const checked = $('.check-item:checked');
-                $('#numSelected').text(checked.length);
-
-                let html = '';
-                checked.each(function(index) {
-                    const id = $(this).val();
-                    const name = $(this).data('name');
-                    const code = $(this).data('code');
-
-                    html += `
-                    <div class="card mb-3 border shadow-none bg-white">
-                        <div class="card-header bg-light py-2 px-3 fw-bold small">
-                            ${name} <br> <span class="text-muted text-xs">${code}</span>
-                            <input type="hidden" name="items[${index}][id]" value="${id}">
-                        </div>
-                        <div class="card-body p-3">
-                            <div class="mb-2">
-                                <label class="form-label fw-bold text-xs">PROPOSED ACTION</label>
-                                <select name="items[${index}][action]" class="form-select form-select-sm" required>
-                                    <option value="return_to_supplier">Return to Supplier</option>
-                                    <option value="dispose">Disposal / Destruction</option>
-                                    <option value="repair">Repair / Servicing</option>
-                                    <option value="other">Other</option>
-                                </select>
-                            </div>
-                            <div class="mb-2">
-                                <label class="form-label fw-bold text-xs">SPECIFIC NOTES</label>
-                                <textarea name="items[${index}][notes]" class="form-control form-control-sm" rows="2" placeholder="State reason or condition..."></textarea>
-                            </div>
-                            <div>
-                                <label class="form-label fw-bold text-xs">EVIDENCE PHOTOS (Action Proof)</label>
-                                <input type="file" name="items[${index}][photos][]" class="form-control form-control-sm" multiple accept="image/*">
-                            </div>
-                        </div>
-                    </div>`;
-                });
-
-                $('#bulkItemsContainer').html(html);
-                const offcanvas = new bootstrap.Offcanvas(document.getElementById('ocBulkRequest'));
-                offcanvas.show();
+                $('#bulkCount').text(checked.length);
+                if (checked.length > 0) $('#btnBulkRequest').removeClass('d-none');
+                else $('#btnBulkRequest').addClass('d-none');
             });
 
-            $('.btn-detail').on('click', function() {
-                const item = $(this).data('item');
-                const photos = $(this).data('photos');
+            // Detail Logic
+            $(document).on('click', '.btn-detail', function() {
+                const tr = $(this).closest('tr');
+                const rowData = table.row(tr).data();
+                const item = rowData;
+                const photos = rowData.photos || [];
+
                 $('#detProductName').text(item.product.name);
                 $('#detProductCode').text(item.product.product_code);
 
-                const st = item.status.toUpperCase().replace('_', ' ');
+                const st = item.status.toUpperCase().replace(/_/g, ' ');
                 $('#detStatusBadge').html(`<span class="badge bg-label-info">${st}</span>`);
-                $('#detAction').text(item.action ? item.action.toUpperCase().replace('_', ' ') :
-                    'PENDING ANALYSIS');
+                $('#detAction').text(item.action ? item.action.toUpperCase().replace(/_/g, ' ') : 'PENDING ANALYSIS');
+                
                 let approverHtml = item.approver ?
                     `Approved by <b>${item.approver.name}</b> on ${new Date(item.approved_at).toLocaleDateString('id-ID')}` :
                     '<span class="text-danger">Not yet reviewed</span>';
                 if (item.resolver) {
-                    approverHtml +=
-                        `<br><span class="text-success">Resolved by <b>${item.resolver.name}</b></span>`;
+                    approverHtml += `<br><span class="text-success">Resolved by <b>${item.resolver.name}</b></span>`;
                 }
                 $('#detApprover').html(approverHtml);
                 $('#detNotes').text(item.notes || 'No notes available.');
@@ -538,24 +508,95 @@
                         </div>`;
                     });
                 } else {
-                    photoHtml =
-                        '<div class="col-12 py-3 text-center text-muted small border-dashed rounded">No proof photos.</div>';
+                    photoHtml = '<div class="col-12 py-3 text-center text-muted small border-dashed rounded">No proof photos.</div>';
                 }
                 $('#divPhotos').html(photoHtml);
                 $('#mdlDetail').modal('show');
             });
 
-            // 3. Bulk Request Sidebar (Offcanvas)
-            btnBulk.on('click', function() {
+            // Individual Request
+            $(document).on('click', '.btn-request', function() {
+                const id = $(this).data('id');
+                const notes = $(this).data('notes');
+                $('#frmRequest').attr('action', `{{ url('admin/warehouse/damaged-stocks') }}/${id}/request`);
+                $('#frmRequest textarea[name="notes"]').val(notes || '');
+                $('#mdlRequest').modal('show');
+            });
+
+            // Resolve Action
+            $(document).on('click', '.btn-resolve', async function() {
+                const tr = $(this).closest('tr');
+                const id = $(this).data('id');
+                const action = $(this).data('action');
+                const rowData = table.row(tr).data();
+
+                if (action !== 'dispose') {
+                    let typeCode = action === 'repair' ? 'RP' : 'RT';
+                    $('#grTitle').html(`Goods Received – ${typeCode}-${id}`);
+                    $('#grSupplier').html(`Supplier: <strong>${rowData.product.supplier ? rowData.product.supplier.name : 'Unknown Supplier'}</strong>`);
+                    $('#grWarehouse').html(`Warehouse: <strong>${rowData.warehouse ? rowData.warehouse.warehouse_name : 'Unknown Warehouse'}</strong>`);
+                    $('#frmResolveGR').attr('action', `{{ url('admin/warehouse/damaged-stocks') }}/${id}/resolve`);
+
+                    let html = `
+                    <tr>
+                        <td class="ps-3 fw-bold">1</td>
+                        <td>
+                            <div class="fw-bold text-dark" style="font-size: 0.85rem;">${rowData.product.name}</div>
+                            <div class="text-muted small" style="font-size: 0.75rem;">${rowData.product.product_code}</div>
+                        </td>
+                        <td class="text-center text-muted fw-bold">${rowData.quantity}</td>
+                        <td class="text-center text-muted fw-bold">0</td>
+                        <td class="text-center text-muted fw-bold">${rowData.quantity}</td>
+                        <td>
+                            <input type="number" name="qty_good" class="form-control form-control-sm text-center fw-bold border-primary js-sync-gr" 
+                                value="${rowData.quantity}" min="0" max="${rowData.quantity}" data-target="bad">
+                        </td>
+                        <td>
+                            <input type="number" name="qty_damaged" class="form-control form-control-sm text-center fw-bold js-sync-gr" 
+                                value="0" min="0" max="${rowData.quantity}" data-target="good">
+                        </td>
+                        <td class="pe-3">
+                            <input type="text" name="notes" class="form-control form-control-sm" placeholder="Notes (optional)">
+                        </td>
+                    </tr>`;
+                    $('#grTableBody').html(html);
+                    $('#mdlResolveGR').modal('show');
+                } else {
+                    const result = await Alert.fire({
+                        icon: 'warning', title: 'Confirm Disposal?', text: 'Verify destruction. Stock will NOT increase.',
+                        showCancelButton: true, confirmButtonText: 'Yes, Confirm'
+                    });
+                    if (result.isConfirmed) {
+                        const form = $('<form>', { action: `{{ url('admin/warehouse/damaged-stocks') }}/${id}/resolve`, method: 'POST' })
+                            .append($('<input>', { type: 'hidden', name: '_token', value: '{{ csrf_token() }}' }));
+                        $('body').append(form);
+                        form.submit();
+                    }
+                }
+            });
+
+            // Single item Sync Logic (Repair/Return)
+            $(document).on('input', '.js-sync-gr', function() {
+                const tr = $(this).closest('tr');
+                const maxText = tr.find('td:nth-child(3)').text();
+                const max = parseInt(maxText);
+                const targetType = $(this).data('target');
+                const val = parseInt($(this).val()) || 0;
+                let clamped = Math.min(max, Math.max(0, val));
+                $(this).val(clamped);
+                if (targetType === 'bad') tr.find('input[name="qty_damaged"]').val(max - clamped);
+                else tr.find('input[name="qty_good"]').val(max - clamped);
+            });
+
+            // Bulk Request Logic
+            $('#btnBulkRequest').on('click', function() {
                 const checked = $('.check-item:checked');
                 $('#numSelected').text(checked.length);
-
                 let html = '';
                 checked.each(function(index) {
                     const id = $(this).val();
                     const name = $(this).data('name');
                     const code = $(this).data('code');
-
                     html += `
                     <div class="card mb-3 border shadow-none bg-white">
                         <div class="card-header bg-light py-2 px-3 fw-bold small">
@@ -583,132 +624,13 @@
                         </div>
                     </div>`;
                 });
-
                 $('#bulkItemsContainer').html(html);
-                bootstrap.Offcanvas.getOrCreateInstance('#ocBulkRequest').show();
+                const offcanvas = new bootstrap.Offcanvas(document.getElementById('ocBulkRequest'));
+                offcanvas.show();
             });
 
-            $('#frmBulkRequest').on('submit', async function(e) {
-                e.preventDefault();
-                const form = this;
-                const btn = $(form).find('button[type="submit"]');
-                const oc = bootstrap.Offcanvas.getOrCreateInstance('#ocBulkRequest');
-
-                // Hide Sidebar immediately for better UX
-                oc.hide();
-
-                const result = await Alert.fire({
-                    icon: 'question',
-                    title: 'Submit Requests?',
-                    text: 'This will submit all selected items to the Superadmin for approval.',
-                    showCancelButton: true,
-                    confirmButtonText: 'Yes, Submit Bulk'
-                });
-
-                if (result.isConfirmed) {
-                    btn.prop('disabled', true).html('<i class="bx bx-loader-alt bx-spin me-1"></i> Processing...');
-                    form.submit();
-                } else {
-                    // Show sidebar again if cancelled
-                    oc.show();
-                }
-            });
-
-            // 3. Single Request Action (Modal)
-            $('.btn-request').on('click', function() {
-                const id = $(this).data('id');
-                const notes = $(this).data('notes');
-                $('#frmRequest').attr('action',
-                    `{{ url('admin/warehouse/damaged-stocks') }}/${id}/request`);
-                $('#frmRequest textarea[name="notes"]').val(notes || '');
-                $('#mdlRequest').modal('show');
-            });
-
-            $('.btn-resolve').on('click', async function() {
-                const id = $(this).data('id');
-                const action = $(this).data('action');
-                const item = $(this).closest('tr').find('.btn-detail').data('item');
-
-                // NEW: Use Professional GR Modal for all resolvable actions (Supplier, Repair, Other)
-                if (action !== 'dispose') {
-                    let typeCode = action === 'repair' ? 'RP' : 'RT';
-                    $('#grTitle').html(`Goods Received – ${typeCode}-${id}`);
-                    $('#grSupplier').html(
-                        `Supplier: <strong>${item.product.supplier ? item.product.supplier.name : 'Unknown Supplier'}</strong>`
-                        );
-                    $('#grWarehouse').html(
-                        `Warehouse: <strong>${item.warehouse ? item.warehouse.warehouse_name : 'Unknown Warehouse'}</strong>`
-                        );
-
-                    $('#frmResolveGR').attr('action',
-                        `{{ url('admin/warehouse/damaged-stocks') }}/${id}/resolve`);
-
-                    let html = `
-                    <tr>
-                        <td class="ps-3 fw-bold">1</td>
-                        <td>
-                            <div class="fw-bold text-dark" style="font-size: 0.85rem;">${item.product.name}</div>
-                            <div class="text-muted small" style="font-size: 0.75rem;">${item.product.product_code}</div>
-                        </td>
-                        <td class="text-center text-muted fw-bold">${item.quantity}</td>
-                        <td class="text-center text-muted fw-bold">0</td>
-                        <td class="text-center text-muted fw-bold">${item.quantity}</td>
-                        <td>
-                            <input type="number" name="qty_good" class="form-control form-control-sm text-center fw-bold border-primary js-sync-gr" 
-                                value="${item.quantity}" min="0" max="${item.quantity}" data-target="bad">
-                        </td>
-                        <td>
-                            <input type="number" name="qty_damaged" class="form-control form-control-sm text-center fw-bold js-sync-gr" 
-                                value="0" min="0" max="${item.quantity}" data-target="good">
-                        </td>
-                        <td class="pe-3">
-                            <input type="text" name="notes" class="form-control form-control-sm" placeholder="Notes (optional)">
-                        </td>
-                    </tr>`;
-
-                    $('#grTableBody').html(html);
-                    $('#mdlResolveGR').modal('show');
-                } else {
-                    // ORIGINAL: SIMPLE CONFIRMATION FOR DISPOSALS (SAT-SET)
-                    const result = await Alert.fire({
-                        icon: 'warning',
-                        title: 'Confirm Disposal?',
-                        text: 'Verify that the item has been permanently destroyed. Stock levels will not increase.',
-                        showCancelButton: true,
-                        confirmButtonText: 'Yes, Confirm Destruction'
-                    });
-
-                    if (result.isConfirmed) {
-                        const form = $('<form>', {
-                            action: `{{ url('admin/warehouse/damaged-stocks') }}/${id}/resolve`,
-                            method: 'POST'
-                        }).append($('<input>', {
-                            type: 'hidden',
-                            name: '_token',
-                            value: '{{ csrf_token() }}'
-                        }));
-                        $('body').append(form);
-                        form.submit();
-                    }
-                }
-            });
-
-            // Sync Logic for the new GR Modal
-            $(document).on('input', '.js-sync-gr', function() {
-                const tr = $(this).closest('tr');
-                const max = parseInt(tr.find('td:nth-child(3)').text());
-                const targetType = $(this).data('target');
-                const val = parseInt($(this).val()) || 0;
-
-                let clamped = Math.min(max, Math.max(0, val));
-                $(this).val(clamped);
-
-                if (targetType === 'bad') {
-                    tr.find('input[name="qty_damaged"]').val(max - clamped);
-                } else {
-                    tr.find('input[name="qty_good"]').val(max - clamped);
-                }
-            });
+            @if (session('success')) Alert.fire({ icon: 'success', title: 'Success!', text: "{{ session('success') }}", timer: 3000, showConfirmButton: false }); @endif
+            @if (session('error')) Alert.fire({ icon: 'error', title: 'Oops!', text: "{{ session('error') }}" }); @endif
         });
 
         function previewImage(src) {
