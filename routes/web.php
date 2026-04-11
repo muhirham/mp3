@@ -177,6 +177,14 @@ Route::middleware(['auth', 'active'])->group(function () {
 
     /* === Purchase Orders === */
     // key: po
+    Route::get('/po/datatable',       [PreOController::class, 'datatable'])
+        ->name('po.datatable')
+        ->middleware('menu:po');
+
+    Route::get('/po/modal-gr/{po}',   [PreOController::class, 'modalGr'])
+        ->name('po.modal-gr')
+        ->middleware('menu:po');
+
     Route::get('/po',                 [PreOController::class, 'index'])
         ->name('po.index')
         ->middleware('menu:po');
