@@ -15,72 +15,101 @@ class StockRequestApprovalController extends Controller
 {
     public function index(Request $request)
     {
-            $me = auth()->user();
+        $me = auth()->user();
 
-            $dateFrom = $request->date_from ?? now()->toDateString();
-            $dateTo   = $request->date_to ?? now()->toDateString();
+        $dateFrom = $request->date_from ?? now()->toDateString();
+        $dateTo   = $request->date_to ?? now()->toDateString();
 
-            $query = StockRequest::with('product','warehouse','user')
-                ->whereIn('status', ['pending','approved','rejected']);
-
-            if (!$me->hasRole(['admin', 'superadmin'])) {
-                $query->where('warehouse_id', $me->warehouse_id);
-            }
-
-            if ($me->hasRole(['admin','superadmin']) && filled($request->warehouse_id)) {
-                $query->where('warehouse_id', $request->warehouse_id);
-            }
-
-            $query->whereBetween('created_at', [
-                $dateFrom . ' 00:00:00',
-                $dateTo . ' 23:59:59'
-            ]);
-
-        if ($request->search) {
-
-            $search = $request->search;
-
-            $query->where(function($q) use ($search){
-                $q->whereHas('user', fn($x)=>$x->where('name','like',"%$search%"))
-                ->orWhereHas('product', fn($x)=>$x->where('name','like',"%$search%"))
-                ->orWhereHas('warehouse', fn($x)=>$x->where('warehouse_name','like',"%$search%"));
-            });
-        }
-
-        $requests = $query->latest()->get()
-                ->groupBy(function ($item) {
-                    return $item->user_id . '_' .
-                        $item->warehouse_id . '_' .
-                        $item->created_at->format('Y-m-d H:i');
-                });
-
-            if ($request->ajax()) {
-            return response()->json(
-            $requests->map(function($group){
-
-                $first = $group->first();
-
-                return [
-                    'ids' => $group->pluck('id'),
-                    'date' => $first->created_at->format('Y-m-d H:i'),
-                    'sales' => $first->user->name,
-                    'warehouse' => $first->warehouse->warehouse_name,
-                    'count' => $group->count(),
-                    'items' => $group->values()
-                ];
-                })->values()
-            );
-        }
-        $warehouses = $me->hasRole(['admin','superadmin'])
+        $warehouses = $me->hasRole('superadmin')
             ? Warehouse::orderBy('warehouse_name')->get()
             : collect();
 
         return view('wh.approval_stock_requests', compact(
-                'requests',
-                'warehouses',
-                'me',
-                'dateFrom',
-                'dateTo'));
+            'warehouses',
+            'me',
+            'dateFrom',
+            'dateTo'
+        ));
+    }
+
+    public function filter(Request $request)
+    {
+        $me = auth()->user();
+
+        $dateFrom = $request->date_from;
+        $dateTo   = $request->date_to;
+
+        // Base query for grouping
+        $query = DB::table('stock_requests')
+            ->join('users', 'stock_requests.user_id', '=', 'users.id')
+            ->join('warehouses', 'stock_requests.warehouse_id', '=', 'warehouses.id')
+            ->select(
+                'stock_requests.user_id',
+                'stock_requests.warehouse_id',
+                'users.name as sales_name',
+                'warehouses.warehouse_name',
+                DB::raw("DATE_FORMAT(stock_requests.created_at, '%Y-%m-%d %H:%i') as group_time"),
+                DB::raw("COUNT(*) as item_count"),
+                DB::raw("CASE 
+                    WHEN SUM(CASE WHEN stock_requests.status = 'pending' THEN 1 ELSE 0 END) > 0 THEN 'pending'
+                    WHEN SUM(CASE WHEN stock_requests.status = 'approved' THEN 1 ELSE 0 END) > 0 THEN 'approved'
+                    WHEN SUM(CASE WHEN stock_requests.status = 'completed' THEN 1 ELSE 0 END) > 0 THEN 'completed'
+                    ELSE 'rejected'
+                END as max_status")
+            )
+            ->whereIn('stock_requests.status', ['pending', 'approved', 'rejected']);
+
+        if (!$me->hasRole('superadmin')) {
+            $query->where('stock_requests.warehouse_id', $me->warehouse_id);
+        } elseif ($request->warehouse_id) {
+            $query->where('stock_requests.warehouse_id', $request->warehouse_id);
+        }
+
+        if ($dateFrom && $dateTo) {
+            $query->whereBetween('stock_requests.created_at', [
+                $dateFrom . ' 00:00:00',
+                $dateTo . ' 23:59:59'
+            ]);
+        }
+
+        if ($request->search['value'] ?? null) {
+            $search = $request->search['value'];
+            $query->where(function ($q) use ($search) {
+                $q->where('users.name', 'like', "%$search%")
+                    ->orWhere('warehouses.warehouse_name', 'like', "%$search%");
+            });
+        }
+
+        $query->groupBy('stock_requests.user_id', 'stock_requests.warehouse_id', 'users.name', 'warehouses.warehouse_name', 'group_time');
+
+        // Untuk pegination di grouped query, kita bungkus lagi
+        $totalData = DB::table(DB::raw("({$query->toSql()}) as sub"))
+            ->mergeBindings($query)
+            ->count();
+
+        $results = $query->orderByDesc('group_time')
+            ->offset($request->start)
+            ->limit($request->length)
+            ->get();
+
+        $data = $results->map(function ($row) {
+            return [
+                'group_key' => "{$row->user_id}_{$row->warehouse_id}_{$row->group_time}",
+                'date'      => $row->group_time,
+                'sales'     => $row->sales_name,
+                'warehouse' => $row->warehouse_name,
+                'count'     => "{$row->item_count} Item",
+                'status'    => $row->max_status,
+                'actions'   => '<button class="btn btn-primary btn-sm detailBtn" data-group="' . "{$row->user_id}_{$row->warehouse_id}_{$row->group_time}" . '">Detail</button>'
+            ];
+        });
+
+        return response()->json([
+            'draw'            => intval($request->draw),
+            'recordsTotal'    => $totalData,
+            'recordsFiltered' => $totalData, // search sudah masuk di query utama
+            'data'            => $data
+        ]);
     }
 
     public function approve(Request $request, $id)
@@ -263,8 +292,13 @@ class StockRequestApprovalController extends Controller
             ->where('warehouse_id', $warehouseId)
             ->whereRaw("DATE_FORMAT(created_at,'%Y-%m-%d %H:%i') = ?", [$time]);
 
-        if (!auth()->user()->hasRole(['admin','superadmin'])) {
+        if (!auth()->user()->hasRole('superadmin')) {
             $items->where('warehouse_id', auth()->user()->warehouse_id);
+            
+            // SECURITY: if sales, they can only see their own items
+            if (auth()->user()->hasRole('sales')) {
+                $items->where('user_id', auth()->user()->id);
+            }
         }
 
         $items = $items->orderBy('id')->get();

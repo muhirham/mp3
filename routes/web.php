@@ -585,6 +585,10 @@ Route::post('/warehouse/stock-requests/{id}/reject', [StockRequestApprovalContro
         ->name('sales-request.index')
         ->middleware('menu:sales_request');
 
+    Route::get('/sales/stock-requests/filter', [StockRequestController::class, 'filter'])
+        ->name('sales-requests.filter')
+        ->middleware('menu:sales_request');
+
     Route::post('/sales/stock-requests', [StockRequestController::class, 'store'])
         ->name('sales-requests.store')
         ->middleware('menu:sales_request');
@@ -597,12 +601,15 @@ Route::post('/warehouse/stock-requests/{id}/reject', [StockRequestApprovalContro
         ->name('warehouse.stock-requests.approve')
         ->middleware('menu:sales_request_approval');
 
+    Route::get('/warehouse/stock-requests/detail', [StockRequestApprovalController::class, 'detail'])
+        ->name('warehouse.stock-requests.detail');
+    
     Route::post('/warehouse/stock-requests/{id}/reject', [StockRequestApprovalController::class, 'reject'])
         ->name('warehouse.stock-requests.reject')
         ->middleware('menu:sales_request_approval');
-    
-    Route::get('/warehouse/stock-requests/detail', [StockRequestApprovalController::class, 'detail'])
-        ->name('warehouse.stock-requests.detail')
+
+    Route::get('/warehouse/stock-requests/filter', [StockRequestApprovalController::class, 'filter'])
+        ->name('warehouse.stock-requests.filter')
         ->middleware('menu:sales_request_approval');
 
     // === Sales pages (SALES & WAREHOUSE) ===
