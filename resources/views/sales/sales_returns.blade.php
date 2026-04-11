@@ -369,9 +369,19 @@
         }
 
         function submitFix(handoverId) {
-
             const form = document.getElementById('fixForm');
             const formData = new FormData(form);
+
+            // Hide the modal first to prevent z-index overlap with Swal
+            const modalEl = document.getElementById('hdoDetailModal');
+            const modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) modalInstance.hide();
+
+            Swal.fire({
+                title: 'Processing...',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
 
             fetch(`/sales/returns/${handoverId}/update-rejected`, {
                     method: 'POST',
@@ -381,24 +391,40 @@
                     body: formData
                 })
                 .then(res => {
-                    if (!res.ok) {
-                        return res.text().then(text => {
-                            console.error(text);
-                            throw new Error('Request failed');
-                        });
-                    }
-                    return res.text(); // ⬅ jangan json
+                    if (!res.ok) throw new Error('Request failed');
+                    return res.text();
                 })
                 .then(() => {
-                    location.reload();
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success',
+                        text: 'Return resubmitted successfully.',
+                        timer: 1500,
+                        showConfirmButton: false
+                    }).then(() => {
+                        location.reload();
+                    });
                 })
-                .catch(err => console.error(err));
+                .catch(err => {
+                    console.error(err);
+                    Swal.fire({ icon: 'error', title: 'Error', text: 'Failed to resubmit return.' });
+                });
         }
 
         function submitReturn() {
-
             let form = document.getElementById('modalReturnForm');
             let formData = new FormData(form);
+
+            // Hide the modal first
+            const modalEl = document.getElementById('hdoDetailModal');
+            const modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) modalInstance.hide();
+
+            Swal.fire({
+                title: 'Processing...',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
 
             fetch("{{ route('sales.returns.store') }}", {
                     method: 'POST',
@@ -409,19 +435,24 @@
                     body: formData
                 })
                 .then(res => {
-                    if (!res.ok) {
-                        return res.text().then(text => {
-                            console.error(text);
-                            alert("Terjadi error saat submit.");
-                            throw new Error('Request failed');
-                        });
-                    }
+                    if (!res.ok) throw new Error('Request failed');
                     return res.text();
                 })
                 .then(() => {
-                    location.reload();
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success',
+                        text: 'Return submitted successfully.',
+                        timer: 1500,
+                        showConfirmButton: false
+                    }).then(() => {
+                        location.reload();
+                    });
                 })
-                .catch(err => console.error(err));
+                .catch(err => {
+                    console.error(err);
+                    Swal.fire({ icon: 'error', title: 'Error', text: 'Failed to submit return.' });
+                });
         }
     </script>
 
@@ -572,4 +603,12 @@
             });
         </script>
     @endif
+@endpush
+
+@push('styles')
+    <style>
+        .swal2-container {
+            z-index: 20000 !important;
+        }
+    </style>
 @endpush
