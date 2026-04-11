@@ -540,6 +540,14 @@ Route::post('/warehouse/stock-requests/{id}/reject', [StockRequestApprovalContro
         ->name('warehouse.returns.reject')
         ->middleware('menu:sales_return_approval');
 
+    Route::post('/warehouse/returns/{handover}/approve-all', [SalesReturnController::class, 'approveAll'])
+        ->name('warehouse.returns.approve-all')
+        ->middleware('menu:sales_return_approval');
+
+    Route::post('/warehouse/returns/{handover}/reject-all', [SalesReturnController::class, 'rejectAll'])
+        ->name('warehouse.returns.reject-all')
+        ->middleware('menu:sales_return_approval');
+
     Route::post('/sales/returns/{salesReturn}/resubmit',[SalesReturnController::class,'resubmit'])
         ->name('sales.returns.resubmit')
         ->middleware('menu:sales_return');

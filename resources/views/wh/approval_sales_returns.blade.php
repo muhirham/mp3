@@ -52,8 +52,8 @@
         </div>
         <div class="card shadow-sm border-0 rounded-3">
             <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0 text-nowrap">
+                <div class="table-responsive" style="overflow-x: auto;">
+                    <table id="tblApprovalReturns" class="table table-hover align-middle mb-0 w-100">
                         <thead class="table-light">
                             <tr>
                                 <th style="width:140px;">HDO</th>
@@ -61,55 +61,9 @@
                                 <th style="width:120px;">Total Items</th>
                                 <th style="width:120px;">Status</th>
                                 <th style="width:180px;">Created</th>
-                                <th style="width:110px;" class="text-end pe-3">Action</th>
+                                <th style="width:110px;" class="text-end">Action</th>
                             </tr>
                         </thead>
-
-                        <tbody id="returnTableBody">
-                            @forelse($returns as $handoverId => $data)
-                                <tr>
-                                    <td class="fw-semibold text-nowrap">
-                                        {{ $data['handover']->code ?? '-' }}
-                                    </td>
-
-                                    <td>{{ $data['sales']->name }}</td>
-
-                                    <td>
-                                        <span class="badge bg-label-primary">
-                                            {{ $data['items']->count() }} item
-                                        </span>
-                                    </td>
-
-                                    <td>
-                                        @if ($data['status'] == 'pending')
-                                            <span class="badge bg-label-warning">Pending</span>
-                                        @elseif($data['status'] == 'rejected')
-                                            <span class="badge bg-label-danger">Rejected</span>
-                                        @else
-                                            <span class="badge bg-label-success">Approved</span>
-                                        @endif
-                                    </td>
-
-                                    <td class="text-muted text-nowrap">
-                                        {{ $data['date']->format('d M Y H:i') }}
-                                    </td>
-
-                                    <td class="text-end">
-                                        <button class="btn btn-sm btn-primary"
-                                            onclick="openDetailModal('{{ $handoverId }}')">
-                                            Detail
-                                        </button>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="6" class="text-center py-4 text-muted">
-                                        No return data found
-                                    </td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-
                     </table>
                 </div>
             </div>
@@ -172,9 +126,13 @@
                     }
 
                     let html = `
-                    <button class="btn btn-success mb-3"
+                    <button class="btn btn-success mb-3 me-2"
                         onclick="approveAll(${handoverId})">
                         Approve All
+                    </button>
+                    <button class="btn btn-danger mb-3"
+                        onclick="rejectAll(${handoverId})">
+                        Reject All
                     </button>
                     <div class="table-responsive">
                     <table class="table table-bordered align-middle">
@@ -301,6 +259,62 @@
                 }
             });
         }
+
+        function rejectAll(handoverId) {
+            // Hide detail modal to prevent backdrop issues with Swal
+            const modalEl = document.getElementById('detailModal');
+            const modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) modalInstance.hide();
+
+            Swal.fire({
+                title: 'Reject all items?',
+                text: "Please provide a reason for rejecting all items:",
+                input: 'textarea',
+                inputPlaceholder: 'Type your reason here...',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, reject all!',
+                inputValidator: (value) => {
+                    if (!value) return 'You need to provide a reason!'
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({
+                        title: 'Rejecting...',
+                        allowOutsideClick: false,
+                        didOpen: () => Swal.showLoading()
+                    });
+
+                    fetch(`/warehouse/returns/${handoverId}/reject-all`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                        },
+                        body: JSON.stringify({ reject_reason: result.value })
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Rejected',
+                                text: 'All items successfully rejected.',
+                                timer: 1500,
+                                showConfirmButton: false
+                            }).then(() => location.reload());
+                        } else {
+                            throw new Error();
+                        }
+                    })
+                    .catch(() => {
+                        Swal.fire({ icon: 'error', title: 'Error', text: 'Failed to reject items.' });
+                    });
+                }
+            });
+        }
     </script>
 
     @if (session('success'))
@@ -314,76 +328,52 @@
             });
         </script>
     @endif
+    <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
     <script>
-        const inputs = filterForm.querySelectorAll('input, select');
-
-        inputs.forEach(input => {
-            input.addEventListener('change', loadFilteredData);
-        });
-
-        // GLOBAL SEARCH INTEGRATION (with 300ms debounce)
-        let searchTimer;
-        $('#globalSearch').on('keyup', function() {
-            clearTimeout(searchTimer);
-            searchTimer = setTimeout(loadFilteredData, 300);
-        });
-
-        function loadFilteredData() {
-
-            const formData = new FormData(filterForm);
-            // Include globalSearch value
-            const searchVal = $('#globalSearch').val();
-            const params = new URLSearchParams(formData);
-            if (searchVal) params.append('search', searchVal);
-
-            fetch(`/warehouse/returns/filter?${params.toString()}`)
-                .then(res => res.json())
-                .then(data => {
-
-                    const tbody = document.getElementById('returnTableBody');
-                    tbody.innerHTML = '';
-
-                    if (!data.length) {
-                        tbody.innerHTML = `
-                    <tr>
-                        <td colspan="6" class="text-center text-muted">
-                            No return data found
-                        </td>
-                    </tr>
-                `;
-                        return;
+        $(function() {
+            const table = $('#tblApprovalReturns').DataTable({
+                processing: true,
+                serverSide: true,
+                searching: true,
+                ordering: false,
+                dom: '<"d-flex justify-content-between align-items-center mx-3 mt-3"<"me-auto"l><"d-none"f>>rt<"d-flex justify-content-between align-items-center mx-3 mb-3"ip>',
+                ajax: {
+                    url: "{{ route('warehouse.returns.filter') }}",
+                    data: d => {
+                        d.from = $('input[name="from"]').val();
+                        d.to = $('input[name="to"]').val();
+                        d.status = $('select[name="status"]').val();
+                        @if(!empty($canSwitchWarehouse) && $canSwitchWarehouse)
+                        d.warehouse_id = $('select[name="warehouse_id"]').val();
+                        @endif
                     }
+                },
+                columns: [
+                    { data: 'handover_code', className: 'fw-bold text-nowrap' },
+                    { data: 'sales_name' },
+                    { data: 'total_items', className: 'text-nowrap' },
+                    { data: 'status_badge' },
+                    { data: 'date' },
+                    { 
+                        data: null, 
+                        className: 'text-end',
+                        render: data => `<button class="btn btn-sm btn-primary" onclick="openDetailModal(${data.handover_id})">Detail</button>`
+                    }
+                ]
+            });
 
-                    data.forEach(item => {
+            // Filter triggers
+            $('input[name="from"], input[name="to"], select[name="status"], select[name="warehouse_id"]').on('change', () => table.ajax.reload());
 
-                        let badge = '';
-
-                        if (item.status === 'pending') {
-                            badge = '<span class="badge bg-warning text-dark">Pending</span>';
-                        } else if (item.status === 'rejected') {
-                            badge = '<span class="badge bg-danger">Rejected</span>';
-                        } else {
-                            badge = '<span class="badge bg-success">Approved</span>';
-                        }
-
-                        tbody.innerHTML += `
-                    <tr>
-                        <td><strong>${item.handover_code}</strong></td>
-                        <td>${item.sales_name}</td>
-                        <td>${item.total_items} items</td>
-                        <td>${badge}</td>
-                        <td>${item.date}</td>
-                        <td>
-                            <button class="btn btn-sm btn-outline-primary w-100"
-                                onclick="openDetailModal(${item.handover_id})">
-                                Detail
-                            </button>
-                        </td>
-                    </tr>
-                `;
-                    });
-
-                });
-        }
+            // Global Search with Debounce
+            let searchTimeout;
+            $('#globalSearch').on('keyup', function() {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    table.search(this.value).draw();
+                }, 400);
+            });
+        });
     </script>
 @endpush
