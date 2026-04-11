@@ -51,6 +51,15 @@
 
         <div class="container-xxl container-p-y">
 
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4 class="fw-bold py-3 mb-0">
+                    <span class="text-muted fw-light">Warehouse /</span> Transfer Detail
+                </h4>
+                <a href="{{ route('warehouse-transfers.index') }}" class="btn btn-outline-secondary">
+                    <i class="bx bx-chevron-left"></i> Back to List
+                </a>
+            </div>
+
             @if ($transfer->exists)
                 <div class="card mb-3">
                     <div class="card-body row g-3">
