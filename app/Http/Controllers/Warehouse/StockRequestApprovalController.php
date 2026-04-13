@@ -95,7 +95,7 @@ class StockRequestApprovalController extends Controller
         $data = $results->map(function ($row) {
             return [
                 'group_key' => "{$row->user_id}_{$row->warehouse_id}_{$row->group_time}",
-                'date'      => $row->group_time,
+                'date'      => fm_relativedate($row->group_time),
                 'sales'     => $row->sales_name,
                 'warehouse' => $row->warehouse_name,
                 'count'     => "{$row->item_count} Item",

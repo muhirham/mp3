@@ -91,7 +91,7 @@ class StockRequestController extends Controller
             if ($row->max_status === 'rejected') $statusBadge = 'bg-danger';
 
             return [
-                'date'         => $row->group_time,
+                'date'         => fm_relativedate($row->group_time),
                 'warehouse'    => $row->warehouse_name,
                 'count'        => "{$row->item_count} Item",
                 'status'       => '<span class="badge ' . $statusBadge . '">' . strtoupper($row->max_status) . '</span>',
