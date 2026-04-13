@@ -382,12 +382,11 @@
                             <div class="text-muted italic" style="font-size: 0.65rem;">${row.product.product_code} | ${row.condition.toUpperCase()}</div>
                         </div>`;
                     }},
-                    { data: 'created_at', render: function(data, type, row) {
-                        const date = new Date(data).toLocaleDateString('id-ID');
+                    { data: 'created_at_html', render: function(data, type, row) {
                         const source = (row.source_type || 'Manual').toUpperCase().replace(/_/g, ' ');
                         return `<div style="line-height: 1.1;">
-                            <div class="fw-medium">${date}</div>
-                            <div class="text-muted italic" style="font-size: 0.65rem;">${source}</div>
+                            <div class="fw-medium">${data}</div>
+                            <div class="text-muted italic" style="font-size: 0.65rem; margin-top: 2px;">${source}</div>
                         </div>`;
                     }},
                     { data: 'quantity', className: 'text-center fw-bold' },
@@ -396,18 +395,17 @@
                         const label = data.toUpperCase().replace(/_/g, ' ');
                         return `<span class="badge bg-label-${colors[data] || 'secondary'}">${label}</span>`;
                     }},
-                    { data: 'resolved_at', render: function(data, type, row) {
+                    { data: 'resolved_at_html', render: function(data, type, row) {
                         const approverName = row.approver ? row.approver.name : 'System';
                         if (data) {
-                            const date = new Date(data).toLocaleDateString('id-ID');
                             return `<div style="line-height: 1.1;">
-                                <div class="text-success fw-medium">${date}</div>
-                                <div class="text-muted italic" style="font-size: 0.65rem;">By: ${approverName}</div>
+                                <div class="text-success fw-medium">${data}</div>
+                                <div class="text-muted italic" style="font-size: 0.65rem; margin-top: 2px;">By: ${approverName}</div>
                             </div>`;
                         } else if (row.approved_at) {
                             return `<div style="line-height: 1.1;">
                                 <div class="text-info fw-medium">Approved</div>
-                                <div class="text-muted italic" style="font-size: 0.65rem;">By: ${approverName}</div>
+                                <div class="text-muted italic" style="font-size: 0.65rem; margin-top: 2px;">By: ${approverName}</div>
                             </div>`;
                         }
                         return `<span class="text-muted italic" style="font-size: 0.65rem;">Waiting...</span>`;
