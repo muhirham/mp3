@@ -242,6 +242,9 @@ class StockRequestApprovalController extends Controller
                 'sales_handover_id' => $handover->id,
             ]);
 
+            // Tembak sinyal real-time!
+            broadcast(new \App\Events\StockRequestUpdated());
+
             return $handover;
         });
 
@@ -277,6 +280,9 @@ class StockRequestApprovalController extends Controller
             'approved_by' => auth()->id(),
             'note'        => $oldNote . $rejectNote
         ]);
+
+        // Tembak sinyal real-time!
+        broadcast(new \App\Events\StockRequestUpdated());
 
         return response()->json([
             'success' => true,

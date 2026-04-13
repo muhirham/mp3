@@ -141,6 +141,13 @@ class StockRequestController extends Controller
             ]);
         }
 
+        // Tembak sinyal real-time biar Admin WH dapet notif!
+        broadcast(new \App\Events\StockRequestUpdated());
+
+        if ($request->ajax()) {
+            return response()->json(['success' => true, 'message' => 'Request created successfully']);
+        }
+
         return redirect()
             ->route('sales-request.index')
             ->with('success', 'Request created successfully');

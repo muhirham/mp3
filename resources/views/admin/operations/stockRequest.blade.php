@@ -462,5 +462,14 @@
         });
 
         load();
+
+        // LISTENER REAL-TIME (PoC)
+        if (window.Echo) {
+            window.Echo.channel('sales-channel')
+                .listen('.stock-request-updated', (e) => {
+                    console.log('Real-time Update Received: Admin Pusat');
+                    load(); // Refresh data pake fungsi bawaan dashboard ini
+                });
+        }
     </script>
 @endsection

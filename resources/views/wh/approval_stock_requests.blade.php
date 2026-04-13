@@ -411,6 +411,15 @@
                     }
                 }, 200);
             });
+
+            // LISTENER REAL-TIME (PoC)
+            if (window.Echo) {
+                window.Echo.channel('sales-channel')
+                    .listen('.stock-request-updated', (e) => {
+                        console.log('Real-time Update Received: WH Approval');
+                        table.draw(false); // reload datatable
+                    });
+            }
         });
     </script>
 @endpush

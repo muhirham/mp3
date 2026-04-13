@@ -105,7 +105,7 @@
     <div class="modal fade" id="requestModal" tabindex="-1">
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
-                <form method="POST" action="{{ route('sales-requests.store') }}">
+                <form id="requestForm" method="POST" action="{{ route('sales-requests.store') }}">
                     @csrf
                     <div class="modal-header">
                         <h5 class="modal-title">New Stock Request</h5>
@@ -302,6 +302,59 @@
                     });
             });
 
+            // AJAX SUBMIT (BIAR GA RELOAD)
+            $('#requestForm').on('submit', function(e) {
+                e.preventDefault();
+                const form = $(this);
+                const btn = form.find('button[type="submit"]');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('requestModal'));
+
+                btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Processing...');
+
+                fetch(form.attr('action'), {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: form.serialize()
+                })
+                .then(async res => {
+                    if (res.redirected) {
+                        // Kalau sukses biasanya diredirect, tapi kita mau handle AJAX
+                        return { success: true };
+                    }
+                    const data = await res.json();
+                    if (!res.ok) throw data;
+                    return data;
+                })
+                .then(data => {
+                    modal.hide();
+                    form[0].reset();
+                    table.draw();
+                    
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Request Sent',
+                        text: 'Your stock request has been submitted successfully.',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                })
+                .catch(err => {
+                    console.error(err);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Failed',
+                        text: err.message || 'An error occurred while submitting.'
+                    });
+                })
+                .finally(() => {
+                    btn.prop('disabled', false).text('Submit Request');
+                });
+            });
+
             @if (session('success'))
                 Swal.fire({
                     icon: 'success',
@@ -311,6 +364,16 @@
                     showConfirmButton: false
                 });
             @endif
+
+            // LISTENER REAL-TIME (PoC)
+            if (window.Echo) {
+                window.Echo.channel('sales-channel')
+                    .listen('.stock-request-updated', (e) => {
+                        console.log('Real-time Update Received');
+                        // Refresh tabel tanpa ganggu input user (null = jangan reset paging)
+                        table.draw();
+                    });
+            }
         });
     </script>
 @endpush
