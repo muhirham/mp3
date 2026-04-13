@@ -85,125 +85,33 @@
         <div class="card shadow-sm border-0 rounded-3">
             <div class="card-body">
 
-                <h5 class="fw-semibold mb-3">Return History</h5>
-
-                {{-- DESKTOP TABLE --}}
-                <div class="d-none d-md-block">
-                    <div class="table-responsive">
-                        <table class="table align-middle">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>HDO</th>
-                                    <th>Total Items</th>
-                                    <th>Status</th>
-                                    <th>Date</th>
-                                    <th width="120">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody id="returnTableBody">
-                                @forelse($groupedReturns as $handoverId => $items)
-                                    @php
-                                        $itemsCollection = $items['items'];
-                                        $status = $items['status'];
-                                        $date = $items['date'];
-                                    @endphp
-
-                                    <tr>
-                                        <td>
-                                            <strong>
-                                                {{ $itemsCollection->first()->handover->code ?? '-' }}
-                                            </strong>
-                                        </td>
-                                        <td>{{ $itemsCollection->count() }} items</td>
-                                        <td>
-                                            @if ($status == 'pending')
-                                                <span class="badge bg-warning text-dark">Pending</span>
-                                            @elseif($status == 'approved')
-                                                <span class="badge bg-success">Approved</span>
-                                            @elseif($status == 'rejected')
-                                                <span class="badge bg-danger">Rejected</span>
-                                            @endif
-                                        </td>
-                                        <td>
-                                            {{ \Carbon\Carbon::parse($date)->format('d M Y') }}
-                                        </td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-primary w-100"
-                                                onclick="viewHdoDetails({{ $handoverId }})">
-                                                View
-                                            </button>
-
-                                            @if ($status == 'rejected')
-                                                <button class="btn btn-sm btn-outline-danger w-100 mt-1"
-                                                    onclick="viewHdoDetails({{ $handoverId }}, true)">
-                                                    Resubmit
-                                                </button>
-                                            @endif
-                                        </td>
-                                    </tr>
-
-                                @empty
-                                    <tr>
-                                        <td colspan="5" class="text-center text-muted">
-                                            No return history found.
-                                        </td>
-                                    </tr>
-                                @endforelse
-                            </tbody>
-                        </table>
-                    </div>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-semibold mb-0">Return History</h5>
                 </div>
 
-
-                {{-- MOBILE CARD VERSION --}}
-                <div class="d-block d-md-none" id="mobileReturnContainer">
-
-                    @forelse($groupedReturns as $handoverId => $items)
-                        @php
-                            $itemsCollection = $items['items'];
-                            $status = $items['status'];
-                            $date = $items['date'];
-                        @endphp
-                        <div class="border rounded-3 p-3 mb-3 bg-light">
-
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <strong>{{ $itemsCollection->first()->handover->code ?? '-' }}</strong>
-
-                                @if ($status == 'pending')
-                                    <span class="badge bg-warning text-dark">Pending</span>
-                                @elseif($status == 'approved')
-                                    <span class="badge bg-success">Approved</span>
-                                @elseif($status == 'rejected')
-                                    <span class="badge bg-danger">Rejected</span>
-                                @endif
-                            </div>
-
-                            <div class="small text-muted mb-2">
-                                {{ $itemsCollection->count() }}items •
-                                {{ \Carbon\Carbon::parse($date)->format('d M Y') }}
-                            </div>
-
-                            <button class="btn btn-primary btn-sm w-100 mb-2"
-                                onclick="viewHdoDetails({{ $handoverId }})">
-                                View Details
-                            </button>
-
-                            @if ($status == 'rejected')
-                                <button class="btn btn-danger btn-sm w-100"
-                                    onclick="viewHdoDetails({{ $handoverId }}, true)">
-                                    Resubmit
-                                </button>
-                            @endif
-
-                        </div>
-
-                    @empty
-                        <div class="text-center text-muted py-3">
-                            No return history found.
-                        </div>
-                    @endforelse
-
+                {{-- ADAPTIVE CONTAINER: Table on Desktop, Cards on Mobile --}}
+                <div class="table-responsive d-none d-md-block" style="overflow-x: auto;">
+                    <table id="tblSalesReturns" class="table align-middle w-100">
+                        <thead class="table-light">
+                            <tr>
+                                <th>HDO</th>
+                                <th>Sales</th>
+                                <th>Total Items</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                                <th width="100">Action</th>
+                            </tr>
+                        </thead>
+                    </table>
                 </div>
+
+                {{-- MOBILE CONTAINER (Populated via DataTable drawCallback) --}}
+                <div id="mobileReturnContainer" class="d-block d-md-none">
+                    {{-- Cards injected here --}}
+                </div>
+                
+                {{-- MOBILE PAGINATION PLACEHOLDER --}}
+                <div id="mobilePagination" class="d-block d-md-none mt-3"></div>
 
             </div>
         </div>
@@ -284,6 +192,13 @@
                                     max="${item.remaining}"
                                     value="0">
                             </div>
+                        </div>
+                        <div class="mt-2">
+                            <label class="small fw-semibold">Item Note (optional)</label>
+                            <input type="text"
+                                name="items[${index}][item_note]"
+                                class="form-control form-control-sm"
+                                placeholder="e.g. Broken seal, box crushed">
                         </div>
                     </div>
                 `;
@@ -366,70 +281,50 @@
                     }
 
                     data.forEach((r, index) => {
+                    html += `<div class="border rounded-3 p-3 mb-3">`;
+                    html += `<strong>${r.product?.name ?? '-'}</strong>`;
 
+                    if (!isEdit) {
                         html += `
-                                    <div class="border rounded-3 p-3 mb-3">
-                                        <strong>${r.product?.name ?? '-'}</strong>
-                                `;
+                            <div class="mt-2">
+                                <div>Condition: <span class="badge bg-light text-dark">${r.condition}</span></div>
+                                <div>Qty: <strong>${r.quantity}</strong></div>
+                            </div>
+                        `;
+                    } else {
+                        html += `
+                            <div class="mt-2 card-item" id="item-card-${r.id}" data-total="${r.quantity}">
+                                <div class="row g-2">
+                                    <div class="col-4">
+                                        <label class="small fw-bold">Good</label>
+                                        <input type="number" name="items[${r.id}][good]" class="form-control form-control-sm good-input" value="${r.condition === 'good' ? r.quantity : 0}" readonly>
+                                    </div>
+                                    <div class="col-4">
+                                        <label class="small fw-bold text-danger">Damaged</label>
+                                        <input type="number" name="items[${r.id}][damaged]" class="form-control form-control-sm damaged-input" value="${r.condition === 'damaged' ? r.quantity : 0}" min="0" max="${r.quantity}" oninput="recalcFix(${r.id})">
+                                    </div>
+                                    <div class="col-4">
+                                        <label class="small fw-bold text-warning">Expired</label>
+                                        <input type="number" name="items[${r.id}][expired]" class="form-control form-control-sm expired-input" value="${r.condition === 'expired' ? r.quantity : 0}" min="0" max="${r.quantity}" oninput="recalcFix(${r.id})">
+                                    </div>
+                                </div>
+                                <div class="mt-2 text-start">
+                                    <label class="small fw-bold">Item Note</label>
+                                    <input type="text" name="items[${r.id}][note]" class="form-control form-control-sm" placeholder="Catatan per barang...">
+                                </div>
+                            </div>
+                        `;
+                    }
 
-                        if (!isEdit) {
-
-                            html += `
-                                        <div class="mt-2">
-                                            <div>Condition: ${r.condition}</div>
-                                            <div>Qty: ${r.quantity}</div>
-                                        </div>
-                                    `;
-
-                        } else {
-
-                            html += `
-                                        <div class="mt-2">
-                                            <div class="row g-2">
-
-                                                <div class="col-4">
-                                                    <label>Good</label>
-                                                    <input type="number"
-                                                        name="items[${r.product_id}][good]"
-                                                        class="form-control"
-                                                        value="${r.condition === 'good' ? r.quantity : 0}"
-                                                        min="0">
-                                                </div>
-
-                                                <div class="col-4">
-                                                    <label>Damaged</label>
-                                                    <input type="number"
-                                                        name="items[${r.product_id}][damaged]"
-                                                        class="form-control"
-                                                        value="${r.condition === 'damaged' ? r.quantity : 0}"
-                                                        min="0">
-                                                </div>
-
-                                                <div class="col-4">
-                                                    <label>Expired</label>
-                                                    <input type="number"
-                                                        name="items[${r.product_id}][expired]"
-                                                        class="form-control"
-                                                        value="${r.condition === 'expired' ? r.quantity : 0}"
-                                                        min="0">
-                                                </div>
-
-                                            </div>
-                                        </div>
-                                    `;
-                        }
-
-                        if (r.status === 'rejected' && r.reason) {
-                            html += `
-                                        <div class="text-danger mt-2">
-                                            <strong>Reject Reason:</strong>
-                                            <div>${r.reason}</div>
-                                        </div>
-                                    `;
-                        }
-
-                        html += `</div>`;
-                    });
+                    if (r.status === 'rejected' && r.reason) {
+                        html += `
+                            <div class="mt-2 small border-top pt-2">
+                                <strong>Reject Reason:</strong> ${r.reason}
+                            </div>
+                        `;
+                    }
+                    html += `</div>`;
+                });
 
                     if (isEdit) {
                         html += `
@@ -453,10 +348,40 @@
                 });
         }
 
-        function submitFix(handoverId) {
+        function recalcFix(id) {
+            const card = document.getElementById(`item-card-${id}`);
+            const total = parseInt(card.dataset.total);
+            const goodInput = card.querySelector('.good-input');
+            const damagedInput = card.querySelector('.damaged-input');
+            const expiredInput = card.querySelector('.expired-input');
 
+            let d = parseInt(damagedInput.value) || 0;
+            let e = parseInt(expiredInput.value) || 0;
+
+            if (d + e > total) {
+                if (d > total) d = total;
+                e = total - d;
+                damagedInput.value = d;
+                expiredInput.value = e;
+            }
+
+            goodInput.value = total - d - e;
+        }
+
+        function submitFix(handoverId) {
             const form = document.getElementById('fixForm');
             const formData = new FormData(form);
+
+            // Hide the modal first to prevent z-index overlap with Swal
+            const modalEl = document.getElementById('hdoDetailModal');
+            const modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) modalInstance.hide();
+
+            Swal.fire({
+                title: 'Processing...',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
 
             fetch(`/sales/returns/${handoverId}/update-rejected`, {
                     method: 'POST',
@@ -466,24 +391,40 @@
                     body: formData
                 })
                 .then(res => {
-                    if (!res.ok) {
-                        return res.text().then(text => {
-                            console.error(text);
-                            throw new Error('Request failed');
-                        });
-                    }
-                    return res.text(); // ⬅ jangan json
+                    if (!res.ok) throw new Error('Request failed');
+                    return res.text();
                 })
                 .then(() => {
-                    location.reload();
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success',
+                        text: 'Return resubmitted successfully.',
+                        timer: 1500,
+                        showConfirmButton: false
+                    }).then(() => {
+                        location.reload();
+                    });
                 })
-                .catch(err => console.error(err));
+                .catch(err => {
+                    console.error(err);
+                    Swal.fire({ icon: 'error', title: 'Error', text: 'Failed to resubmit return.' });
+                });
         }
 
         function submitReturn() {
-
             let form = document.getElementById('modalReturnForm');
             let formData = new FormData(form);
+
+            // Hide the modal first
+            const modalEl = document.getElementById('hdoDetailModal');
+            const modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) modalInstance.hide();
+
+            Swal.fire({
+                title: 'Processing...',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
 
             fetch("{{ route('sales.returns.store') }}", {
                     method: 'POST',
@@ -494,140 +435,128 @@
                     body: formData
                 })
                 .then(res => {
-                    if (!res.ok) {
-                        return res.text().then(text => {
-                            console.error(text);
-                            alert("Terjadi error saat submit.");
-                            throw new Error('Request failed');
-                        });
-                    }
+                    if (!res.ok) throw new Error('Request failed');
                     return res.text();
                 })
                 .then(() => {
-                    location.reload();
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success',
+                        text: 'Return submitted successfully.',
+                        timer: 1500,
+                        showConfirmButton: false
+                    }).then(() => {
+                        location.reload();
+                    });
                 })
-                .catch(err => console.error(err));
+                .catch(err => {
+                    console.error(err);
+                    Swal.fire({ icon: 'error', title: 'Error', text: 'Failed to submit return.' });
+                });
         }
+    </script>
 
-        const inputs = filterForm.querySelectorAll('input, select');
-
-        inputs.forEach(input => {
-            input.addEventListener('change', loadFilteredData);
-        });
-
-        // GLOBAL SEARCH INTEGRATION (with 300ms debounce)
-        let searchTimer;
-        $('#globalSearch').on('keyup', function() {
-            clearTimeout(searchTimer);
-            searchTimer = setTimeout(loadFilteredData, 300);
-        });
-
-        function loadFilteredData() {
-
-            const formData = new FormData(filterForm);
-            // Include globalSearch value
-            const searchVal = $('#globalSearch').val();
-            const params = new URLSearchParams(formData);
-            if (searchVal) params.append('search', searchVal);
-
-            fetch(`/sales/returns/filter?${params.toString()}`)
-                .then(res => res.json())
-                .then(data => {
-
-                    const tbody = document.getElementById('returnTableBody');
-                    const mobileContainer = document.getElementById('mobileReturnContainer');
-
-                    tbody.innerHTML = '';
-                    mobileContainer.innerHTML = '';
-
-                    if (!data.length) {
-
-                        tbody.innerHTML = `
-                    <tr>
-                        <td colspan="5" class="text-center text-muted">
-                            No return history found.
-                        </td>
-                    </tr>
-                `;
-
-                        mobileContainer.innerHTML = `
-                    <div class="text-center text-muted py-3">
-                        No return history found.
-                    </div>
-                `;
-
+    {{-- DataTables Core --}}
+    <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+    <script>
+        $(function() {
+            const table = $('#tblSalesReturns').DataTable({
+                processing: true,
+                serverSide: true,
+                searching: true,
+                ordering: false,
+                dom: '<"d-flex justify-content-between align-items-center mx-3 mt-3"<"me-auto"l><"d-none"f>>rt<"d-flex justify-content-between align-items-center mx-3 mb-3"ip>',
+                ajax: {
+                    url: "{{ route('sales.returns.filter') }}",
+                    data: d => {
+                        d.from = $('input[name="from"]').val();
+                        d.to = $('input[name="to"]').val();
+                        d.status = $('select[name="status"]').val();
+                        @if($isAdmin)
+                        d.warehouse_id = $('#warehouseSelect').val();
+                        d.sales_id = $('#salesSelect').val();
+                        @endif
+                    }
+                },
+                columns: [
+                    { data: 'handover_code', className: 'fw-bold text-primary text-nowrap' },
+                    { data: 'sales_name' },
+                    { data: 'total_items', className: 'text-nowrap' },
+                    { data: 'status_badge', className: 'text-center' },
+                    { data: 'date' },
+                    { 
+                        data: null, 
+                        orderable: false,
+                        render: function(data) {
+                            let btns = `<button class="btn btn-sm btn-outline-primary w-100" onclick="viewHdoDetails(${data.handover_id})">View</button>`;
+                            if (data.status === 'rejected') {
+                                btns += `<button class="btn btn-sm btn-outline-danger w-100 mt-1" onclick="viewHdoDetails(${data.handover_id}, true)">Resubmit</button>`;
+                            }
+                            return btns;
+                        }
+                    }
+                ],
+                drawCallback: function(settings) {
+                    const api = this.api();
+                    const data = api.rows({ page: 'current' }).data();
+                    const container = $('#mobileReturnContainer');
+                    const pagination = $('#mobilePagination');
+                    
+                    container.empty();
+                    
+                    if (data.length === 0) {
+                        container.append('<div class="text-center text-muted py-3">No return history found.</div>');
+                        pagination.hide();
                         return;
                     }
 
-                    data.forEach(item => {
-
-                        let badge = '';
-
-                        if (item.status === 'pending') {
-                            badge = '<span class="badge bg-warning text-dark">Pending</span>';
-                        } else if (item.status === 'rejected') {
-                            badge = '<span class="badge bg-danger">Rejected</span>';
-                        } else {
-                            badge = '<span class="badge bg-success">Approved</span>';
-                        }
-
-                        let actionButtons = `
-                    <button class="btn btn-sm btn-outline-primary w-100"
-                        onclick="viewHdoDetails(${item.handover_id})">
-                        View
-                    </button>
-                `;
-
-                        if (item.status === 'rejected') {
-                            actionButtons += `
-                        <button class="btn btn-sm btn-outline-danger w-100 mt-1"
-                            onclick="viewHdoDetails(${item.handover_id}, true)">
-                            Resubmit
-                        </button>
-                    `;
-                        }
-
-                        // ================= DESKTOP =================
-                        tbody.innerHTML += `
-                    <tr>
-                        <td><strong>${item.handover_code}</strong></td>
-                        <td>${item.total_items} items</td>
-                        <td>${badge}</td>
-                        <td>${item.date}</td>
-                        <td>${actionButtons}</td>
-                    </tr>
-                `;
-
-                        // ================= MOBILE =================
-                        mobileContainer.innerHTML += `
-                    <div class="border rounded-3 p-3 mb-3 bg-light">
-
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <strong>${item.handover_code}</strong>
-                            ${badge}
-                        </div>
-
-                        <div class="small text-muted mb-2">
-                            ${item.total_items} items • ${item.date}
-                        </div>
-
-                        <button class="btn btn-primary btn-sm w-100 mb-2"
-                            onclick="viewHdoDetails(${item.handover_id})">
-                            View Details
-                        </button>
-
-                        ${item.status === 'rejected' ? `
-                                <button class="btn btn-danger btn-sm w-100"
-                                    onclick="viewHdoDetails(${item.handover_id}, true)">
-                                    Resubmit
-                                </button>
-                            ` : ''}
-
-                    </div>
-                `;
+                    data.each(function(item) {
+                        let resubmitBtn = item.status === 'rejected' ? 
+                            `<button class="btn btn-danger btn-sm w-100" onclick="viewHdoDetails(${item.handover_id}, true)">Resubmit</button>` : '';
+                        
+                        let card = `
+                            <div class="card mb-3 border shadow-none bg-light">
+                                <div class="card-body p-3">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <div>
+                                            <div class="fw-bold text-primary">${item.handover_code}</div>
+                                            <div class="small text-muted">${item.sales_name}</div>
+                                        </div>
+                                        ${item.status_badge}
+                                    </div>
+                                    <div class="small mb-3">
+                                        <i class='bx bx-package me-1'></i> ${item.total_items} • 
+                                        <i class='bx bx-calendar me-1'></i> ${item.date}
+                                    </div>
+                                    <div class="d-grid gap-2">
+                                        <button class="btn btn-primary btn-sm" onclick="viewHdoDetails(${item.handover_id})">View Details</button>
+                                        ${resubmitBtn}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        container.append(card);
                     });
-                });
-        }
+
+                    // Sync pagination for mobile
+                    pagination.show().html($('.dataTables_paginate').html());
+                    pagination.find('ul').addClass('pagination-sm justify-content-center');
+                }
+            });
+
+            // Filter triggers
+            $('input[name="from"], input[name="to"], select[name="status"], #warehouseSelect, #salesSelect').on('change', () => table.ajax.reload());
+
+            // Global Search with Debounce
+            let searchTimeout;
+            $('#globalSearch').on('keyup', function() {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    table.search(this.value).draw();
+                }, 400);
+            });
+        });
     </script>
     <script>
         const warehouseSelect = document.getElementById('warehouseSelect');
@@ -674,4 +603,12 @@
             });
         </script>
     @endif
+@endpush
+
+@push('styles')
+    <style>
+        .swal2-container {
+            z-index: 20000 !important;
+        }
+    </style>
 @endpush

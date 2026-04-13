@@ -15,9 +15,9 @@ return [
         ],
         [
             'key'   => 'packages',
-            'label' => 'Uom',
+            'label' => 'Units of Measure',
             'route' => 'packages.index',
-            'group' => 'inventory',
+            'group' => 'master',
             'icon'  => 'bx bx-package',
         ],
         [
@@ -31,19 +31,19 @@ return [
             'key'   => 'suppliers',
             'label' => 'Suppliers',
             'route' => 'suppliers.index',
-            'group' => 'inventory',
+            'group' => 'procurement',
             'icon'  => 'bx bx-store-alt',
         ],
         [
             'key'   => 'stock_adjustments',
-            'label' => 'Stock Adjustments',
+            'label' => 'Adjustment',
             'route' => 'stock-adjustments.index',
             'group' => 'inventory',
             'icon'  => 'bx bx-adjust',
         ],
                 [
             'key'   => 'approval_stock_damage',
-            'label' => 'Approval Stock Damage',
+            'label' => 'Damage Approvals',
             'route' => 'damaged-stocks.approval',
             'group' => 'inventory',
             'icon'  => 'bx bx-shield-quarter',
@@ -59,7 +59,7 @@ return [
         ],
         [
             'key'   => 'wh_stocklevel',
-            'label' => 'Warehouse Stock Level',
+            'label' => 'Inventory Balances',
             'route' => 'stocklevel.index',
             'group' => 'warehouse',
             'icon'  => 'bx bx-layer',
@@ -73,14 +73,14 @@ return [
         ],
         [
             'key'   => 'wh_issue',
-            'label' => 'Issue to Sales (Morning)',
+            'label' => 'Stock Handover (Out)',
             'route' => 'sales.handover.morning',
             'group' => 'warehouse',
             'icon'  => 'bx bx-up-arrow-circle',
         ],
         [
             'key'   => 'wh_reconcile',
-            'label' => 'Reconcile + OTP (Evening)',
+            'label' => 'Sales Reconciliation',
             'route' => 'sales.handover.evening',
             'group' => 'warehouse',
             'icon'  => 'bx bx-check-shield',
@@ -94,7 +94,7 @@ return [
         ],
         [
             'key'   => 'wh_transfers',
-            'label' => 'Warehouse Transfers',
+            'label' => 'Stock Transfers',
             'route' => 'warehouse-transfers.index',
             'group' => 'warehouse',
             'icon'  => 'bx bx-transfer',
@@ -162,7 +162,7 @@ return [
         ],
         [
             'key'   => 'sales_otp',  // <=== KEY BARU
-            'label' => 'Morning OTP & Issued Items',
+            'label' => 'Issued Stock History',
             'route' => 'sales.otp.items',
             'group' => 'sales',
             'icon'  => 'bx bx-key', // bebas mau ganti icon apa
@@ -176,14 +176,14 @@ return [
         ],
         [
             'key'        => 'sales-handover-otp',
-            'label'      => 'OTP Handover',
+            'label'      => 'Handover Verification',
             'route'      => 'sales.handover.otps',
             'group'      => 'sales',
             'icon'       => 'bx bx-key',
         ],
         [
             'key'   => 'sales_request',
-            'label' => 'Sales Request',
+            'label' => 'Stock Requests',
             'route' => 'sales-request.index',
             'group' => 'sales',
             'icon'  => 'bx bx-cart-download',
@@ -212,7 +212,7 @@ return [
         ],
         [
             'key'   => 'bom',
-            'label' => 'BOM & Production',
+            'label' => 'Manufacturing / BOM',
             'route' => 'bom.index',
             'group' => 'master',
             'icon'  => 'bx bx-cog',

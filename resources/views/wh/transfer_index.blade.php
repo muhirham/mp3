@@ -12,18 +12,46 @@
         <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
         <style>
             #tblTransfers {
-                font-size: .75rem;
-                white-space: nowrap
+                font-size: 0.8rem;
+                width: 100% !important;
+                border-collapse: collapse !important;
             }
-
-            #tblTransfers th,
-            #tblTransfers td {
-                padding: .35rem .45rem
+            #tblTransfers thead th {
+                background-color: #f8f9fa;
+                color: #566a7f;
+                font-weight: 600;
+                text-transform: uppercase;
+                font-size: 0.7rem;
+                letter-spacing: 0.5px;
+                border-bottom: 2px solid #e6e8eb !important;
+                padding: 10px 15px;
             }
-
-            .dataTables_info,
-            .dataTables_paginate {
-                font-size: .75rem
+            #tblTransfers tbody td {
+                padding: 8px 15px;
+                vertical-align: middle;
+                border-bottom: 1px solid #f0f2f4;
+            }
+            .dataTables_processing {
+                box-shadow: 0 0.25rem 1rem rgba(161, 172, 184, 0.45);
+                border: none !important;
+                background: rgba(255,255,255,0.9) !important;
+                border-radius: 8px;
+            }
+            .badge {
+                font-size: 0.7rem;
+                padding: 0.4em 0.7em;
+            }
+            /* Menghilangkan scrollbar horizontal di desktop */
+            .table-responsive {
+                overflow-x: hidden;
+            }
+            @media (max-width: 991.98px) {
+                .table-responsive {
+                    overflow-x: auto;
+                }
+                #tblTransfers {
+                    white-space: nowrap;
+                }
             }
         </style>
     @endpush
@@ -114,70 +142,109 @@
 
 @push('scripts')
     <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
     <script>
-        const table = $('#tblTransfers').DataTable({
-            searching: true,
-            dom: 'rtip',
-            ajax: {
-                url: "{{ route('warehouse-transfers.data') }}",
-                data: d => {
-                    d.status = $('#f_status').val();
-                    d.from_warehouse = $('#f_from_wh').val();
-                    d.to_warehouse = $('#f_to_wh').val();
+        $(function() {
+            // Restore filters from localStorage if exist
+            const table = $('#tblTransfers').DataTable({
+                processing: true,
+                serverSide: true,
+                searching: true,
+                ordering: false, // Default order logic di backend
+                dom: '<"d-flex justify-content-between align-items-center mx-3 mt-3"l>rt<"d-flex justify-content-between align-items-center mx-3 mb-3"ip>',
+                ajax: {
+                    url: "{{ route('warehouse-transfers.data') }}",
+                    data: d => {
+                        d.status = $('#f_status').val();
+                        d.from_warehouse = $('#f_from_wh').val();
+                        d.to_warehouse = $('#f_to_wh').val();
+                    }
+                },
+                columns: [{
+                        data: 'code',
+                        className: 'fw-bold text-primary',
+                        width: '12%'
+                    },
+                    {
+                        data: 'products',
+                        width: '30%',
+                        render: function(data) {
+                            return `<div style="max-height: 80px; overflow-y: auto; line-height: 1.4;">${data}</div>`;
+                        }
+                    },
+                    {
+                        data: 'from_warehouse',
+                        width: '12%'
+                    },
+                    {
+                        data: 'to_warehouse',
+                        width: '12%'
+                    },
+                    {
+                        data: 'total_qty',
+                        className: 'text-center fw-bold',
+                        width: '7%'
+                    },
+                    {
+                        data: 'total_cost',
+                        className: 'text-end',
+                        width: '10%'
+                    },
+                    {
+                        data: 'status_badge',
+                        className: 'text-center',
+                        width: '8%'
+                    },
+                    {
+                        data: 'created_at',
+                        width: '10%'
+                    },
+                    {
+                        data: 'action',
+                        orderable: false,
+                        className: 'text-center',
+                        width: '5%'
+                    }
+                ],
+                pageLength: 10,
+                language: {
+                    paginate: {
+                        next: '<i class="bx bx-chevron-right"></i>',
+                        previous: '<i class="bx bx-chevron-left"></i>'
+                    }
                 }
-            },
-            columns: [{
-                    data: 'code'
-                },
-                {
-                    data: 'products'
-                },
-                {
-                    data: 'from_warehouse'
-                },
-                {
-                    data: 'to_warehouse'
-                },
-                {
-                    data: 'total_qty',
-                    className: 'text-end'
-                },
-                {
-                    data: 'total_cost',
-                    className: 'text-end'
-                },
-                {
-                    data: 'status_badge'
-                },
-                {
-                    data: 'created_at'
-                },
-                {
-                    data: 'action',
-                    orderable: false
-                }
-            ],
-            pageLength: 10
-        });
-
-        $('#f_status,#f_from_wh,#f_to_wh').change(() => table.ajax.reload());
-
-        // Connect global navbar search
-        $('#globalSearch').on('keyup', function() {
-            table.search(this.value).draw();
-        });
-
-        $('#btnExport').on('click', function(e) {
-            e.preventDefault();
-
-            const params = new URLSearchParams({
-                status: $('#f_status').val(),
-                from_warehouse_id: $('#f_from_wh').val(),
-                to_warehouse_id: $('#f_to_wh').val(),
             });
 
-            window.location.href =
-                "{{ route('warehouse-transfer.export') }}?" + params.toString();
+            // Auto-reload on filter change
+            $('#f_status, #f_from_wh, #f_to_wh').on('change', function() {
+                table.ajax.reload();
+            });
+
+            // Connect global navbar search
+            const $globalSearch = $('#globalSearch');
+            if ($globalSearch.length) {
+                // Initial sync if URL has 'q' parameter or navbar search already has value
+                const urlParams = new URLSearchParams(window.location.search);
+                const q = urlParams.get('q') || $globalSearch.val();
+                if (q) {
+                    $globalSearch.val(q);
+                    table.search(q).draw();
+                }
+
+                $globalSearch.on('keyup', function() {
+                    table.search(this.value).draw();
+                });
+            }
+
+            $('#btnExport').on('click', function(e) {
+                e.preventDefault();
+                const params = new URLSearchParams({
+                    status: $('#f_status').val(),
+                    from_warehouse_id: $('#f_from_wh').val(),
+                    to_warehouse_id: $('#f_to_wh').val(),
+                });
+                window.location.href = "{{ route('warehouse-transfer.export') }}?" + params.toString();
+            });
         });
     </script>
 @endpush

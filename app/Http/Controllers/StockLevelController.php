@@ -234,7 +234,7 @@ class StockLevelController extends Controller
                             'status'        => $badge,
                             'hpp'           => 'Rp' . number_format((float)$r->standard_cost, 0, ',', '.'),
                             'selling_price' => 'Rp' . number_format($selling, 0, ',', '.'),
-                            'created_at'    => $r->created_at ? date('Y-m-d H:i:s', strtotime($r->created_at)) : '-',
+                            'created_at'    => $r->created_at ? date('Y-m-d H:i', strtotime($r->created_at)) : '-',
                         ];
                     });
 

@@ -67,7 +67,12 @@ class DamagedStockController extends Controller
         $items = $query->orderByDesc('created_at')
                        ->offset($start)
                        ->limit($length)
-                       ->get();
+                       ->get()
+                       ->map(function($item) {
+                           $item->created_at_html = fm_relativedate($item->created_at);
+                           $item->resolved_at_html = $item->resolved_at ? fm_relativedate($item->resolved_at) : null;
+                           return $item;
+                       });
 
         return response()->json([
             'draw' => $draw,
@@ -131,7 +136,12 @@ class DamagedStockController extends Controller
                        ->orderByDesc('created_at')
                        ->offset($start)
                        ->limit($length)
-                       ->get();
+                       ->get()
+                       ->map(function($item) {
+                           $item->created_at_html = fm_relativedate($item->created_at);
+                           $item->resolved_at_html = $item->resolved_at ? fm_relativedate($item->resolved_at) : null;
+                           return $item;
+                       });
 
         return response()->json([
             'draw' => $draw,

@@ -66,22 +66,25 @@
         }
 
         .po-table thead th {
-            font-size: .75rem;
+            font-size: .7rem;
             letter-spacing: .02em;
             text-transform: uppercase;
             color: #6c757d;
+            padding: 8px 4px !important;
         }
 
         .po-table tbody td {
-            font-size: .8125rem;
+            font-size: .725rem;
+            padding: 4px 4px !important;
         }
 
-        .po-table .badge {
-            font-size: .7rem;
+        .table-tiny {
+            width: 100% !important;
         }
 
         .po-muted {
-            font-size: .75rem;
+            font-size: .625rem;
+            line-height: 1.1;
         }
 
         @media (max-width: 576px) {
@@ -103,6 +106,8 @@
             z-index: 99999 !important;
         }
     </style>
+
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css" />
 
     <div class="container-xxl flex-grow-1 container-p-y">
 
@@ -200,6 +205,7 @@
                                 @endforeach
                             </select>
                         </div>
+
                     </div>
                 </form>
 
@@ -214,377 +220,174 @@
             </div>
 
             <div id="po-table-wrapper">
-
                 <div class="table-responsive">
-                    <table class="table table-hover table-sm align-middle mb-0 po-table">
+                    <table class="table table-hover table-tiny align-middle mb-0 po-table" id="tblPOs">
                         <thead>
                             <tr>
-                                <th class="text-nowrap">PO CODE</th>
-                                <th>Supplier</th>
-                                <th>Status</th>
-                                <th>Approval</th>
-                                <th class="text-end">Subtotal</th>
-                                <th class="text-end">Discount</th>
-                                <th class="text-end">Grand</th>
-                                <th>Lines</th>
-                                <th>Warehouse</th>
-                                <th class="text-end text-nowrap">Actions</th>
+                                <th style="width: 11%;">PO CODE</th>
+                                <th style="width: 14%;">Supplier</th>
+                                <th style="width: 10%;">Status</th>
+                                <th style="width: 15%;">Approval</th>
+                                <th class="text-end" style="width: 8%;">Subtotal</th>
+                                <th class="text-end" style="width: 8%;">Discount</th>
+                                <th class="text-end" style="width: 8%;">Grand</th>
+                                <th style="width: 5%;">Lines</th>
+                                <th style="width: 11%;">Warehouse</th>
+                                <th class="text-end" style="width: 10%;">Actions</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            @forelse($pos as $po)
-                                @php
-                                    $hasGr = (int) ($po->gr_count ?? 0) > 0;
-
-                                    $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
-
-                                    $poWhIds = $po->items->pluck('warehouse_id')->filter()->unique();
-                                    $isMyWarehousePo = !$myWhId || $poWhIds->contains($myWhId);
-
-                                    $canReceive =
-                                        !$hasGr &&
-                                        $po->status === 'ordered' &&
-                                        $po->approval_status === 'approved' &&
-                                        $po->items_count > 0 &&
-                                        (($fromRequest && $isWarehouse && $isMyWarehousePo) ||
-                                            (!$fromRequest && $isSuperadmin));
-
-                                    $showBlockedReceive =
-                                        $isSuperadmin &&
-                                        $fromRequest &&
-                                        !$hasGr &&
-                                        $po->status === 'ordered' &&
-                                        $po->approval_status === 'approved' &&
-                                        $po->items_count > 0;
-
-                                    $supplierNames = collect();
-                                    if (!empty($po->supplier?->name)) {
-                                        $supplierNames->push($po->supplier->name);
-                                    }
-                                    foreach ($po->items as $it) {
-                                        $sName = $it->product->supplier->name ?? null;
-                                        if ($sName) {
-                                            $supplierNames->push($sName);
-                                        }
-                                    }
-                                    $supplierNames = $supplierNames->unique()->values();
-
-                                    if ($supplierNames->isEmpty()) {
-                                        $supplierLabel = '-';
-                                    } elseif ($supplierNames->count() === 1) {
-                                        $supplierLabel = $supplierNames->first();
-                                    } else {
-                                        $supplierLabel =
-                                            $supplierNames->first() .
-                                            ' + ' .
-                                            ($supplierNames->count() - 1) .
-                                            ' supplier';
-                                    }
-
-                                    if (!$fromRequest) {
-                                        $warehouseLabel = 'Central Stock';
-                                    } else {
-                                        $warehouseNames = collect();
-                                        foreach ($po->items as $it) {
-                                            if ($it->warehouse) {
-                                                $warehouseNames->push(
-                                                    $it->warehouse->warehouse_name ?? $it->warehouse->name,
-                                                );
-                                            }
-                                        }
-                                        $warehouseNames = $warehouseNames->filter()->unique()->values();
-
-                                        if ($warehouseNames->isEmpty()) {
-                                            $warehouseLabel = '-';
-                                        } elseif ($warehouseNames->count() === 1) {
-                                            $warehouseLabel = $warehouseNames->first();
-                                        } else {
-                                            $warehouseLabel =
-                                                $warehouseNames->first() .
-                                                ' + ' .
-                                                ($warehouseNames->count() - 1) .
-                                                ' wh';
-                                        }
-                                    }
-
-                                    $approvalStatus = $po->approval_status ?: 'draft';
-
-                                    if ($approvalStatus === 'draft') {
-                                        $approvalBadge = '<span class="badge bg-label-secondary">DRAFT</span>';
-                                    } elseif ($approvalStatus === 'waiting_procurement') {
-                                        $approvalBadge =
-                                            '<span class="badge bg-label-warning">WAITING PROCUREMENT</span>';
-                                    } elseif ($approvalStatus === 'waiting_ceo') {
-                                        $approvalBadge = '<span class="badge bg-label-info">WAITING CEO</span>';
-                                    } elseif ($approvalStatus === 'approved') {
-                                        $approvalBadge = '<span class="badge bg-label-success">APPROVED</span>';
-                                    } elseif ($approvalStatus === 'rejected') {
-                                        $approvalBadge = '<span class="badge bg-label-danger">REJECTED</span>';
-                                    } else {
-                                        $approvalBadge =
-                                            '<span class="badge bg-label-secondary">' .
-                                            e(strtoupper($approvalStatus)) .
-                                            '</span>';
-                                    }
-
-                                    $procName = $po->procurementApprover->name ?? '-';
-                                    $ceoName = $po->ceoApprover->name ?? '-';
-                                @endphp
-
-                                <tr>
-                                    <td class="fw-semibold">{{ $po->po_code }}</td>
-                                    <td>{{ $supplierLabel }}</td>
-                                    <td>
-                                        <span class="badge bg-label-info text-uppercase">{{ $po->status }}</span>
-                                        @if ($hasGr)
-                                            <span class="badge bg-label-success ms-1">GR EXIST</span>
-                                        @endif
-                                    </td>
-
-                                    <td>
-                                        {!! $approvalBadge !!}
-                                        <div class="po-muted text-muted mt-1">
-                                            Proc: {{ $procName }}<br>
-                                            CEO&nbsp;: {{ $ceoName }}
-                                        </div>
-                                    </td>
-
-                                    <td class="text-end">{{ number_format($po->subtotal, 0, ',', '.') }}</td>
-                                    <td class="text-end">{{ number_format($po->discount_total, 0, ',', '.') }}</td>
-                                    <td class="text-end">{{ number_format($po->grand_total, 0, ',', '.') }}</td>
-                                    <td>{{ $po->items_count }}</td>
-                                    <td>{{ $warehouseLabel }}</td>
-
-                                    <td class="text-end">
-                                        <div class="btn-group">
-                                            <a class="btn btn-sm btn-primary"
-                                                href="{{ route('po.edit', $po->id) }}">Open</a>
-
-                                            @if ($canReceive)
-                                                <button type="button" class="btn btn-sm btn-success"
-                                                    data-bs-toggle="modal" data-bs-target="#mdlGR-{{ $po->id }}">
-                                                    <i class="bx bx-download"></i> Receive
-                                                </button>
-                                            @elseif($showBlockedReceive)
-                                                <button type="button"
-                                                    class="btn btn-sm btn-outline-success js-gr-blocked"
-                                                    data-po="{{ $po->po_code }}">
-                                                    <i class="bx bx-info-circle"></i> Receive
-                                                </button>
-                                            @endif
-                                        </div>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="10" class="text-center text-muted">No Purchase Orders found.</td>
-                                </tr>
-                            @endforelse
-                        </tbody>
                     </table>
                 </div>
-
-                @if ($pos->hasPages())
-                    <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <div class="small text-muted">
-                            Showing {{ $pos->firstItem() }}–{{ $pos->lastItem() }} of {{ $pos->total() }} POs
-                        </div>
-                        <div>
-                            {{ $pos->withQueryString()->links('pagination::bootstrap-5') }}
-                        </div>
-                    </div>
-                @endif
-
-                {{-- MODAL GR --}}
-                @foreach ($pos as $po)
-                    @php
-                        $hasGr = (int) ($po->gr_count ?? 0) > 0;
-                        $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
-
-                        $poWhIds = $po->items->pluck('warehouse_id')->filter()->unique();
-                        $isMyWarehousePo = !$myWhId || $poWhIds->contains($myWhId);
-
-                        $canReceive =
-                            !$hasGr &&
-                            $po->status === 'ordered' &&
-                            $po->approval_status === 'approved' &&
-                            $po->items_count > 0 &&
-                            (($fromRequest && $isWarehouse && $isMyWarehousePo) || (!$fromRequest && $isSuperadmin));
-
-                        if (!$canReceive) {
-                            continue;
-                        }
-
-                        $supplierNames = collect();
-                        if (!empty($po->supplier?->name)) {
-                            $supplierNames->push($po->supplier->name);
-                        }
-                        foreach ($po->items as $it) {
-                            $sName = $it->product->supplier->name ?? null;
-                            if ($sName) {
-                                $supplierNames->push($sName);
-                            }
-                        }
-                        $supplierNames = $supplierNames->unique()->values();
-
-                        if ($supplierNames->isEmpty()) {
-                            $supplierLabel = '-';
-                        } elseif ($supplierNames->count() === 1) {
-                            $supplierLabel = $supplierNames->first();
-                        } else {
-                            $supplierLabel =
-                                $supplierNames->first() . ' + ' . ($supplierNames->count() - 1) . ' supplier';
-                        }
-
-                        if (!$fromRequest) {
-                            $whLabel = 'Central Stock';
-                        } else {
-                            $whNames = collect();
-                            foreach ($po->items as $it) {
-                                if ($it->warehouse) {
-                                    $whNames->push($it->warehouse->warehouse_name ?? $it->warehouse->name);
-                                }
-                            }
-                            $whNames = $whNames->filter()->unique()->values();
-                            if ($whNames->isEmpty()) {
-                                $whLabel = '-';
-                            } elseif ($whNames->count() === 1) {
-                                $whLabel = $whNames->first();
-                            } else {
-                                $whLabel = $whNames->first() . ' + ' . ($whNames->count() - 1) . ' wh';
-                            }
-                        }
-                    @endphp
-
-                    <div class="modal fade mdl-gr-po" id="mdlGR-{{ $po->id }}" tabindex="-1" aria-hidden="true">
-                        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title">Goods Received – {{ $po->po_code }}</h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal"
-                                        aria-label="Close"></button>
-                                </div>
-
-                                <form action="{{ route('po.gr.store', $po) }}" method="POST"
-                                    enctype="multipart/form-data">
-                                    @csrf
-                                    <div class="modal-body">
-                                        <p class="mb-3 small">
-                                            Supplier: <strong>{{ $supplierLabel }}</strong><br>
-                                            Warehouse: <strong>{{ $whLabel }}</strong>
-                                        </p>
-
-                                        <div class="table-responsive">
-                                            <table class="table table-sm align-middle">
-                                                <thead>
-                                                    <tr>
-                                                        <th>#</th>
-                                                        <th>Product</th>
-                                                        <th>Qty Ordered</th>
-                                                        <th>Qty Received</th>
-                                                        <th>Qty Remaining</th>
-                                                        <th>Qty Good</th>
-                                                        <th>Qty Damaged</th>
-                                                        <th>Notes</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    @foreach ($po->items as $i => $item)
-                                                        @php
-                                                            $ordered = (int) ($item->qty_ordered ?? 0);
-                                                            $received = (int) ($item->qty_received ?? 0);
-                                                            $remaining = max(0, $ordered - $received);
-                                                            $key = $item->id;
-                                                        @endphp
-                                                        <tr>
-                                                            <td>{{ $i + 1 }}</td>
-                                                            <td>
-                                                                {{ $item->product->name ?? '-' }}<br>
-                                                                <small
-                                                                    class="text-muted">{{ $item->product->product_code ?? '' }}</small>
-                                                            </td>
-                                                            <td>{{ $ordered }}</td>
-                                                            <td>{{ $received }}</td>
-                                                            <td class="js-remaining"
-                                                                data-remaining="{{ $remaining }}">{{ $remaining }}
-                                                            </td>
-
-                                                            <td style="width:120px">
-                                                                <input type="number"
-                                                                    class="form-control form-control-sm js-qty-good"
-                                                                    name="receives[{{ $key }}][qty_good]"
-                                                                    min="0" max="{{ $remaining }}"
-                                                                    value="{{ $remaining }}">
-                                                            </td>
-                                                            <td style="width:120px">
-                                                                <input type="number"
-                                                                    class="form-control form-control-sm js-qty-damaged"
-                                                                    name="receives[{{ $key }}][qty_damaged]"
-                                                                    min="0" max="{{ $remaining }}"
-                                                                    value="0">
-                                                            </td>
-                                                            <td style="width:180px">
-                                                                <input type="text" class="form-control form-control-sm"
-                                                                    name="receives[{{ $key }}][notes]"
-                                                                    placeholder="Notes (optional)">
-                                                                <small class="text-danger small js-row-msg"></small>
-                                                            </td>
-                                                        </tr>
-                                                    @endforeach
-                                                </tbody>
-                                            </table>
-                                        </div>
-
-                                        <div class="mb-3">
-                                            <label class="form-label">Upload photo of good items (optional)</label>
-                                            <input type="file" name="photos_good[]" class="form-control" multiple>
-                                        </div>
-
-                                        <div class="mb-3">
-                                            <label class="form-label">Upload photo of damaged items (optional)</label>
-                                            <input type="file" name="photos_damaged[]" class="form-control" multiple>
-                                        </div>
-                                    </div>
-
-                                    <div class="modal-footer">
-                                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
-                                            Cancel
-                                        </button>
-                                        <button type="submit" class="btn btn-primary">
-                                            <i class="bx bx-save"></i> Save Goods Received
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-                @endforeach
-
             </div>
         </div>
-
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    {{-- SINGLE DYNAMIC MODAL FOR GOODS RECEIVED --}}
+    <div class="modal fade mdl-gr-po" id="modalDynamicGR" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content" id="modalDynamicGRContent">
+                <div class="modal-body text-center p-5">
+                    <span class="spinner-border text-primary" role="status"></span>
+                    <p class="mt-2">Loading Good Received form...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+@endsection
 
-    {{-- ✅ INI KUNCI: Swal sukses setelah GR tersimpan (dari session server) --}}
-    @if (session('gr_success'))
+@push('scripts')
+    {{-- DataTables Core --}}
+    <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+
+    @if(session('gr_success') || session('success'))
         <script>
             document.addEventListener('DOMContentLoaded', function() {
                 Swal.fire({
                     icon: 'success',
                     title: 'Success',
-                    text: @json(session('gr_success')),
-                    timer: 1500,
+                    text: "{{ session('gr_success') ?: session('success') }}",
+                    timer: 2500,
                     showConfirmButton: false
                 });
             });
         </script>
     @endif
 
+    @if(session('error'))
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: "{{ session('error') }}",
+                });
+            });
+        </script>
+    @endif
+
     <script>
-        // ===== AUTO SYNC GOOD / DAMAGED BIAR GA NGACO (tanpa Swal validasi submit) =====
-        (function() {
+        $(function() {
+            // Sync navbar search with URL parameter 'q'
+            const urlParams = new URLSearchParams(window.location.search);
+            const qParam = urlParams.get('q');
+            if (qParam) {
+                $('#globalSearch').val(qParam);
+            }
+
+            const table = $('#tblPOs').DataTable({
+                processing: true,
+                serverSide: true,
+                ajax: {
+                    url: "{{ route('po.datatable') }}",
+                    data: function(d) {
+                        d.status = $('select[name="status"]').val();
+                        d.approval_status = $('select[name="approval_status"]').val();
+                        d.warehouse_id = $('select[name="warehouse_id"]').val();
+                        d.from = $('input[name="from"]').val();
+                        d.to = $('input[name="to"]').val();
+                        d.q = $('#globalSearch').val();
+                    }
+                },
+                columns: [
+                    { data: 'po_code', name: 'po_code', className: 'fw-semibold' },
+                    { data: 'supplier', name: 'supplier' },
+                    { data: 'status', name: 'status' },
+                    { data: 'approval', name: 'approval' },
+                    { data: 'subtotal', name: 'subtotal', className: 'text-end' },
+                    { data: 'discount', name: 'discount', className: 'text-end' },
+                    { data: 'grand_total', name: 'grand_total', className: 'text-end fw-bold' },
+                    { data: 'lines', name: 'lines', className: 'text-center' },
+                    { data: 'warehouse', name: 'warehouse' },
+                    { data: 'actions', name: 'actions', className: 'text-end', orderable: false, searchable: false }
+                ],
+                order: [[0, 'desc']],
+                pageLength: 25,
+                language: {
+                    processing: '<div class="spinner-border text-primary" role="status"></div>',
+                    search: "_INPUT_",
+                    searchPlaceholder: "Search PO..."
+                },
+                dom: '<"d-flex justify-content-between align-items-center mx-0 row py-3 px-1"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6">>t<"d-flex justify-content-between mx-0 row py-3 px-1"<"col-sm-12 col-md-6"i><"col-sm-12 col-md-6"p>>',
+                drawCallback: function() {
+                    $('.po-table [data-bs-toggle="tooltip"]').tooltip();
+                }
+            });
+
+            // Auto-filter
+            $('#po-filter-form select, #po-filter-form input[type="date"]').on('change', function() {
+                table.ajax.reload();
+            });
+
+            // Global search
+            const debounce = (fn, ms = 450) => {
+                let t;
+                return (...args) => {
+                    clearTimeout(t);
+                    t = setTimeout(() => fn(...args), ms);
+                };
+            };
+
+            $('#globalSearch').on('input', debounce(function() {
+                table.ajax.reload();
+            }, 450));
+
+            // Export logic stays same but uses current filters
+            $('#po-export-form').on('submit', function() {
+                const form = $(this);
+                form.find('input[name="q"]').val($('#globalSearch').val());
+                form.find('input[name="status"]').val($('select[name="status"]').val());
+                form.find('input[name="approval_status"]').val($('select[name="approval_status"]').val());
+                form.find('input[name="warehouse_id"]').val($('select[name="warehouse_id"]').val());
+                form.find('input[name="from"]').val($('input[name="from"]').val());
+                form.find('input[name="to"]').val($('input[name="to"]').val());
+            });
+
+            // Dynamic Modal Loading
+            const modalGR = new bootstrap.Modal(document.getElementById('modalDynamicGR'));
+            const modalBody = document.getElementById('modalDynamicGRContent');
+
+            $(document).on('click', '.js-btn-receive', function() {
+                const url = $(this).data('url');
+                modalBody.innerHTML = `
+                    <div class="modal-body text-center p-5">
+                        <span class="spinner-border text-primary" role="status"></span>
+                        <p class="mt-2">Loading Good Received form...</p>
+                    </div>`;
+                modalGR.show();
+
+                fetch(url)
+                    .then(res => res.text())
+                    .then(html => {
+                        modalBody.innerHTML = html;
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        modalBody.innerHTML = `<div class="modal-body"><div class="alert alert-danger">Failed to load data.</div></div>`;
+                    });
+            });
+
+            // Auto-sync Good/Damaged (Delegated)
             const clampInt = (v, min, max) => {
                 v = parseInt(v ?? 0, 10);
                 if (isNaN(v)) v = 0;
@@ -595,11 +398,9 @@
                 const remEl = tr.querySelector('.js-remaining');
                 const goodEl = tr.querySelector('.js-qty-good');
                 const badEl = tr.querySelector('.js-qty-damaged');
-
                 if (!remEl || !goodEl || !badEl) return;
 
                 const remaining = parseInt(remEl.dataset.remaining ?? '0', 10) || 0;
-
                 goodEl.max = remaining;
                 badEl.max = remaining;
 
@@ -610,214 +411,28 @@
                     bad = remaining - good;
                 } else if (changed === 'bad') {
                     good = remaining - bad;
-                } else {
+                } else if (changed === 'init') {
                     if (good + bad !== remaining) {
-                        if (good > 0) bad = remaining - good;
-                        else if (bad > 0) good = remaining - bad;
-                        else {
-                            good = remaining;
-                            bad = 0;
-                        }
+                        good = remaining; bad = 0;
                     }
                 }
-
                 goodEl.value = good;
                 badEl.value = bad;
             }
 
-            document.addEventListener('shown.bs.modal', function(e) {
-                const modal = e.target;
-                if (!modal || !modal.classList.contains('mdl-gr-po')) return;
-                modal.querySelectorAll('tbody tr').forEach(tr => syncRow(tr, 'init'));
-            });
+            $(document).on('input', '.mdl-gr-po .js-qty-good', function() { syncRow(this.closest('tr'), 'good'); });
+            $(document).on('input', '.mdl-gr-po .js-qty-damaged', function() { syncRow(this.closest('tr'), 'bad'); });
 
-            document.addEventListener('input', function(e) {
-                const good = e.target.closest('.mdl-gr-po .js-qty-good');
-                const bad = e.target.closest('.mdl-gr-po .js-qty-damaged');
-
-                if (good) {
-                    syncRow(good.closest('tr'), 'good');
-                    return;
-                }
-                if (bad) {
-                    syncRow(bad.closest('tr'), 'bad');
-                    return;
-                }
-            });
-        })();
-
-        // ===== AJAX FILTER + PAGINATION (NO RELOAD) =====
-        (function() {
-            const filterForm = document.getElementById('po-filter-form');
-            const exportForm = document.getElementById('po-export-form');
-            const wrapper = document.getElementById('po-table-wrapper');
-            const globalSearch = document.getElementById('globalSearch');
-
-            if (!filterForm || !wrapper) return;
-
-            const actionUrl = filterForm.getAttribute('action');
-            const qHidden = filterForm.querySelector('input[name="q"]');
-
-            const debounce = (fn, ms = 450) => {
-                let t;
-                return (...args) => {
-                    clearTimeout(t);
-                    t = setTimeout(() => fn(...args), ms);
-                };
-            };
-
-            function sameMonth(fromStr, toStr) {
-                if (!fromStr || !toStr) return true;
-                return fromStr.slice(0, 7) === toStr.slice(0, 7);
-            }
-
-            function buildQueryFromForm(formEl) {
-                const fd = new FormData(formEl);
-                const params = new URLSearchParams();
-                fd.forEach((v, k) => {
-                    v = String(v ?? '').trim();
-                    if (v !== '') params.append(k, v);
+            // Confirm gr_blocked
+            $(document).on('click', '.js-gr-blocked', function() {
+                const poCode = $(this).data('po');
+                Swal.fire({
+                    icon: 'info',
+                    title: 'Restricted Action',
+                    text: `PO ${poCode} berasal dari Request Stock. Sesuai prosedur, penerimaan barang HARUS dilakukan oleh akun Warehouse didepo tujuan, bukan Superadmin.`,
+                    confirmButtonText: 'I Understand'
                 });
-                return params.toString();
-            }
-
-            function syncQFromGlobal() {
-                if (!qHidden) return;
-                const val = (globalSearch?.value || '').trim();
-                qHidden.value = val;
-            }
-
-            function syncGlobalFromHidden() {
-                if (!globalSearch || !qHidden) return;
-                globalSearch.value = qHidden.value || '';
-            }
-
-            function syncExportHidden() {
-                if (!exportForm) return;
-
-                const getVal = (name) => (filterForm.querySelector(`[name="${name}"]`)?.value || '');
-
-                exportForm.querySelector('input[name="q"]').value = getVal('q');
-                exportForm.querySelector('input[name="status"]').value = getVal('status');
-                exportForm.querySelector('input[name="approval_status"]').value = getVal('approval_status');
-                exportForm.querySelector('input[name="warehouse_id"]').value = getVal('warehouse_id');
-                exportForm.querySelector('input[name="from"]').value = getVal('from');
-                exportForm.querySelector('input[name="to"]').value = getVal('to');
-            }
-
-            function validateRange() {
-                const fromVal = filterForm.querySelector('[name="from"]')?.value || '';
-                const toVal = filterForm.querySelector('[name="to"]')?.value || '';
-
-                if (fromVal && toVal && fromVal > toVal) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Invalid Range',
-                        text: 'The "From" date must be earlier than or equal to the "To" date.'
-                    });
-                    return false;
-                }
-
-                if (!sameMonth(fromVal, toVal)) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Invalid Range',
-                        text: 'Maximum range is 1 month. Both "From" and "To" must be in the same month.'
-                    });
-                    return false;
-                }
-                return true;
-            }
-
-            async function loadPage(url) {
-                const res = await fetch(url, {
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest'
-                    }
-                });
-                const html = await res.text();
-
-                const doc = new DOMParser().parseFromString(html, 'text/html');
-                const newWrapper = doc.querySelector('#po-table-wrapper');
-
-                if (!newWrapper) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Failed',
-                        text: 'Table wrapper not found in response.'
-                    });
-                    return;
-                }
-
-                wrapper.innerHTML = newWrapper.innerHTML;
-            }
-
-            function applyFilters(historyMode = 'replace') {
-                syncQFromGlobal();
-                if (!validateRange()) return;
-
-                syncExportHidden();
-
-                const qs = buildQueryFromForm(filterForm);
-                const url = actionUrl + (qs ? ('?' + qs) : '');
-
-                loadPage(url).then(() => {
-                    if (historyMode === 'push') history.pushState({}, '', url);
-                    else history.replaceState({}, '', url);
-                });
-            }
-
-            filterForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                applyFilters('replace');
-            });
-
-            if (globalSearch) {
-                globalSearch.setAttribute('placeholder', 'Search PO code...');
-                globalSearch.addEventListener('input', debounce(() => applyFilters('replace'), 450));
-            }
-
-            filterForm.querySelectorAll('select, input[type="date"]').forEach(el => {
-                el.addEventListener('change', () => applyFilters('replace'));
-            });
-
-            wrapper.addEventListener('click', function(e) {
-                const a = e.target.closest('.pagination a');
-                if (!a) return;
-                e.preventDefault();
-
-                syncQFromGlobal();
-                syncExportHidden();
-
-                loadPage(a.href).then(() => {
-                    history.pushState({}, '', a.href);
-                });
-            });
-
-            window.addEventListener('popstate', function() {
-                const urlQ = new URL(location.href).searchParams.get('q') || '';
-                if (qHidden) qHidden.value = urlQ;
-                syncGlobalFromHidden();
-
-                loadPage(location.href);
-                syncExportHidden();
-            });
-
-            syncGlobalFromHidden();
-            syncExportHidden();
-        })();
-
-        // Swal info untuk tombol blocked (biarin)
-        document.addEventListener('click', function(e) {
-            const btn = e.target.closest('.js-gr-blocked');
-            if (!btn) return;
-
-            const poCode = btn.getAttribute('data-po') || '';
-            Swal.fire({
-                icon: 'info',
-                title: 'Receive blocked for Admin',
-                text: `PO ${poCode} originates from a Warehouse RESTOCK REQUEST. Receiving must be done by the corresponding Warehouse Admin.`,
             });
         });
     </script>
-@endsection
+@endpush

@@ -1,4 +1,5 @@
 <?php
+use Carbon\Carbon;
 
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -129,5 +130,26 @@ if (! function_exists('save_optimized_image')) {
         imagedestroy($dst);
 
         return $finalPath;
+    }
+}
+
+if (! function_exists('fm_relativedate')) {
+    /**
+     * Format Tanggal + Jam + Time-Ago untuk UI yang padat.
+     * Output: 2026-04-13 09:00 <br><small class="text-muted">2 hours ago</small>
+     */
+    function fm_relativedate($date): string
+    {
+        if (! $date) return '-';
+        
+        try {
+            $carbon = Carbon::parse($date);
+            $fullDate = $carbon->format('Y-m-d H:i');
+            $relative = $carbon->diffForHumans();
+            
+            return $fullDate . '<br><small class="text-muted" style="font-size: 0.85em;">' . $relative . '</small>';
+        } catch (\Throwable $e) {
+            return $date;
+        }
     }
 }

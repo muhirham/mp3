@@ -6,8 +6,8 @@
         #tblStock {
             width: 100% !important;
             table-layout: fixed;
-            font-size: 0.75rem;
-            /* kecilin font */
+            font-size: 0.7rem;
+            /* makin kecilin font */
         }
 
         #tblStock th,
@@ -22,14 +22,25 @@
         /* Biar kolom panjang gak meledak */
         #tblStock th:nth-child(3),
         #tblStock td:nth-child(3) {
-            max-width: 180px;
-            /* product */
+            max-width: 200px; /* product */
         }
 
-        #tblStock th:nth-child(6),
-        #tblStock td:nth-child(6) {
-            max-width: 220px;
-            /* supplier */
+        #tblStock th:nth-child(7),
+        #tblStock td:nth-child(7) {
+            max-width: 150px; /* supplier */
+        }
+
+        /* Sepit kolom status biar created at dapet space */
+        #tblStock th:nth-child(10),
+        #tblStock td:nth-child(10) {
+            max-width: 80px; /* status */
+            text-align: center;
+        }
+
+        /* Kolom Created At di pojok kanan */
+        #tblStock th:nth-child(13),
+        #tblStock td:nth-child(13) {
+            width: 120px;
         }
 
         /* Hilangin scroll horizontal */
@@ -119,9 +130,9 @@
                             <th class="text-end">STOCK</th>
                             <th class="text-end">MIN STOCK</th>
                             <th>STATUS</th>
-                            <th>CREATED AT</th>
                             <th class="text-end">COGS</th>
                             <th class="text-end">SELLING PRICE</th>
+                            <th>CREATED AT</th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -219,16 +230,16 @@
                         searchable: false
                     },
                     {
-                        data: 'created_at',
-                        orderable: true
-                    },
-                    {
                         data: 'hpp',
                         className: 'text-end'
                     },
                     {
                         data: 'selling_price',
                         className: 'text-end'
+                    },
+                    {
+                        data: 'created_at',
+                        orderable: true
                     },
                 ]
             });

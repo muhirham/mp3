@@ -67,7 +67,7 @@ class PreOController extends Controller
                 }
             ]);
 
-                        // ✅ role-based visibility:
+            // ✅ role-based visibility:
             // - procurement: cuma PO yang nunggu procurement
             // - ceo       : cuma PO yang nunggu CEO
         if (! $isSuperadmin) {
@@ -75,7 +75,7 @@ class PreOController extends Controller
                 $query->where(function ($qq) {
                     $qq->whereIn('approval_status', ['waiting_procurement','waiting_ceo','approved','rejected'])
                     ->orWhereNull('approval_status')
-                    ->orWhere('approval_status');
+                    ->orWhere('approval_status', 'draft');
                 });
             } elseif ($isCeo) {
                 $query->where('grand_total', '>', self::CEO_MIN_TOTAL);
@@ -129,21 +129,22 @@ class PreOController extends Controller
             });
         }
 
-        // filter tanggal: hanya jalan kalau user ngisi from/to/month
-        $hasDateFilter = $request->filled('from') || $request->filled('to') || $request->filled('month');
-        if ($hasDateFilter) {
-            [$fromC, $toC] = $this->parseRangeMaxOneMonth($request); // kita ubah fn-nya di bawah biar fleksibel
+        // filter tanggal: inline fixed
+        $from = $request->get('from');
+        $to   = $request->get('to');
+        if ($from || $to) {
+            $fC = $from ? Carbon::parse($from)->startOfDay() : null;
+            $tC = $to ? Carbon::parse($to)->endOfDay() : null;
 
-            if ($dateCol === 'created_at') {
-                $query->whereBetween('created_at', [
-                    $fromC->copy()->startOfDay(),
-                    $toC->copy()->endOfDay(),
-                ]);
-            } else {
+            if ($fC && $tC) {
                 $query->whereBetween($dateCol, [
-                    $fromC->toDateString(),
-                    $toC->toDateString(),
+                    $dateCol === 'created_at' ? $fC : $fC->toDateString(),
+                    $dateCol === 'created_at' ? $tC : $tC->toDateString()
                 ]);
+            } elseif ($fC) {
+                $query->where($dateCol, '>=', $dateCol === 'created_at' ? $fC : $fC->toDateString());
+            } elseif ($tC) {
+                $query->where($dateCol, '<=', $dateCol === 'created_at' ? $tC : $tC->toDateString());
             }
         }
 
@@ -167,6 +168,355 @@ class PreOController extends Controller
             'isCeo',
             'isSuperadmin'
         ));
+    }
+
+    public function datatable(Request $request)
+    {
+        $draw   = (int) $request->input('draw');
+        $start  = (int) $request->input('start', 0);
+        $length = (int) $request->input('length', 10);
+
+        $q              = trim((string) $request->get('q', ''));
+        $status         = trim((string) $request->get('status', ''));
+        $approvalStatus = trim((string) $request->get('approval_status', ''));
+        $warehouseId    = trim((string) $request->get('warehouse_id', ''));
+        $from           = $request->get('from');
+        $to             = $request->get('to');
+
+        $me    = auth()->user();
+        $roles = $me?->roles ?? collect();
+
+        $isSuperadmin  = $roles->contains('slug', 'superadmin') || (($me->role ?? '') === 'superadmin');
+        $isProcurement = $roles->contains('slug', 'procurement') || (($me->role ?? '') === 'procurement');
+        $isCeo         = $roles->contains('slug', 'ceo') || (($me->role ?? '') === 'ceo');
+        $isWarehouse   = $roles->contains('slug', 'warehouse') || (($me->role ?? '') === 'warehouse');
+        $myWhId        = $me->warehouse_id ?? null;
+
+        $dateCol = Schema::hasColumn('purchase_orders', 'po_date') ? 'po_date' : 'created_at';
+
+        $baseQuery = PurchaseOrder::query();
+
+        // Role-based visibility (Must apply to both counts)
+        if (!$isSuperadmin) {
+            if ($isProcurement) {
+                $baseQuery->where(function ($qq) {
+                    $qq->whereIn('approval_status', ['waiting_procurement','waiting_ceo','approved','rejected'])
+                    ->orWhereNull('approval_status')
+                    ->orWhere('approval_status', 'draft');
+                });
+            } elseif ($isCeo) {
+                $baseQuery->where('grand_total', '>', self::CEO_MIN_TOTAL);
+                $baseQuery->where(function ($qq) {
+                    $qq->where('approval_status', 'waiting_ceo')
+                    ->orWhere(function ($q2) {
+                        $q2->where('approval_status', 'approved')->whereNotNull('approved_by_ceo');
+                    })
+                    ->orWhere(function ($q2) {
+                        $q2->where('approval_status', 'rejected')->whereNotNull('approved_by_ceo');
+                    });
+                });
+            } else {
+                $baseQuery->whereRaw('1=0');
+            }
+        }        $recordsTotal = (clone $baseQuery)->count();
+
+        $query = (clone $baseQuery)->with([
+                'supplier',
+                'items.product.supplier',
+                'items.warehouse',
+                'user',
+                'procurementApprover',
+                'ceoApprover',
+            ])
+            ->withCount('items')
+            ->withCount([
+                'restockReceipts as gr_count' => function ($q) {
+                    $q->where(function ($qq) {
+                        $qq->where('qty_good', '>', 0)
+                        ->orWhere('qty_damaged', '>', 0);
+                    });
+                }
+            ]);
+
+        // Search
+        if ($q !== '') {
+            $query->where(function($qq) use ($q) {
+                $qq->where('po_code', 'like', "%{$q}%")
+                   ->orWhereHas('supplier', function($sq) use ($q) { $sq->where('name', 'like', "%{$q}%"); });
+            });
+        }
+        if ($status !== '') $query->where('status', $status);
+        if ($approvalStatus !== '') {
+            if ($approvalStatus === 'draft') {
+                $query->where(function ($qq) { $qq->whereNull('approval_status')->orWhere('approval_status', 'draft'); });
+            } else {
+                $query->where('approval_status', $approvalStatus);
+            }
+        }
+        if ($warehouseId !== '') {
+            $query->whereHas('items', function ($itQ) use ($warehouseId) {
+                if ($warehouseId === 'central') $itQ->whereNull('warehouse_id');
+                else $itQ->where('warehouse_id', (int) $warehouseId);
+            });
+        }
+
+        if ($from || $to) {
+            $fC = $from ? Carbon::parse($from)->startOfDay() : null;
+            $tC = $to ? Carbon::parse($to)->endOfDay() : null;
+            if ($fC && $tC) {
+                $query->whereBetween($dateCol, [ $dateCol === 'created_at' ? $fC : $fC->toDateString(), $dateCol === 'created_at' ? $tC : $tC->toDateString() ]);
+            } elseif ($fC) {
+                $query->where($dateCol, '>=', $dateCol === 'created_at' ? $fC : $fC->toDateString());
+            } elseif ($tC) {
+                $query->where($dateCol, '<=', $dateCol === 'created_at' ? $tC : $tC->toDateString());
+            }
+        }
+
+        $recordsFiltered = (clone $query)->count();
+        $pos = $query->orderByDesc('id')->offset($start)->limit($length)->get();
+
+        $data = [];
+        foreach ($pos as $po) {
+            $hasGr = (int) ($po->gr_count ?? 0) > 0;
+            $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
+            $poWhIds = $po->items->pluck('warehouse_id')->filter()->unique();
+            $isMyWarehousePo = !$myWhId || $poWhIds->contains($myWhId);
+
+            // Perm logic unification
+            $isOrdered = $po->status === 'ordered';
+            $isApproved = $po->approval_status === 'approved';
+            $hasItems = $po->items_count > 0;
+
+            $canReceive = !$hasGr && $isOrdered && $isApproved && $hasItems &&
+                         (($fromRequest && $isWarehouse && $isMyWarehousePo) || (!$fromRequest && $isSuperadmin));
+
+            $showBlockedReceive = $isSuperadmin && $fromRequest && !$hasGr && $isOrdered && $isApproved && $hasItems;
+
+            // Supplier Label
+            $supplierNames = collect();
+            if(!empty($po->supplier?->name)) $supplierNames->push($po->supplier->name);
+            foreach($po->items as $it) {
+                if($it->product?->supplier?->name) $supplierNames->push($it->product->supplier->name);
+            }
+            $supplierNames = $supplierNames->unique()->values();
+            if ($supplierNames->isEmpty()) $supplierLabel = '-';
+            elseif ($supplierNames->count() === 1) $supplierLabel = $supplierNames->first();
+            else $supplierLabel = $supplierNames->first() . ' + ' . ($supplierNames->count() - 1) . ' supplier';
+
+            // Warehouse Label
+            if (!$fromRequest) {
+                $warehouseLabel = 'Central Stock';
+            } else {
+                $whNames = collect();
+                foreach($po->items as $it) {
+                    if($it->warehouse) $whNames->push($it->warehouse->warehouse_name ?? $it->warehouse->name);
+                }
+                $whNames = $whNames->filter()->unique()->values();
+                if ($whNames->isEmpty()) $warehouseLabel = '-';
+                elseif ($whNames->count() === 1) $warehouseLabel = $whNames->first();
+                else $warehouseLabel = $whNames->first() . ' + ' . ($whNames->count() - 1) . ' wh';
+            }
+
+            // Approval Badge
+            $appStatus = $po->approval_status ?: 'draft';
+            $badgeColor = match($appStatus) {
+                'draft' => 'secondary',
+                'waiting_procurement' => 'warning',
+                'waiting_ceo' => 'info',
+                'approved' => 'success',
+                'rejected' => 'danger',
+                default => 'secondary'
+            };
+            $approvalBadge = '<span class="badge bg-label-'.$badgeColor.'">'.strtoupper(str_replace('_', ' ', $appStatus)).'</span>';
+            $approvers = '<div class="po-muted text-muted mt-1">Proc: '.($po->procurementApprover->name ?? '-').'<br>CEO&nbsp;: '.($po->ceoApprover->name ?? '-').'</div>';
+
+            $data[] = [
+                'po_code' => $po->po_code,
+                'supplier' => $supplierLabel,
+                'status' => '<span class="badge bg-label-info text-uppercase">'.$po->status.'</span>' . ($hasGr ? ' <span class="badge bg-label-success">GR EXIST</span>' : ''),
+                'approval' => $approvalBadge . $approvers,
+                'subtotal' => number_format($po->subtotal, 0, ',', '.'),
+                'discount' => number_format($po->discount_total, 0, ',', '.'),
+                'grand_total' => number_format($po->grand_total, 0, ',', '.'),
+                'lines' => $po->items_count,
+                'warehouse' => $warehouseLabel,
+                'actions' => '
+                    <div class="btn-group">
+                        <a class="btn btn-sm btn-primary" href="'.route('po.edit', $po->id).'">Open</a>
+                        ' . ($canReceive ? '
+                            <button type="button" class="btn btn-sm btn-success js-btn-receive" data-url="'.route('po.modal-gr', $po->id).'">
+                                <i class="bx bx-download"></i> Receive
+                            </button>' : '') . '
+                        ' . ($showBlockedReceive ? '
+                            <button type="button" class="btn btn-sm btn-outline-success js-gr-blocked" data-po="'.$po->po_code.'">
+                                <i class="bx bx-info-circle"></i> Receive
+                            </button>' : '') . '
+                    </div>'
+            ];
+        }
+
+        return response()->json([
+            'draw'            => $draw,
+            'recordsTotal'    => $recordsTotal,
+            'recordsFiltered' => $recordsFiltered,
+            'data'            => $data
+        ]);
+    }
+
+    public function modalGr(PurchaseOrder $po)
+    {
+        $po->load([
+            'supplier',
+            'items.product.supplier',
+            'items.warehouse',
+        ]);
+
+        $me = auth()->user();
+        $roles = $me?->roles ?? collect();
+        $isSuperadmin = $roles->contains('slug', 'superadmin') || (($me->role ?? '') === 'superadmin');
+        $isWarehouse = $roles->contains('slug', 'warehouse') || (($me->role ?? '') === 'warehouse');
+        $myWhId = $me->warehouse_id ?? null;
+
+        $hasGr = (int) ($po->restockReceipts()->where(function($qq){ $qq->where('qty_good','>',0)->orWhere('qty_damaged','>',0);})->count() ?? 0) > 0;
+        $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
+
+        $poWhIds = $po->items->pluck('warehouse_id')->filter()->unique();
+        $isMyWarehousePo = !$myWhId || $poWhIds->contains($myWhId);
+
+        $isOrdered = $po->status === 'ordered';
+        $isApproved = $po->approval_status === 'approved';
+        $hasItems = $po->items()->count() > 0;
+
+        $canReceive = !$hasGr && $isOrdered && $isApproved && $hasItems &&
+                     (($fromRequest && $isWarehouse && $isMyWarehousePo) || (!$fromRequest && $isSuperadmin));
+
+        if (!$canReceive) {
+            $reason = "You do not have permission to receive this PO.";
+            if ($hasGr) $reason = "This PO has already been received (GR EXIST).";
+            elseif (!$isOrdered) $reason = "This PO status is not 'ordered' (Current: {$po->status}).";
+            elseif (!$isApproved) $reason = "This PO is not yet approved (Current: " . ($po->approval_status ?: 'draft') . ").";
+            elseif ($fromRequest && !$isWarehouse) $reason = "This is a Restock Request PO. It must be received by a Warehouse account.";
+            elseif (!$fromRequest && !$isSuperadmin) $reason = "This is a manual PO. It must be received by a Superadmin account.";
+            
+            return '<div class="alert alert-danger">'.$reason.'</div>';
+        }
+
+        // Supplier Label
+        $supplierNames = collect();
+        if(!empty($po->supplier?->name)) $supplierNames->push($po->supplier->name);
+        foreach($po->items as $it) {
+            if($it->product?->supplier?->name) $supplierNames->push($it->product->supplier->name);
+        }
+        $supplierNames = $supplierNames->unique()->values();
+        if ($supplierNames->isEmpty()) $supplierLabel = '-';
+        elseif ($supplierNames->count() === 1) $supplierLabel = $supplierNames->first();
+        else $supplierLabel = $supplierNames->first() . ' + ' . ($supplierNames->count() - 1) . ' supplier';
+
+        // Warehouse Label
+        if (!$fromRequest) {
+            $whLabel = 'Central Stock';
+        } else {
+            $whNames = collect();
+            foreach ($po->items as $it) {
+                if ($it->warehouse) {
+                    $whNames->push($it->warehouse->warehouse_name ?? $it->warehouse->name);
+                }
+            }
+            $whNames = $whNames->filter()->unique()->values();
+            if ($whNames->isEmpty()) $whLabel = '-';
+            elseif ($whNames->count() === 1) $whLabel = $whNames->first();
+            else $whLabel = $whNames->first() . ' + ' . ($whNames->count() - 1) . ' wh';
+        }
+
+        // Render the modal body HTML
+        ob_start();
+        ?>
+        <form action="<?= route('po.gr.store', $po) ?>" method="POST" enctype="multipart/form-data">
+            <?= csrf_field() ?>
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold">Goods Received – <?= e($po->po_code) ?></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-2">
+                <div class="mb-4 small">
+                    <div id="grSupplier">Supplier: <strong><?= e($supplierLabel) ?></strong></div>
+                    <div id="grWarehouse">Warehouse: <strong><?= e($whLabel) ?></strong></div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle text-nowrap mb-4">
+                        <thead style="background-color: #f8f9fa;" class="text-muted small fw-bold">
+                            <tr>
+                                <th class="ps-3 py-3 text-uppercase border-bottom-0">#</th>
+                                <th class="py-3 text-uppercase border-bottom-0">PRODUCT</th>
+                                <th class="py-3 text-uppercase text-center border-bottom-0">QTY ORDERED</th>
+                                <th class="py-3 text-uppercase text-center border-bottom-0">QTY RECEIVED</th>
+                                <th class="py-3 text-uppercase text-center border-bottom-0">QTY REMAINING</th>
+                                <th class="py-3 text-uppercase text-center border-bottom-0" style="width: 100px;">QTY GOOD</th>
+                                <th class="py-3 text-uppercase text-center border-bottom-0" style="width: 100px;">QTY DAMAGED</th>
+                                <th class="pe-3 py-3 text-uppercase border-bottom-0">NOTES</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($po->items as $i => $item):
+                                $ordered = (int) ($item->qty_ordered ?? 0);
+                                $received = (int) ($item->qty_received ?? 0);
+                                $remaining = max(0, $ordered - $received);
+                                $key = $item->id;
+                            ?>
+                                <tr>
+                                    <td class="ps-3 small"><?= $i + 1 ?></td>
+                                    <td>
+                                        <div class="fw-bold text-dark"><?= e($item->product->name ?? '-') ?></div>
+                                        <div class="text-muted small" style="font-size: 0.65rem;"><?= e($item->product->product_code ?? '') ?></div>
+                                    </td>
+                                    <td class="text-center"><?= $ordered ?></td>
+                                    <td class="text-center"><?= $received ?></td>
+                                    <td class="text-center fw-bold js-remaining" data-remaining="<?= $remaining ?>"><?= $remaining ?></td>
+
+                                    <td style="width:100px">
+                                        <input type="number" class="form-control form-control-sm text-center fw-bold border-primary js-qty-good"
+                                            name="receives[<?= $key ?>][qty_good]"
+                                            min="0" max="<?= $remaining ?>"
+                                            value="<?= $remaining ?>">
+                                    </td>
+                                    <td style="width:100px">
+                                        <input type="number" class="form-control form-control-sm text-center fw-bold js-qty-damaged"
+                                            name="receives[<?= $key ?>][qty_damaged]"
+                                            min="0" max="<?= $remaining ?>"
+                                            value="0">
+                                    </td>
+                                    <td class="pe-3" style="width:180px">
+                                        <input type="text" class="form-control form-control-sm"
+                                            name="receives[<?= $key ?>][notes]"
+                                            placeholder="Notes (optional)">
+                                        <small class="text-danger small js-row-msg"></small>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label fw-bold small text-uppercase text-muted mb-1">UPLOAD PHOTO OF GOOD ITEMS (OPTIONAL)</label>
+                    <input type="file" name="photos_good[]" class="form-control mb-3" multiple accept="image/*">
+
+                    <label class="form-label fw-bold small text-uppercase text-muted mb-1">UPLOAD PHOTO OF DAMAGED ITEMS (OPTIONAL)</label>
+                    <input type="file" name="photos_damaged[]" class="form-control" multiple accept="image/*">
+                </div>
+            </div>
+
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-outline-secondary px-4 fw-bold" data-bs-dismiss="modal"
+                    style="border-color: #d9dee3; color: #8592a3;">Cancel</button>
+                <button type="submit" class="btn btn-primary px-4 fw-bold">
+                    <i class="bx bx-save me-1"></i> Save Goods Received
+                </button>
+            </div>
+        </form>
+        <?php
+        return ob_get_clean();
     }
 
     protected function isProcurementUser($user): bool

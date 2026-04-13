@@ -191,16 +191,22 @@ class SalesReturnController extends Controller
                 ] as $condition => $qty) {
 
                     if ($qty > 0) {
+                        // Kalau barang bagus -> Pakai Note Global
+                        // Kalau barang rusak/expired -> Pakai Item Note (kalau kosong baru pakai Global)
+                        $itemReason = ($condition === 'good')
+                            ? ($data['note'] ?? null)
+                            : ($row['item_note'] ?? ($data['note'] ?? null));
+
                         SalesReturn::create([
-                        'sales_id'     => $me->id,
-                        'warehouse_id' => $me->warehouse_id,
-                        'handover_id'  => $data['handover_id'],
-                        'product_id'   => $row['product_id'],
-                        'quantity'     => $qty,
-                        'condition'    => $condition,
-                        'status'       => 'pending',
-                        'reason' => $data['note'] ?? null,
-                    ]);
+                            'sales_id'     => $me->id,
+                            'warehouse_id' => $me->warehouse_id,
+                            'handover_id'  => $data['handover_id'],
+                            'product_id'   => $row['product_id'],
+                            'quantity'     => $qty,
+                            'condition'    => $condition,
+                            'status'       => 'pending',
+                            'reason'       => $itemReason,
+                        ]);
                     }
                 }
             }
@@ -405,34 +411,41 @@ class SalesReturnController extends Controller
     }
 
         DB::transaction(function () use ($request, $handoverId) {
+            foreach ($request->items as $returnId => $conditions) {
+                $original = SalesReturn::lockForUpdate()->find($returnId);
+                if (!$original) continue;
 
-            foreach ($request->items as $productId => $conditions) {
-
-                foreach (['good','damaged','expired'] as $condition) {
-
+                foreach (['good', 'damaged', 'expired'] as $condition) {
                     $qty = (int) ($conditions[$condition] ?? 0);
+                    if ($qty <= 0) continue;
 
-                    $return = SalesReturn::where('handover_id', $handoverId)
-                        ->where('product_id', $productId)
-                        ->where('condition', $condition)
-                        ->where('status', 'rejected')
-                        ->lockForUpdate()
-                        ->first();
+                    // Prioritize per-item note over global note
+                    $itemNote = $conditions['note'] ?? $request->note;
 
-                    if ($return) {
-
-                        // Kalau qty jadi 0 → hapus record
-                        if ($qty <= 0) {
-                            $return->delete();
-                            continue;
-                        }
-
-                        $return->update([
+                    if ($condition === $original->condition) {
+                        $original->update([
                             'quantity' => $qty,
                             'status'   => 'pending',
-                            'reason' => $request->note
+                            'reason'   => $itemNote
+                        ]);
+                    } else {
+                        // Create NEW record for new condition shifted from original
+                        SalesReturn::create([
+                            'sales_id'     => $original->sales_id,
+                            'warehouse_id' => $original->warehouse_id,
+                            'handover_id'  => $original->handover_id,
+                            'product_id'   => $original->product_id,
+                            'quantity'     => $qty,
+                            'condition'    => $condition,
+                            'status'       => 'pending',
+                            'reason'       => $itemNote,
                         ]);
                     }
+                }
+
+                $originalQtyInForm = (int) ($conditions[$original->condition] ?? 0);
+                if ($originalQtyInForm <= 0) {
+                    $original->delete();
                 }
             }
         });
@@ -513,141 +526,150 @@ class SalesReturnController extends Controller
         return back()->with('success','All returns approved successfully.');
     }
 
-    public function filterAjax(Request $request)
+    public function rejectAll(Request $request, $handoverId)
     {
-        $me = auth()->user();
+        $request->validate(['reject_reason' => 'required|string|max:500']);
 
-        $query = SalesReturn::with(['handover','sales']);
+        DB::transaction(function () use ($handoverId, $request) {
+            $items = SalesReturn::where('handover_id', $handoverId)
+                ->where('status', 'pending')
+                ->lockForUpdate()
+                ->get();
 
-        // 🔥 APPLY TANGGAL HANYA KALAU DIISI
-        if ($request->from && $request->to) {
+            foreach ($items as $item) {
+                $item->update([
+                    'status' => 'rejected',
+                    'reason' => $request->reject_reason,
+                ]);
+            }
+        });
 
-            $from = Carbon::parse($request->from)->startOfDay();
-            $to   = Carbon::parse($request->to)->endOfDay();
-
-            $query->whereBetween('created_at', [$from, $to]);
-        }
-
-        // 🔥 LOCK SALES
-        if (!$me->hasRole(['admin','superadmin'])) {
-            $query->where('sales_id', $me->id);
-        }
-
-        if ($request->warehouse_id) {
-            $query->where('warehouse_id', $request->warehouse_id);
-        }
-
-        if ($request->sales_id) {
-            $query->where('sales_id', $request->sales_id);
-        }
-
-        if ($request->status) {
-            $query->where('status', $request->status);
-        }
-
-        if ($request->search) {
-            $search = $request->search;
-            $query->where(function($q) use ($search) {
-                $q->whereHas('handover', fn($x) => $x->where('code', 'like', "%$search%"))
-                  ->orWhereHas('sales', fn($x) => $x->where('name', 'like', "%$search%"))
-                  ->orWhereHas('product', fn($x) => $x->where('name', 'like', "%$search%"));
-            });
-        }
-
-        $returns = $query->get()
-            ->groupBy('handover_id')
-            ->map(function ($items) {
-
-                $first = $items->first();
-
-                if ($items->contains('status','pending')) {
-                    $status = 'pending';
-                } elseif ($items->contains('status','rejected')) {
-                    $status = 'rejected';
-                } else {
-                    $status = 'approved';
-                }
-
-                return [
-                    'handover_code' => optional($first->handover)->code ?? '-',
-                    'total_items'   => $items->count(),
-                    'status'        => $status,
-                    'date'          => optional($first->created_at)->format('d M Y'),
-                    'handover_id'   => $first->handover_id
-                ];
-            })
-            ->values();
-
-        return response()->json($returns);
+        return response()->json(['success' => true]);
     }
 
-    public function filterAjaxWhApproved(Request $request)
+    public function filterAjax(Request $r)
     {
-        $user = auth()->user();
+        try {
+            $me     = auth()->user();
+            $draw   = $r->input('draw');
+            $start  = $r->input('start', 0);
+            $length = $r->input('length', 10);
+            $search = $r->input('search.value');
 
-        $from = $request->from
-            ? Carbon::parse($request->from)->startOfDay()
-            : now()->startOfDay();
+            // 1. Base query - Grouped by handover_id
+            $query = DB::table('sales_returns as sr')
+                ->join('sales_handovers as h', 'h.id', '=', 'sr.handover_id')
+                ->join('users as s', 's.id', '=', 'sr.sales_id')
+                ->select(
+                    'sr.handover_id',
+                    'h.code as handover_code',
+                    's.name as sales_name',
+                    DB::raw("CAST(SUM(sr.quantity) AS SIGNED) as total_items"),
+                    DB::raw("MIN(sr.created_at) as first_created_at"),
+                    DB::raw("
+                        CASE 
+                            WHEN SUM(CASE WHEN sr.status = 'pending' THEN 1 ELSE 0 END) > 0 THEN 'pending'
+                            WHEN SUM(CASE WHEN sr.status = 'rejected' THEN 1 ELSE 0 END) > 0 THEN 'rejected'
+                            ELSE 'approved'
+                        END as status
+                    ")
+                )
+                ->groupBy('sr.handover_id', 'h.code', 's.name');
 
-        $to = $request->to
-            ? Carbon::parse($request->to)->endOfDay()
-            : now()->endOfDay();
-
-        $query = SalesReturn::with(['handover','sales'])
-            ->whereBetween('created_at', [$from, $to]);
-
-        // ✅ SAMA dengan approvalList
-            $canSwitchWarehouse = $user->hasRole(['admin','superadmin']);
-            $isWarehouseUser    = $user->hasRole('warehouse');
-
-            if ($isWarehouseUser) {
-                $query->where('warehouse_id', $user->warehouse_id);
-            } elseif ($canSwitchWarehouse && $request->warehouse_id) {
-                $query->where('warehouse_id', $request->warehouse_id);
+            // 2. Role Filtering
+            if (!$me->hasRole(['admin', 'superadmin'])) {
+                if ($me->hasRole(['sales'])) {
+                    $query->where('sr.sales_id', $me->id);
+                } elseif ($me->hasRole(['warehouse'])) {
+                    $query->where('sr.warehouse_id', $me->warehouse_id);
+                }
             }
 
-        if ($request->status) {
-            $query->where('status', $request->status);
-        }
+            // 3. Custom Filters (Date, Status, Warehouse, Sales)
+            if ($r->filled('from') && $r->filled('to')) {
+                $query->whereBetween('sr.created_at', [
+                    Carbon::parse($r->from)->startOfDay(),
+                    Carbon::parse($r->to)->endOfDay()
+                ]);
+            }
 
-        if ($request->search) {
-            $search = $request->search;
-            $query->where(function($q) use ($search) {
-                $q->whereHas('handover', fn($x) => $x->where('code', 'like', "%$search%"))
-                  ->orWhereHas('sales', fn($x) => $x->where('name', 'like', "%$search%"))
-                  ->orWhereHas('product', fn($x) => $x->where('name', 'like', "%$search%"));
-            });
-        }
+            if ($r->filled('status')) {
+                // If status filter is applied, we look for groups that have this specific state
+                // This is a bit complex due to grouping, but usually status refers to the group's aggregate status.
+                // For simplicity, we filter individual items first if a status is selected.
+                $query->having('status', $r->status);
+            }
 
-        $returns = $query->get()
-            ->groupBy('handover_id')
-            ->map(function ($items) {
+            if ($r->filled('warehouse_id')) {
+                $query->where('sr.warehouse_id', $r->warehouse_id);
+            }
 
-                $first = $items->first();
+            if ($r->filled('sales_id')) {
+                $query->where('sr.sales_id', $r->sales_id);
+            }
 
-                if (!$first) return null;
+            // 4. Global Search
+            if ($search) {
+                $query->where(function($q) use ($search) {
+                    $q->where('h.code', 'like', "%{$search}%")
+                      ->orWhere('s.name', 'like', "%{$search}%");
+                });
+            }
 
-                if ($items->contains('status','pending')) {
-                    $status = 'pending';
-                } elseif ($items->contains('status','rejected')) {
-                    $status = 'rejected';
-                } else {
-                    $status = 'approved';
-                }
+            // 5. Counting (Robust method for grouped queries)
+            $countSql = "SELECT COUNT(*) as aggregate FROM ({$query->toSql()}) as sub";
+            $countResult = DB::select($countSql, $query->getBindings());
+            $recordsTotal = $countResult[0]->aggregate ?? 0;
 
-                return [
-                    'handover_code' => optional($first->handover)->code ?? '-',
-                    'sales_name'    => optional($first->sales)->name ?? '-',
-                    'total_items'   => $items->count(),
-                    'status'        => $status,
-                    'date'          => optional($first->created_at)->format('d M Y H:i') ?? '-',
-                    'handover_id'   => $first->handover_id,
+            // 6. Fetch paginated data
+            $rows = $query->orderByDesc('first_created_at')
+                ->offset($start)
+                ->limit($length)
+                ->get();
+
+            $data = [];
+            foreach ($rows as $row) {
+                $badge = match ($row->status) {
+                    'pending'  => '<span class="badge bg-warning text-dark">Pending</span>',
+                    'rejected' => '<span class="badge bg-danger">Rejected</span>',
+                    'approved' => '<span class="badge bg-success">Approved</span>',
+                    default    => '<span class="badge bg-secondary">Unknown</span>',
+                };
+
+                $data[] = [
+                    'handover_code' => $row->handover_code,
+                    'sales_name'    => $row->sales_name,
+                    'total_items'   => $row->total_items . ' items',
+                    'status_badge'  => $badge,
+                    'status'        => $row->status,
+                    'date'          => Carbon::parse($row->first_created_at)->format('d M Y'),
+                    'handover_id'   => $row->handover_id,
                 ];
-            })
-            ->filter()
-            ->values();
+            }
 
-        return response()->json($returns);
+            return response()->json([
+                'draw' => (int)$draw,
+                'recordsTotal' => $recordsTotal,
+                'recordsFiltered' => $recordsTotal, // Same as total since we applied filters in base
+                'data' => $data
+            ]);
+
+        } catch (\Throwable $e) {
+            \Log::error('SalesReturn filterAjax error: ' . $e->getMessage());
+            return response()->json([
+                'draw' => (int)$r->input('draw'),
+                'recordsTotal' => 0,
+                'recordsFiltered' => 0,
+                'data' => [],
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function filterAjaxWhApproved(Request $r)
+    {
+        // WH view usually mostly identical but has different role checks and shows dates with time
+        return $this->filterAjax($r);
     }
 
     public function getSalesByWarehouse($warehouseId)

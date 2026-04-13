@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\StockRequest;
 use App\Models\Product;
 use App\Models\Warehouse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 
 class StockRequestController extends Controller
@@ -14,65 +15,7 @@ class StockRequestController extends Controller
     {
         $me = auth()->user();
 
-        $canSwitchWarehouse = $me->hasRole(['admin', 'superadmin']);
-
-        $query = StockRequest::with('product', 'warehouse')
-            ->where('user_id', $me->id);
-
-        if ($request->date_from && $request->date_to) {
-            $query->whereBetween('created_at', [
-                $request->date_from . ' 00:00:00',
-                $request->date_to . ' 23:59:59'
-            ]);
-        } else {
-            $query->whereDate('created_at', now()->toDateString());
-        }
-
-        if ($request->search) {
-            $search = $request->search;
-
-            $query->where(function ($q) use ($search) {
-                $q->whereHas('product', fn($x) =>
-                    $x->where('name', 'like', "%$search%"))
-                ->orWhereHas('warehouse', fn($x) =>
-                    $x->where('warehouse_name', 'like', "%$search%"));
-            });
-        }
-
-        $requests = $query->latest()->get()
-            ->groupBy(function ($item) {
-                return $item->created_at->format('Y-m-d H:i:s');
-            })
-            ->map(function ($group) {
-
-                $statuses = $group->pluck('status');
-
-                if ($statuses->contains('pending')) {
-                    $group->final_status = 'pending';
-                } elseif ($statuses->every(fn($s) => $s === 'rejected')) {
-                    $group->final_status = 'rejected';
-                } else {
-                    $group->final_status = 'completed';
-                }
-
-                return $group;
-            });
-
-        if ($request->ajax()) {
-
-            $data = $requests->map(function ($group, $date) {
-
-                return [
-                    'date' => $date,
-                    'warehouse' => $group->first()->warehouse->warehouse_name,
-                    'count' => $group->count(),
-                    'final_status' => $group->final_status,
-                    'items' => $group->values()
-                ];
-            })->values();
-
-            return response()->json($data);
-        }
+        $canSwitchWarehouse = $me->hasRole('superadmin');
 
         if ($canSwitchWarehouse) {
             $warehouses = Warehouse::orderBy('warehouse_name')->get();
@@ -85,7 +28,6 @@ class StockRequestController extends Controller
         $products = Product::all();
 
         return view('sales.stock_requests', compact(
-            'requests',
             'warehouses',
             'products',
             'selectedWarehouseId',
@@ -93,11 +35,83 @@ class StockRequestController extends Controller
         ));
     }
 
+    public function filter(Request $request)
+    {
+        $me = auth()->user();
+
+        $dateFrom = $request->date_from;
+        $dateTo   = $request->date_to;
+
+        $query = DB::table('stock_requests')
+            ->join('warehouses', 'stock_requests.warehouse_id', '=', 'warehouses.id')
+            ->select(
+                'stock_requests.warehouse_id',
+                'warehouses.warehouse_name',
+                DB::raw("DATE_FORMAT(stock_requests.created_at, '%Y-%m-%d %H:%i') as group_time"),
+                DB::raw("COUNT(*) as item_count"),
+                DB::raw("CASE 
+                    WHEN SUM(CASE WHEN stock_requests.status = 'pending' THEN 1 ELSE 0 END) > 0 THEN 'pending'
+                    WHEN SUM(CASE WHEN stock_requests.status = 'approved' THEN 1 ELSE 0 END) > 0 THEN 'approved'
+                    WHEN SUM(CASE WHEN stock_requests.status = 'completed' THEN 1 ELSE 0 END) > 0 THEN 'completed'
+                    ELSE 'rejected'
+                END as max_status")
+            )
+            ->where('stock_requests.user_id', $me->id);
+
+        if (!$me->hasRole('superadmin')) {
+            $query->where('stock_requests.warehouse_id', $me->warehouse_id);
+        }
+
+        if ($dateFrom && $dateTo) {
+            $query->whereBetween('stock_requests.created_at', [
+                $dateFrom . ' 00:00:00',
+                $dateTo . ' 23:59:59'
+            ]);
+        }
+
+        if ($request->search['value'] ?? null) {
+            $search = $request->search['value'];
+            $query->where('warehouses.warehouse_name', 'like', "%$search%");
+        }
+
+        $query->groupBy('stock_requests.warehouse_id', 'warehouses.warehouse_name', 'group_time');
+
+        $totalData = DB::table(DB::raw("({$query->toSql()}) as sub"))
+            ->mergeBindings($query)
+            ->count();
+
+        $results = $query->orderByDesc('group_time')
+            ->offset($request->start)
+            ->limit($request->length)
+            ->get();
+
+        $data = $results->map(function ($row) use ($me) {
+            $statusBadge = 'bg-warning';
+            if ($row->max_status === 'approved') $statusBadge = 'bg-success';
+            if ($row->max_status === 'rejected') $statusBadge = 'bg-danger';
+
+            return [
+                'date'         => fm_relativedate($row->group_time),
+                'warehouse'    => $row->warehouse_name,
+                'count'        => "{$row->item_count} Item",
+                'status'       => '<span class="badge ' . $statusBadge . '">' . strtoupper($row->max_status) . '</span>',
+                'actions'      => '<button class="btn btn-sm btn-outline-primary detailBtn" data-group="' . "{$me->id}_{$row->warehouse_id}_{$row->group_time}" . '">Detail</button>'
+            ];
+        });
+
+        return response()->json([
+            'draw'            => intval($request->draw),
+            'recordsTotal'    => $totalData,
+            'recordsFiltered' => $totalData,
+            'data'            => $data
+        ]);
+    }
+
     public function store(Request $request)
     {
         $me = auth()->user();
 
-        $warehouseId = $me->hasRole(['admin', 'superadmin'])
+        $warehouseId = $me->hasRole('superadmin')
             ? $request->warehouse_id
             : $me->warehouse_id;
 
@@ -116,25 +130,7 @@ class StockRequestController extends Controller
                 continue;
             }
 
-            $lastRejected = StockRequest::where('user_id', $me->id)
-                ->where('product_id', $productId)
-                ->where('status', 'rejected')
-                ->latest()
-                ->first();
-
-            if ($lastRejected && $lastRejected->created_at->diffInHours(now()) < 24) {
-
-                $lastRejected->update([
-                    'status' => 'pending',
-                    'quantity_requested' => $qty,
-                    'note' => $lastRejected->note .
-                        "\n\n[RESUBMIT " . now()->format('Y-m-d H:i') . "]\n" .
-                        $note
-                ]);
-
-                continue;
-            }
-
+            // Discussion result: Always create new records to preserve history
             StockRequest::create([
                 'user_id'            => $me->id,
                 'warehouse_id'       => $warehouseId,
@@ -143,6 +139,13 @@ class StockRequestController extends Controller
                 'status'             => 'pending',
                 'note'               => $note
             ]);
+        }
+
+        // Tembak sinyal real-time biar Admin WH dapet notif!
+        broadcast(new \App\Events\StockRequestUpdated());
+
+        if ($request->ajax()) {
+            return response()->json(['success' => true, 'message' => 'Request created successfully']);
         }
 
         return redirect()

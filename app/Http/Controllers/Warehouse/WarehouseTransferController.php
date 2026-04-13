@@ -21,6 +21,24 @@ class WarehouseTransferController extends Controller
     /* ======================================================
      * INDEX
      * ====================================================== */
+    protected function nextTransferCode(): string
+    {
+        $prefix = 'WT-' . now()->format('ymd') . '-';
+
+        $last = DB::table('warehouse_transfers')
+            ->where('transfer_code', 'like', $prefix . '%')
+            ->orderByDesc('id')
+            ->value('transfer_code');
+
+        $n = 1;
+        if ($last) {
+            $lastSeq = (int) substr($last, -4);
+            $n       = $lastSeq + 1;
+        }
+
+        return $prefix . str_pad($n, 4, '0', STR_PAD_LEFT);
+    }
+
     public function index()
     {
         $me = auth()->user();
@@ -136,7 +154,7 @@ class WarehouseTransferController extends Controller
                 : $r->from_warehouse_id;
 
             $transfer = WarehouseTransfer::create([
-                'transfer_code' => 'WT-' . now()->format('Ymd') . '-' . strtoupper(Str::random(5)),
+                'transfer_code' => $this->nextTransferCode(),
                 'source_warehouse_id' => $sourceWarehouseId,
                 'destination_warehouse_id' => $r->to_warehouse_id,
                 'status' => 'pending_destination',
@@ -190,8 +208,7 @@ class WarehouseTransferController extends Controller
         return DB::transaction(function () use ($transfer) {
 
             $transfer->update([
-                'transfer_code' => $transfer->transfer_code
-                    ?: 'WT-' . now()->format('Ymd') . '-' . strtoupper(Str::random(5)),
+                'transfer_code' => $transfer->transfer_code ?: $this->nextTransferCode(),
                 'status' => 'pending_source',
             ]);
 
@@ -480,10 +497,56 @@ class WarehouseTransferController extends Controller
     public function data(Request $r)
     {
         try {
-            $query = DB::table('warehouse_transfers as wt')
-                ->leftJoin('warehouses as wf', 'wf.id', '=', 'wt.source_warehouse_id')
+            $draw   = $r->input('draw');
+            $start  = $r->input('start', 0);
+            $length = $r->input('length', 10);
+            $search = $r->input('search.value');
+
+            // 1. Base Query for counting totals
+            $query = DB::table('warehouse_transfers as wt');
+
+            if (auth()->user()->hasRole('warehouse')) {
+                $wid = auth()->user()->warehouse_id;
+                $query->where(function ($q) use ($wid) {
+                    $q->where('wt.source_warehouse_id', $wid)
+                        ->orWhere('wt.destination_warehouse_id', $wid);
+                });
+            }
+            $recordsTotal = (clone $query)->count();
+
+            // 2. Apply Filters
+            if ($r->filled('status')) {
+                $query->where('wt.status', $r->status);
+            }
+            if ($r->filled('from_warehouse')) {
+                $query->where('wt.source_warehouse_id', $r->from_warehouse);
+            }
+            if ($r->filled('to_warehouse')) {
+                $query->where('wt.destination_warehouse_id', $r->to_warehouse);
+            }
+
+            // 3. Search Filter
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('wt.transfer_code', 'like', "%{$search}%")
+                      ->orWhereExists(function ($qe) use ($search) {
+                          $qe->select(DB::raw(1))
+                             ->from('warehouse_transfer_items as wti_s')
+                             ->join('products as p_s', 'p_s.id', '=', 'wti_s.product_id')
+                             ->whereColumn('wti_s.warehouse_transfer_id', 'wt.id')
+                             ->where(function ($qp) use ($search) {
+                                 $qp->where('p_s.name', 'like', "%{$search}%")
+                                    ->orWhere('p_s.product_code', 'like', "%{$search}%");
+                             });
+                      });
+                });
+            }
+
+            $recordsFiltered = (clone $query)->count();
+
+            // 4. Detailed Fetch with Grouping & Pagination
+            $rows = $query->leftJoin('warehouses as wf', 'wf.id', '=', 'wt.source_warehouse_id')
                 ->leftJoin('warehouses as wtg', 'wtg.id', '=', 'wt.destination_warehouse_id')
-                // Join items & products buat ambil list & qty sekaligus (anti N+1)
                 ->leftJoin('warehouse_transfer_items as wti', 'wti.warehouse_transfer_id', '=', 'wt.id')
                 ->leftJoin('products as p', 'p.id', '=', 'wti.product_id')
                 ->select(
@@ -493,7 +556,7 @@ class WarehouseTransferController extends Controller
                     'wtg.warehouse_name as to_warehouse',
                     'wt.total_cost',
                     'wt.status',
-                    DB::raw("DATE_FORMAT(wt.created_at,'%d/%m/%Y') as created_at"),
+                    'wt.created_at',
                     DB::raw("SUM(COALESCE(wti.qty_transfer, 0)) as total_qty"),
                     DB::raw("GROUP_CONCAT(DISTINCT CONCAT(p.product_code, ' - ', p.name) SEPARATOR '<br>') as product_list")
                 )
@@ -506,35 +569,13 @@ class WarehouseTransferController extends Controller
                     'wt.status',
                     'wt.created_at'
                 )
-                ->orderByDesc('wt.id');
-
-            if (auth()->user()->hasRole('warehouse')) {
-                $wid = auth()->user()->warehouse_id;
-
-                $query->where(function ($q) use ($wid) {
-                    $q->where('wt.source_warehouse_id', $wid)
-                        ->orWhere('wt.destination_warehouse_id', $wid);
-                });
-            }
-
-            if ($r->filled('status')) {
-                $query->where('wt.status', $r->status);
-            }
-
-            if ($r->filled('from_warehouse')) {
-                $query->where('wt.source_warehouse_id', $r->from_warehouse);
-            }
-
-            if ($r->filled('to_warehouse')) {
-                $query->where('wt.destination_warehouse_id', $r->to_warehouse);
-            }
-
-            $rows = $query->get();
+                ->orderByDesc('wt.id')
+                ->offset($start)
+                ->limit($length)
+                ->get();
 
             $data = [];
-
             foreach ($rows as $row) {
-
                 $badge = match ($row->status) {
                     'draft'               => 'secondary',
                     'pending_source'      => 'warning',
@@ -546,7 +587,6 @@ class WarehouseTransferController extends Controller
                     default               => 'secondary',
                 };
 
-
                 $data[] = [
                     'code'           => $row->transfer_code ?? '-',
                     'products'       => $row->product_list ?: '-',
@@ -555,25 +595,29 @@ class WarehouseTransferController extends Controller
                     'total_qty'      => (int) $row->total_qty,
                     'total_cost'     => number_format($row->total_cost, 0, ',', '.'),
                     'status_badge'   => '<span class="badge bg-label-' . $badge . '">' . strtoupper($row->status) . '</span>',
-                    'created_at'     => $row->created_at,
-                    'action'         => '<a href="' . route('warehouse-transfer-forms.show', $row->id) . '" class="btn btn-sm btn-primary">Detail</a>',
+                    'created_at'     => \Carbon\Carbon::parse($row->created_at)->format('d/m/Y'),
+                    'action'         => '<a href="' . route('warehouse-transfer-forms.show', $row->id) . '" class="btn btn-sm btn-primary">Open</a>',
                 ];
             }
 
-            return response()->json(['data' => $data]);
-        } catch (\Throwable $e) {
-
-            \Log::error('WarehouseTransfer datatable error', [
-                'msg' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
             return response()->json([
+                'draw' => (int)$draw,
+                'recordsTotal' => $recordsTotal,
+                'recordsFiltered' => $recordsFiltered,
+                'data' => $data
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('WarehouseTransfer datatable error: ' . $e->getMessage());
+            return response()->json([
+                'draw' => (int)$r->input('draw'),
+                'recordsTotal' => 0,
+                'recordsFiltered' => 0,
                 'data' => [],
                 'error' => $e->getMessage()
             ], 500);
         }
     }
+
 
     public function show(WarehouseTransfer $transfer)
     {
