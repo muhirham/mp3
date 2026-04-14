@@ -135,6 +135,9 @@ class HandoverOtpItemsController extends Controller
         $request->session()->put('sales_active_handover_id', $matched->id);
         $request->session()->put('sales_handover_otp_verified_' . $matched->id, true);
 
+        // Tembak sinyal real-time: Biar Admin WH di laptop juga tau kalau ini udah verified
+        broadcast(new \App\Events\HandoverUpdated($matched->sales_id, $matched->id, 'verified'));
+
         return response()->json(['success' => true]);
     }
 
@@ -306,12 +309,22 @@ class HandoverOtpItemsController extends Controller
                     $handover->evening_filled_by_sales = $isFinal;
                     $handover->evening_filled_at = $isFinal ? now() : null;
                     $handover->save();
+
+                    // 🔥 SINYAL: Kasih tau Admin WH kalau Sales udah submit payment/draft
+                    broadcast(new \App\Events\HandoverUpdated($handover->sales_id, $handover->id, $isFinal ? 'payment_submitted' : 'payment_draft_saved'));
                 }
             });
+
+            $msg = $isFinal ? 'Submitted' : 'Draft saved';
+            if (request()->ajax()) {
+                return response()->json(['success' => true, 'message' => $msg, 'isFinal' => $isFinal]);
+            }
+            return back()->with('success', $msg);
         } catch (\Throwable $e) {
+            if (request()->ajax()) {
+                return response()->json(['success' => false, 'message' => 'Error: ' . $e->getMessage()], 422);
+            }
             return back()->with('error', 'Error: ' . $e->getMessage());
         }
-
-        return back()->with('success', $isFinal ? 'Submitted' : 'Draft saved');
     }
 }

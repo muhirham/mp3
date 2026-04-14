@@ -150,40 +150,42 @@
         </div>
 
         {{-- VERIFIKASI OTP PAGI --}}
-        <div class="card">
-            <div class="card-header">
-            <h5 class="mb-0 fw-bold">Verify Morning OTP</h5>
-            </div>
-            <div class="card-body">
-            <form method="POST" action="{{ route('sales.handover.morning.verify') }}" class="row g-2 align-items-end">
-                @csrf
-                <div class="col-md-5">
-                <label class="form-label">Select Handover (Waiting Morning OTP)</label>
-                <select name="handover_id" class="form-select" required>
-                    <option value="">— Select —</option>
-                    @foreach(($waitingMorning ?? []) as $h)
-                    <option value="{{ $h->id }}"
-                    @selected(($selectedHandoverId ?? null) == $h->id)>
-                        {{ $h->code }} — {{ $h->sales->name ?? 'Sales #'.$h->sales_id }}
-                        ({{ \Carbon\Carbon::parse($h->handover_date)->format('Y-m-d') }})
-                    </option>
-                    @endforeach
-                </select>
+        <div id="morningOtpContainer">
+            <div class="card">
+                <div class="card-header">
+                <h5 class="mb-0 fw-bold">Verify Morning OTP</h5>
                 </div>
-                <div class="col-md-3">
-                <label class="form-label">Morning OTP</label>
-                <input type="text" name="otp_code" class="form-control"
-                        inputmode="numeric" pattern="[0-9]*" placeholder="6 digits" required>
+                <div class="card-body">
+                <form method="POST" action="{{ route('sales.handover.morning.verify') }}" class="row g-2 align-items-end">
+                    @csrf
+                    <div class="col-md-5">
+                    <label class="form-label">Select Handover (Waiting Morning OTP)</label>
+                    <select name="handover_id" class="form-select" required>
+                        <option value="">— Select —</option>
+                        @foreach(($waitingMorning ?? []) as $h)
+                        <option value="{{ $h->id }}"
+                        @selected(($selectedHandoverId ?? null) == $h->id)>
+                            {{ $h->code }} — {{ $h->sales->name ?? 'Sales #'.$h->sales_id }}
+                            ({{ \Carbon\Carbon::parse($h->handover_date)->format('Y-m-d') }})
+                        </option>
+                        @endforeach
+                    </select>
+                    </div>
+                    <div class="col-md-3">
+                    <label class="form-label">Morning OTP</label>
+                    <input type="text" name="otp_code" class="form-control"
+                            inputmode="numeric" pattern="[0-9]*" placeholder="6 digits" required>
+                    </div>
+                    <div class="col-md-4">
+                    <button type="submit" class="btn btn-success w-100 mt-3 mt-md-0">
+                        Verify OTP &amp; Lock Stock
+                    </button>
+                    </div>
+                </form>
+                <div class="form-text mt-2">
+                    Once the morning OTP is valid, warehouse stock will be transferred to sales stock and initial values will be saved.
                 </div>
-                <div class="col-md-4">
-                <button type="submit" class="btn btn-success w-100 mt-3 mt-md-0">
-                    Verify OTP &amp; Lock Stock
-                </button>
                 </div>
-            </form>
-            <div class="form-text mt-2">
-                Once the morning OTP is valid, warehouse stock will be transferred to sales stock and initial values will be saved.
-            </div>
             </div>
         </div>
 
@@ -463,4 +465,23 @@
     });
     </script>
     @endif
+
+    <script>
+        // 🔥 Fungsi Global buat Real-time
+        window.refreshMorningStatus = async function() {
+            try {
+                const res = await fetch(window.location.href, {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+                const html = await res.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+
+                const newContainer = doc.querySelector('#morningOtpContainer');
+                if (newContainer) {
+                    document.querySelector('#morningOtpContainer').innerHTML = newContainer.innerHTML;
+                }
+            } catch (err) { console.error('Failed to refresh morning status:', err); }
+        };
+    </script>
     @endpush

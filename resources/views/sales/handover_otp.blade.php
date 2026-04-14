@@ -67,40 +67,43 @@
     </div></div>
     @endif
 
-    <div class="card info mb-3"><div class="card-body">
-        @if (!$handover)
-            <div class="text-center text-muted"><div class="fw-semibold mb-1">No active handover for today.</div><div>Please contact the warehouse admin if items should have been assigned.</div></div>
-        @else
-            <div class="row g-3">
-                <div class="col-md-4"><div class="meta-label">Handover Code</div><div class="meta-value">{{ $handover->code }}</div></div>
-                <div class="col-md-4"><div class="meta-label">Date</div><div class="meta-value">{{ optional($handover->handover_date)->format('Y-m-d') }}</div></div>
-                <div class="col-md-4"><div class="meta-label">Warehouse</div><div class="meta-value">{{ optional($handover->warehouse)->warehouse_name ?? (optional($handover->warehouse)->name ?? '-') }}</div></div>
-                <div class="col-md-4"><div class="meta-label">Sales</div><div class="meta-value">{{ optional($handover->sales)->name ?? '-' }}</div></div>
-                <div class="col-md-4"><div class="meta-label">Status</div><span class="badge {{ $badgeClass }}">{{ $statusLabel }}</span></div>
-                <div class="col-md-4">
-                    <div class="meta-label">Morning OTP Verified</div>
-                    @if ($handover->status !== 'waiting_morning_otp' && $isOtpVerified)
-                        <div class="text-success fw-semibold">Verified in this menu</div>
-                    @else
-                        <div class="text-muted fw-semibold">Not yet verified</div>
+    <div id="handoverHeaderContainer">
+        <div class="card info mb-3"><div class="card-body">
+            @if (!$handover)
+                <div class="text-center text-muted"><div class="fw-semibold mb-1">No active handover for today.</div><div>Please contact the warehouse admin if items should have been assigned.</div></div>
+            @else
+                <div class="row g-3">
+                    <div class="col-md-4"><div class="meta-label">Handover Code</div><div class="meta-value">{{ $handover->code }}</div></div>
+                    <div class="col-md-4"><div class="meta-label">Date</div><div class="meta-value">{{ optional($handover->handover_date)->format('Y-m-d') }}</div></div>
+                    <div class="col-md-4"><div class="meta-label">Warehouse</div><div class="meta-value">{{ optional($handover->warehouse)->warehouse_name ?? (optional($handover->warehouse)->name ?? '-') }}</div></div>
+                    <div class="col-md-4"><div class="meta-label">Sales</div><div class="meta-value">{{ optional($handover->sales)->name ?? '-' }}</div></div>
+                    <div class="col-md-4"><div class="meta-label">Status</div><span class="badge {{ $badgeClass }}">{{ $statusLabel }}</span></div>
+                    <div class="col-md-4">
+                        <div class="meta-label">Morning OTP Verified</div>
+                        @if ($handover->status !== 'waiting_morning_otp' && $isOtpVerified)
+                            <div class="text-success fw-semibold">Verified in this menu</div>
+                        @else
+                            <div class="text-muted fw-semibold" id="otpStatusText">Not yet verified</div>
+                        @endif
+                    </div>
+                    @if (in_array($handover->status, ['waiting_morning_otp', 'on_sales'], true) && !$isOtpVerified && $items->isEmpty())
+                        <div class="col-md-4"><button type="button" class="btn btn-warning btn-sm" id="btnInputOtp">Enter OTP</button></div>
                     @endif
                 </div>
-                @if (in_array($handover->status, ['waiting_morning_otp', 'on_sales'], true) && !$isOtpVerified && $items->isEmpty())
-                    <div class="col-md-4"><button type="button" class="btn btn-warning btn-sm" id="btnInputOtp">Enter OTP</button></div>
-                @endif
-            </div>
-        @endif
-    </div></div>
+            @endif
+        </div></div>
+    </div>
 
-    <div class="card items-card"><div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0">Today's Dispatched Items</h5>
-        <small class="text-muted text-end">Save draft anytime while selling. Submit to Admin WH only for end-of-day closing.</small>
-    </div><div class="card-body">
-        @if (!$handover)
-            <div class="text-center text-muted">No active handover today.</div>
-        @elseif (!$isOtpVerified)
-            <div class="text-center text-muted">Please enter the morning OTP first to view the items list.</div>
-        @else
+    <div id="handoverItemsContainer">
+        <div class="card items-card"><div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Today's Dispatched Items</h5>
+            <small class="text-muted text-end">Save draft anytime while selling. Submit to Admin WH only for end-of-day closing.</small>
+        </div><div class="card-body">
+            @if (!$handover)
+                <div class="text-center text-muted">No active handover today.</div>
+            @elseif (!$isOtpVerified)
+                <div class="text-center text-muted">Please enter the morning OTP first to view the items list.</div>
+            @else
             <div class="sum-grid">
                 <div class="sum-card"><div class="sum-label">Dispatched Qty</div><div class="sum-value">{{ $totalDispatchQty }}</div><div class="sum-note">Total units carried today</div></div>
                 <div class="sum-card"><div class="sum-label">Sold Progress</div><div class="sum-value">{{ $totalSoldQty }}</div><div class="sum-note">Units already entered by sales</div></div>
@@ -216,6 +219,26 @@ document.addEventListener('DOMContentLoaded', function() {
         return json;
     }
 
+    async function refreshHandoverTable() {
+        try {
+            const res = await fetch(window.location.href, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const html = await res.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+
+            const newHeader = doc.querySelector('#handoverHeaderContainer');
+            const newItems  = doc.querySelector('#handoverItemsContainer');
+            
+            if (newHeader) document.querySelector('#handoverHeaderContainer').innerHTML = newHeader.innerHTML;
+            if (newItems)  document.querySelector('#handoverItemsContainer').innerHTML = newItems.innerHTML;
+            
+            // Re-init listeners kalau perlu cok
+            initPaymentListeners();
+        } catch (err) { console.error('Failed to refresh table:', err); }
+    }
+
     async function showOtpModal() {
         const { value: otpCode, isConfirmed } = await Swal.fire({
             title: 'Enter Morning OTP Code',
@@ -236,10 +259,18 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         if (isConfirmed && otpCode) {
             sessionStorage.removeItem('otp-popup-shown-' + handoverId);
-            await Swal.fire({icon:'success',title:'Success',text:'OTP verified successfully. The page will reload.',timer:1500,showConfirmButton:false});
-            window.location.reload();
+            Swal.fire({icon:'success',title:'Success',text:'OTP verified successfully.',timer:1200,showConfirmButton:false});
+            
+            // 🔥 UPDATE TANPA RELOAD
+            refreshHandoverTable();
         }
     }
+
+    // 🔥 EKSPOS KE GLOBAL BIAR ECHO BISA MANGGIL
+    window.triggerOtpModal = () => {
+        if (!isOtpVerified) showOtpModal();
+    };
+    window.refreshHandoverTable = refreshHandoverTable;
 
     if (btnOtp) btnOtp.addEventListener('click', function() { showOtpModal(); });
 
@@ -258,10 +289,86 @@ document.addEventListener('DOMContentLoaded', function() {
     @endif
 });
 
-(function() {
-    const form = document.getElementById('paymentForm');
-    if (!form) return;
-    const rows = document.querySelectorAll('.js-payment-row');
+    function initPaymentListeners() {
+        const form = document.getElementById('paymentForm');
+        if (!form) return;
+
+        // 🔥 AJAX Submission Handler
+        document.addEventListener('submit', async function(e) {
+            const form = e.target;
+            if (form.id !== 'paymentForm') return;
+
+            e.preventDefault();
+            
+            const formData = new FormData(form);
+            const isFinal = formData.get('submit_mode') === 'final';
+
+            // 🔥 Konfirmasi Sesuai Screenshot Lo Cok (Fixing Button Style)
+            const resultConfirm = await Swal.fire({
+                title: isFinal ? 'Submit closing to Admin WH?' : 'Save draft progress?',
+                text: isFinal 
+                    ? 'After submit, the sold items will be locked for warehouse admin approval.' 
+                    : 'You can still edit and add more items to this handover later.',
+                icon: 'warning',
+                iconColor: '#ffab00',
+                showCancelButton: true,
+                confirmButtonColor: '#696cff',
+                cancelButtonColor: '#8592a3',
+                confirmButtonText: isFinal ? 'Yes, Submit' : 'Yes, Save Draft',
+                cancelButtonText: 'Review Again'
+            });
+
+            if (!resultConfirm.isConfirmed) {
+                if (window.resetSubmitButton) window.resetSubmitButton(form);
+                return;
+            }
+
+            // Double click protection local
+            if (form.dataset.submittingLocal === 'true') return;
+            form.dataset.submittingLocal = 'true';
+
+            Swal.fire({
+                title: isFinal ? 'Submitting to Admin...' : 'Saving Draft...',
+                text: 'Please wait while we process your data.',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success',
+                        text: result.message,
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                    
+                    // Segerin Tabel & Badge Sidebar tanpa Reload
+                    if (window.refreshHandoverTable) window.refreshHandoverTable();
+                    if (window.refreshSidebarBadges) window.refreshSidebarBadges();
+                } else {
+                    Swal.fire({ icon: 'error', title: 'Error', text: result.message || 'Failed to save data.' });
+                }
+            } catch (err) {
+                console.error('AJAX Submit Error:', err);
+                Swal.fire({ icon: 'error', title: 'Connection Error', text: 'Failed to reach server.' });
+            } finally {
+                form.dataset.submittingLocal = 'false';
+                // 🔥 BALIKIN TOMBOL KE ASAL (MATIIN SPINNER)
+                if (window.resetSubmitButton) window.resetSubmitButton(form);
+            }
+        });
+
+        const rows = document.querySelectorAll('.js-payment-row');
     const submitModeInput = document.getElementById('submitModeInput');
     const submitButtons = document.querySelectorAll('.js-submit-payment');
     let selectedSubmitMode = 'draft';
@@ -335,6 +442,9 @@ document.addEventListener('DOMContentLoaded', function() {
             $(this).toggle(text.indexOf(val) > -1);
         });
     });
-})();
+}
+
+// 🔥 Jalankan pas awal buka halaman
+initPaymentListeners();
 </script>
 @endpush
