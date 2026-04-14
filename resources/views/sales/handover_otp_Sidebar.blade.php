@@ -287,6 +287,9 @@
     dateToEl.addEventListener('change', loadData);
     statusEl.addEventListener('change', loadData);
 
+    // 🔥 Ekspos ke global biar bisa ditembak Echo
+    window.loadHdoList = loadData;
+
     loadData();
 })();
 </script>

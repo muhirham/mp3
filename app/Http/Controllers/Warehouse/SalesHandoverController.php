@@ -462,6 +462,9 @@ EOT;
             }
             */
 
+            // Tembak sinyal real-time: OTP Pagi terkirim!
+            broadcast(new \App\Events\HandoverUpdated($sales->id, $handover->id, 'otp_sent'));
+
             return back()->with(
                 'success',
                 "Handover {$handover->code} created successfully. Morning OTP is ready for use."
@@ -600,6 +603,10 @@ EOT;
             $handover->save();
 
             DB::commit();
+
+            // Tembak sinyal real-time: OTP Sukses Terverifikasi (Barang resmi dibawa)
+            broadcast(new \App\Events\HandoverUpdated($handover->sales_id, $handover->id, 'verified'));
+
         } catch (\Throwable $e) {
             DB::rollBack();
 
@@ -1916,23 +1923,32 @@ EOT;
             return back()->with('error', 'Failed to save approval: ' . $e->getMessage());
         }
 
+        // 🔥 SINYAL: Kasih tau Sales kalau Admin udah kasih keputusan (Approve/Reject)
+        broadcast(new \App\Events\HandoverUpdated($handover->sales_id, $handover->id, 'payment_decided'));
+
         // ✅ Message yang informatif sesuai hasil
-        if ($isClosed) {
-            return back()->with('success', "All payments approved. Handover has been CLOSED automatically. (Approved: {$approvedCount})");
-        }
-
-        if ($rejectedCount > 0 && $approvedCount === 0) {
-            return back()->with('success', "All {$rejectedCount} item(s) were rejected. Sales must re-submit payment data.");
-        }
-
-        if ($rejectedCount > 0) {
-            return back()->with('success', "Approval saved: {$approvedCount} approved, {$rejectedCount} rejected. Sales must re-submit the rejected item(s)." .
-                ($skippedCount > 0 ? " ({$skippedCount} item(s) skipped — already rejected, awaiting sales re-input.)" : ''));
-        }
-
-        return back()->with('success', "Approval saved. {$approvedCount} item(s) approved." .
+        $msg = "Approval saved. {$approvedCount} item(s) approved." .
             ($skippedCount > 0 ? " ({$skippedCount} item(s) skipped — already rejected, awaiting sales re-input.)" : '') .
-            ' Handover will be closed automatically once all sold items are APPROVED.');
+            ' Handover will be closed automatically once all sold items are APPROVED.';
+            
+        if ($isClosed) {
+            $msg = "All payments approved. Handover has been CLOSED automatically. (Approved: {$approvedCount})";
+        } elseif ($rejectedCount > 0 && $approvedCount === 0) {
+            $msg = "All {$rejectedCount} item(s) were rejected. Sales must re-submit payment data.";
+        } elseif ($rejectedCount > 0) {
+            $msg = "Approval saved: {$approvedCount} approved, {$rejectedCount} rejected. Sales must re-submit the rejected item(s)." .
+                ($skippedCount > 0 ? " ({$skippedCount} item(s) skipped — already rejected, awaiting sales re-input.)" : '');
+        }
+
+        if (request()->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => $msg,
+                'isClosed' => $isClosed
+            ]);
+        }
+
+        return back()->with('success', $msg);
     }
     
     public function paymentProofFile(Request $request, SalesHandoverItem $item, int $index = 0)
