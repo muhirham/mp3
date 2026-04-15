@@ -94,22 +94,22 @@
 
         @vite(['resources/js/app.js'])
 
-    {{-- KURIR GLOBAL (Real-time Handover & Stock) --}}
+    {{-- KURIR GLOBAL (Real-time Handover & Stock & Sales Return) --}}
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             if (window.Echo) {
                 const currentUserId = @json(auth()->id());
                 const isManagement  = @json(auth()->user()->hasRole('admin') || auth()->user()->hasRole('superadmin') || auth()->user()->hasRole('warehouse'));
+                const isSuperOrAdmin = @json(auth()->user()->hasRole('admin') || auth()->user()->hasRole('superadmin'));
+                const myWarehouseId = @json(auth()->user()->warehouse_id);
 
                 window.Echo.channel('sales-channel')
                     .listen('.handover-updated', (e) => {
                         console.log('Real-time Signal Received:', e);
-                        console.log('User Role Management Status:', isManagement);
                         
                         // 1. Logic buat Sidebar & Dashboard: Selalu update angka kalau relevant
                         if (e.salesId == currentUserId || isManagement) {
                             if (window.refreshSidebarBadges) {
-                                console.log('Triggering Sidebar Badge Refresh...');
                                 window.refreshSidebarBadges();
                             }
                         }
@@ -117,33 +117,45 @@
                         // 2. Logic buat Sales (HP): Buka Modal atau Update Tabel
                         if (e.salesId == currentUserId) {
                              if (e.updateType === 'otp_sent') {
-                                 console.log('Triggering Sales OTP Modal...');
                                  if (window.triggerOtpModal) window.triggerOtpModal();
                                  if (window.loadHdoList) window.loadHdoList();
                              }
                              if (['verified', 'payment_decided', 'payment_draft_saved'].includes(e.updateType)) {
-                                 console.log('Triggering Sales Table Refresh...');
                                  if (window.refreshHandoverTable) window.refreshHandoverTable();
                              }
                         }
 
                         // 3. Logic buat Admin (Laptop): Update list approval sore
                         if (isManagement && window.location.href.indexOf('handover') > -1) {
-                             console.log('Event Match for Management Page Refresh:', e.updateType);
                              if (e.updateType === 'payment_submitted') {
-                                 if (window.refreshEveningList) {
-                                     console.log('Calling window.refreshEveningList()...');
-                                     window.refreshEveningList();
-                                 } else {
-                                     console.warn('window.refreshEveningList is NOT defined on this page!');
-                                 }
+                                 if (window.refreshEveningList) window.refreshEveningList();
                              }
                              if (e.updateType === 'verified') {
-                                 if (window.refreshMorningStatus) {
-                                     console.log('Calling window.refreshMorningStatus()...');
-                                     window.refreshMorningStatus();
-                                 }
+                                 if (window.refreshMorningStatus) window.refreshMorningStatus();
                              }
+                        }
+                    })
+                    .listen('.sales-return-updated', (e) => {
+                        console.log('[SalesReturn Global] Event received:', e);
+
+                        // ✅ SUPERADMIN & ADMIN: dapet semua event apapun tipenya
+                        if (isSuperOrAdmin) {
+                            if (window.refreshReturnTable) window.refreshReturnTable();
+                            return;
+                        }
+
+                        // ✅ WAREHOUSE ADMIN: reload untuk KEDUA tipe event (new_return & status_updated)
+                        // Misal: Superadmin approve/reject → WH Admin harus ikut update
+                        if (isManagement) {
+                            if (parseInt(e.warehouseId) === myWarehouseId) {
+                                if (window.refreshReturnTable) window.refreshReturnTable();
+                            }
+                            return;
+                        }
+
+                        // ✅ SALES: reload kalau status return mereka berubah
+                        if (e.updateType === 'status_updated' && parseInt(e.salesId) === currentUserId) {
+                            if (window.refreshReturnTable) window.refreshReturnTable();
                         }
                     });
             }

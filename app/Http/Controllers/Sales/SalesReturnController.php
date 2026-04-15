@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Sales;
 
 use App\Http\Controllers\Controller;
+use App\Events\SalesReturnUpdated;
 use App\Models\SalesReturn;
 use App\Models\Warehouse;
 use App\Models\User;
@@ -212,6 +213,16 @@ class SalesReturnController extends Controller
             }
         });
 
+        // 🔥 BROADCAST: Kasih tau Admin WH ada return baru
+        $me = auth()->user();
+        broadcast(new SalesReturnUpdated(
+            $me->warehouse_id,
+            $me->id,
+            $data['handover_id'],
+            'new_return',
+            $me->name
+        ))->toOthers();
+
         return back()->with('success','Return submitted successfully.');
     }
     /**
@@ -350,6 +361,15 @@ class SalesReturnController extends Controller
             ]);
         });
 
+        // 🔥 BROADCAST: Kasih tau Sales status-nya berubah
+        broadcast(new SalesReturnUpdated(
+            $salesReturn->warehouse_id,
+            $salesReturn->sales_id,
+            $salesReturn->handover_id,
+            'status_updated',
+            auth()->user()->name
+        ))->toOthers();
+
         return back()->with('success','Return approved successfully.');
     }
     
@@ -367,6 +387,15 @@ class SalesReturnController extends Controller
             'status' => 'rejected',
             'reason' => $request->reject_reason,
         ]);
+
+        // 🔥 BROADCAST: Kasih tau Sales status-nya di-reject
+        broadcast(new SalesReturnUpdated(
+            $salesReturn->warehouse_id,
+            $salesReturn->sales_id,
+            $salesReturn->handover_id,
+            'status_updated',
+            auth()->user()->name
+        ))->toOthers();
 
         return back()->with('success','Return rejected.');
     }
@@ -450,6 +479,16 @@ class SalesReturnController extends Controller
             }
         });
 
+        // 🔥 BROADCAST: Kasih tau Admin WH ada resubmit baru
+        $me = auth()->user();
+        broadcast(new SalesReturnUpdated(
+            $me->warehouse_id,
+            $me->id,
+            $handoverId,
+            'new_return',
+            $me->name
+        ))->toOthers();
+
         return back()->with('success', 'Return resubmitted successfully.');
     }
 
@@ -521,6 +560,18 @@ class SalesReturnController extends Controller
                     'approved_at' => now(),
                 ]);
             }
+
+            // 🔥 BROADCAST: Kasih tau Sales semua approved (ambil info dari item pertama)
+            if ($items->isNotEmpty()) {
+                $first = $items->first();
+                broadcast(new SalesReturnUpdated(
+                    $first->warehouse_id,
+                    $first->sales_id,
+                    $handoverId,
+                    'status_updated',
+                    auth()->user()->name
+                ))->toOthers();
+            }
         });
 
         return back()->with('success','All returns approved successfully.');
@@ -530,11 +581,14 @@ class SalesReturnController extends Controller
     {
         $request->validate(['reject_reason' => 'required|string|max:500']);
 
-        DB::transaction(function () use ($handoverId, $request) {
+        $firstItem = null;
+        DB::transaction(function () use ($handoverId, $request, &$firstItem) {
             $items = SalesReturn::where('handover_id', $handoverId)
                 ->where('status', 'pending')
                 ->lockForUpdate()
                 ->get();
+
+            $firstItem = $items->first();
 
             foreach ($items as $item) {
                 $item->update([
@@ -543,6 +597,17 @@ class SalesReturnController extends Controller
                 ]);
             }
         });
+
+        // 🔥 BROADCAST: Kasih tau Sales semua di-reject
+        if ($firstItem) {
+            broadcast(new SalesReturnUpdated(
+                $firstItem->warehouse_id,
+                $firstItem->sales_id,
+                $handoverId,
+                'status_updated',
+                auth()->user()->name
+            ))->toOthers();
+        }
 
         return response()->json(['success' => true]);
     }

@@ -237,7 +237,6 @@
                             return res.text();
                         })
                         .then(() => {
-
                             Swal.fire({
                                 icon: 'success',
                                 title: 'Success',
@@ -245,9 +244,11 @@
                                 timer: 1500,
                                 showConfirmButton: false
                             }).then(() => {
-                                location.reload();
+                                // 🔄 Reload DataTable, bukan halaman
+                                if ($.fn.DataTable.isDataTable('#tblApprovalReturns')) {
+                                    $('#tblApprovalReturns').DataTable().ajax.reload(null, false);
+                                }
                             });
-
                         })
                         .catch(() => {
                             Swal.fire({
@@ -304,7 +305,12 @@
                                 text: 'All items successfully rejected.',
                                 timer: 1500,
                                 showConfirmButton: false
-                            }).then(() => location.reload());
+                            }).then(() => {
+                                // 🔄 Reload DataTable, bukan halaman
+                                if ($.fn.DataTable.isDataTable('#tblApprovalReturns')) {
+                                    $('#tblApprovalReturns').DataTable().ajax.reload(null, false);
+                                }
+                            });
                         } else {
                             throw new Error();
                         }
@@ -374,6 +380,12 @@
                     table.search(this.value).draw();
                 }, 400);
             });
+
+            // 🔥 REAL-TIME: Expose refresh function, dipanggil dari global listener di home.blade.php
+            window.refreshReturnTable = function() {
+                table.ajax.reload(null, false);
+                console.log('[ApprovalReturn] Table refreshed via global listener.');
+            };
         });
     </script>
 @endpush
