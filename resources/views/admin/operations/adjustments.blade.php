@@ -299,18 +299,24 @@
                 font-size: 12px;
             }
 
-            /* ================== DATATABLE: NO HORIZONTAL SCROLL ================== */
-            /* bikin kolom wrap, jadi ga perlu scroll kiri kanan */
+            /* ================== DATATABLE: RESPONSIVE FIX ================== */
+            /* Jangan paksa fixed layout biar teks nggak tumpang tindih */
             #tblAdjustments {
                 width: 100% !important;
-                table-layout: fixed;
             }
 
             #tblAdjustments td,
             #tblAdjustments th {
-                white-space: normal !important;
-                word-break: break-word;
+                white-space: nowrap !important; /* Biar data nggak kepotong baris baru kecuali di mobile */
                 vertical-align: middle;
+            }
+
+            @media (max-width: 992px) {
+                #tblAdjustments td,
+                #tblAdjustments th {
+                    white-space: normal !important; /* Di layar kecil baru boleh wrap */
+                    word-break: break-word;
+                }
             }
 
             /* rapihin padding cell */
@@ -322,9 +328,10 @@
                 padding: .6rem .6rem;
             }
 
-            /* wrapper jangan maksa scroll-x */
+            /* wrapper UTAMA: aktifkan scroll horizontal */
             .table-responsive {
-                overflow-x: hidden;
+                overflow-x: auto !important;
+                -webkit-overflow-scrolling: touch;
             }
 
             /* ================== MODAL SCROLL FIX ================== */
@@ -408,13 +415,13 @@
                         [0, 'desc']
                     ],
                     searching: false,
-                    autoWidth: false, // ✅ biar table-layout fixed jalan
-                    responsive: false,
+                    autoWidth: true, // ✅ Biar DataTables auto-manage lebar kolom yang pas
+                    responsive: false, // Biar tabel utuh, tinggal di-scroll horizontal
 
-                    // ✅ pagination ATAS DIHAPUS (tinggal bawah)
-                    dom: "<'row'<'col-12 col-md-6'l><'col-12 col-md-6 text-md-end'>>" +
-                        "rt" +
-                        "<'row mt-2'<'col-12 col-md-6'i><'col-12 col-md-6 text-md-end'p>>",
+                    // ✅ Kasih jarak (padding & gap) biar nggak mepet kontainer
+                    dom: "<'row px-3 mt-3'<'col-sm-12 col-md-6'l><'col-sm-12 col-md-6'f>>" +
+                        "<'row'<'col-sm-12'tr>>" +
+                        "<'row px-3 mb-2 mt-2'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
 
                     ajax: {
                         url: datatableUrl,
@@ -429,38 +436,32 @@
 
                     columns: [{
                             data: 'id',
-                            width: '70px'
+                            className: 'text-center'
                         },
                         {
-                            data: 'adj_code',
-                            width: '130px'
+                            data: 'adj_code'
                         },
                         {
-                            data: 'adj_date',
-                            width: '140px'
+                            data: 'adj_date'
                         },
                         {
                             data: 'warehouse'
                         },
                         {
                             data: 'items_count',
-                            className: 'text-center',
-                            width: '110px'
+                            className: 'text-center'
                         },
                         {
-                            data: 'creator',
-                            width: '170px'
+                            data: 'creator'
                         },
                         {
-                            data: 'created_at',
-                            width: '120px'
+                            data: 'created_at'
                         },
                         {
                             data: 'action',
                             orderable: false,
                             searchable: false,
-                            className: 'text-end',
-                            width: '130px'
+                            className: 'text-end'
                         },
                     ],
                 });

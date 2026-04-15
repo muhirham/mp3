@@ -402,7 +402,10 @@
                         timer: 1500,
                         showConfirmButton: false
                     }).then(() => {
-                        location.reload();
+                        // 🔄 Reload DataTable, bukan halaman
+                        if ($.fn.DataTable.isDataTable('#tblSalesReturns')) {
+                            $('#tblSalesReturns').DataTable().ajax.reload(null, false);
+                        }
                     });
                 })
                 .catch(err => {
@@ -446,7 +449,10 @@
                         timer: 1500,
                         showConfirmButton: false
                     }).then(() => {
-                        location.reload();
+                        // 🔄 Reload DataTable, bukan halaman
+                        if ($.fn.DataTable.isDataTable('#tblSalesReturns')) {
+                            $('#tblSalesReturns').DataTable().ajax.reload(null, false);
+                        }
                     });
                 })
                 .catch(err => {
@@ -603,6 +609,17 @@
             });
         </script>
     @endif
+
+    {{-- 🔥 REAL-TIME: Expose refresh function, dipanggil dari global listener di home.blade.php --}}
+    <script>
+        window.refreshReturnTable = function() {
+            if ($.fn.DataTable.isDataTable('#tblSalesReturns')) {
+                $('#tblSalesReturns').DataTable().ajax.reload(null, false);
+                console.log('[SalesReturn] Table refreshed via global listener.');
+            }
+        };
+    </script>
+
 @endpush
 
 @push('styles')

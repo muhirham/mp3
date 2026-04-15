@@ -2,50 +2,32 @@
 
 @section('content')
     <style>
-        /* Table compact seperti halaman products */
+        /* Table compact & Responsive */
         #tblStock {
             width: 100% !important;
-            table-layout: fixed;
-            font-size: 0.7rem;
-            /* makin kecilin font */
+            font-size: 0.75rem; 
         }
 
         #tblStock th,
         #tblStock td {
-            white-space: nowrap;
+            white-space: nowrap !important;
             vertical-align: middle;
-            padding: .35rem .45rem;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            padding: .45rem .55rem;
         }
 
-        /* Biar kolom panjang gak meledak */
-        #tblStock th:nth-child(3),
-        #tblStock td:nth-child(3) {
-            max-width: 200px; /* product */
+        @media (max-width: 992px) {
+            #tblStock th,
+            #tblStock td {
+                white-space: normal !important;
+                word-break: break-word;
+            }
         }
 
-        #tblStock th:nth-child(7),
-        #tblStock td:nth-child(7) {
-            max-width: 150px; /* supplier */
-        }
-
-        /* Sepit kolom status biar created at dapet space */
-        #tblStock th:nth-child(10),
-        #tblStock td:nth-child(10) {
-            max-width: 80px; /* status */
-            text-align: center;
-        }
-
-        /* Kolom Created At di pojok kanan */
-        #tblStock th:nth-child(13),
-        #tblStock td:nth-child(13) {
-            width: 120px;
-        }
-
-        /* Hilangin scroll horizontal */
+        /* wrapper UTAMA: aktifkan scroll horizontal */
         .table-responsive {
-            overflow-x: hidden !important;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 1px; /* Avoid scrollbar covering content */
         }
     </style>
 
@@ -146,18 +128,13 @@
 @push('styles')
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
     <style>
-        /* Biar nggak perlu scroll horizontal */
-        #tblStock td,
-        #tblStock th {
-            white-space: nowrap;
+        /* Standadisasi Header & Footer DataTable */
+        .dataTables_wrapper .dataTables_info {
+            font-size: 12px;
+            padding: 0.5rem 1rem;
         }
-
-        @media (max-width: 992px) {
-
-            #tblStock td,
-            #tblStock th {
-                white-space: normal;
-            }
+        .dataTables_wrapper .pagination {
+            padding: 0.5rem 1rem;
         }
     </style>
 @endpush
@@ -177,7 +154,13 @@
                 processing: true,
                 serverSide: true,
                 searching: true,
-                dom: 'tip',
+                autoWidth: true, // ✅ Biar ngatur sendiri lebarnya
+                responsive: false, // ✅ scroll horizontal dikontrol di .table-responsive
+
+                // ✅ Standarisasi layout dengan padding biar lega
+                dom: "<'row px-3 mt-3'<'col-sm-12 col-md-6'l><'col-sm-12 col-md-6'f>>" +
+                    "<'row'<'col-sm-12'tr>>" +
+                    "<'row px-3 mb-2 mt-2'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
                 pageLength: 25,
                 ajax: {
                     url: dtUrl,
