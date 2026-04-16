@@ -141,25 +141,33 @@
 
                         // ✅ SUPERADMIN & ADMIN: dapet semua event apapun tipenya
                         if (isSuperOrAdmin) {
+                            console.log('[Debug] Super/Admin access granted. Refreshing table & badges...');
                             if (window.refreshReturnTable) window.refreshReturnTable();
                             if (window.refreshSidebarBadges) window.refreshSidebarBadges();
                             return;
                         }
 
                         // ✅ WAREHOUSE ADMIN: reload untuk KEDUA tipe event (new_return & status_updated)
-                        // Misal: Superadmin approve/reject → WH Admin harus ikut update
                         if (isManagement) {
-                            if (parseInt(e.warehouseId) === myWarehouseId) {
+                            console.log('[Debug] Warehouse Admin check:', { eventWH: e.warehouseId, myWH: myWarehouseId });
+                            if (e.warehouseId == myWarehouseId) {
                                 if (window.refreshReturnTable) window.refreshReturnTable();
                                 if (window.refreshSidebarBadges) window.refreshSidebarBadges();
+                            } else {
+                                console.warn('[Debug] Warehouse ID mismatch. Event ignored.');
                             }
                             return;
                         }
 
                         // ✅ SALES: reload kalau status return mereka berubah
-                        if (e.updateType === 'status_updated' && parseInt(e.salesId) === currentUserId) {
-                            if (window.refreshReturnTable) window.refreshReturnTable();
-                            if (window.refreshSidebarBadges) window.refreshSidebarBadges();
+                        if (e.updateType === 'status_updated') {
+                            console.log('[Debug] Sales check:', { eventSales: e.salesId, currentSales: currentUserId });
+                            if (e.salesId == currentUserId) {
+                                if (window.refreshReturnTable) window.refreshReturnTable();
+                                if (window.refreshSidebarBadges) window.refreshSidebarBadges();
+                            } else {
+                                console.warn('[Debug] Sales ID mismatch. Event ignored.');
+                            }
                         }
                     });
             }
