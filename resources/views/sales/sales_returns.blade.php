@@ -406,6 +406,8 @@
                         if ($.fn.DataTable.isDataTable('#tblSalesReturns')) {
                             $('#tblSalesReturns').DataTable().ajax.reload(null, false);
                         }
+                        // 🔥 Update badge sidebar
+                        if (window.refreshSidebarBadges) window.refreshSidebarBadges();
                     });
                 })
                 .catch(err => {
@@ -453,6 +455,8 @@
                         if ($.fn.DataTable.isDataTable('#tblSalesReturns')) {
                             $('#tblSalesReturns').DataTable().ajax.reload(null, false);
                         }
+                        // 🔥 Update badge sidebar
+                        if (window.refreshSidebarBadges) window.refreshSidebarBadges();
                     });
                 })
                 .catch(err => {

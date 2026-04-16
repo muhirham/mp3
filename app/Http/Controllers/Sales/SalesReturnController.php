@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Sales;
 
 use App\Http\Controllers\Controller;
 use App\Events\SalesReturnUpdated;
+use App\Helpers\NotificationHelper;
 use App\Models\SalesReturn;
 use App\Models\Warehouse;
 use App\Models\User;
@@ -223,6 +224,17 @@ class SalesReturnController extends Controller
             $me->name
         ))->toOthers();
 
+        // 💾 DB NOTIF: Simpan ke tabel notifications
+        NotificationHelper::notifyWarehouse(
+            $me->warehouse_id,
+            'new_return',
+            'New Sales Return',
+            $me->name . ' submitted a return.',
+            '/warehouse/returns',
+            'sales_return',
+            $data['handover_id']
+        );
+
         return back()->with('success','Return submitted successfully.');
     }
     /**
@@ -370,6 +382,28 @@ class SalesReturnController extends Controller
             auth()->user()->name
         ))->toOthers();
 
+        // Cek kalau udah nggak ada yang pending, hapus badge Admin
+        $pendingCount = SalesReturn::where('handover_id', $salesReturn->handover_id)
+            ->where('status', 'pending')
+            ->count();
+        if ($pendingCount == 0) {
+            NotificationHelper::markAsReadByReference('new_return', 'sales_return', $salesReturn->handover_id);
+        }
+
+        // Hapus notif approved lama buat handover ini (biar nggak numpuk, walau sidebar nggak pake tipe ini)
+        NotificationHelper::markAsReadByReference('return_approved', 'sales_return', $salesReturn->handover_id);
+
+        // 💾 DB NOTIF
+        NotificationHelper::notifySales(
+            $salesReturn->sales_id,
+            'return_approved',
+            'Return Approved',
+            'Your return has been approved by ' . auth()->user()->name . '.',
+            '/sales/returns',
+            'sales_return',
+            $salesReturn->handover_id
+        );
+
         return back()->with('success','Return approved successfully.');
     }
     
@@ -396,6 +430,28 @@ class SalesReturnController extends Controller
             'status_updated',
             auth()->user()->name
         ))->toOthers();
+
+        // Cek kalau udah nggak ada yang pending, hapus badge Admin
+        $pendingCount = SalesReturn::where('handover_id', $salesReturn->handover_id)
+            ->where('status', 'pending')
+            ->count();
+        if ($pendingCount == 0) {
+            NotificationHelper::markAsReadByReference('new_return', 'sales_return', $salesReturn->handover_id);
+        }
+
+        // Hapus notif rejected lama buat handover ini biar nggak duplikat di badge
+        NotificationHelper::markAsReadByReference('return_rejected', 'sales_return', $salesReturn->handover_id);
+
+        // 💾 DB NOTIF
+        NotificationHelper::notifySales(
+            $salesReturn->sales_id,
+            'return_rejected',
+            'Return Rejected',
+            'Your return was rejected. Reason: ' . $request->reject_reason,
+            '/sales/returns',
+            'sales_return',
+            $salesReturn->handover_id
+        );
 
         return back()->with('success','Return rejected.');
     }
@@ -489,6 +545,20 @@ class SalesReturnController extends Controller
             $me->name
         ))->toOthers();
 
+        // Hapus badge notif rejected karena sales udah resubmit
+        NotificationHelper::markAsReadByReference('return_rejected', 'sales_return', $handoverId);
+
+        // 💾 DB NOTIF: Kasih tau Admin WH ada resubmit (status jadi pending lagi)
+        NotificationHelper::notifyWarehouse(
+            $me->warehouse_id,
+            'new_return',
+            'Resubmitted Sales Return',
+            $me->name . ' resubmitted a rejected return.',
+            '/warehouse/returns',
+            'sales_return',
+            $handoverId
+        );
+
         return back()->with('success', 'Return resubmitted successfully.');
     }
 
@@ -571,7 +641,24 @@ class SalesReturnController extends Controller
                     'status_updated',
                     auth()->user()->name
                 ))->toOthers();
+
+                // Hapus notif approved lama buat handover ini
+                NotificationHelper::markAsReadByReference('return_approved', 'sales_return', $handoverId);
+
+                // 💾 DB NOTIF
+                NotificationHelper::notifySales(
+                    $first->sales_id,
+                    'return_approved',
+                    'Return Approved',
+                    'All items in your return have been approved by ' . auth()->user()->name . '.',
+                    '/sales/returns',
+                    'sales_return',
+                    $handoverId
+                );
             }
+            
+            // Hapus badge Admin karena udah kelar semua
+            NotificationHelper::markAsReadByReference('new_return', 'sales_return', $handoverId);
         });
 
         return back()->with('success','All returns approved successfully.');
@@ -607,7 +694,24 @@ class SalesReturnController extends Controller
                 'status_updated',
                 auth()->user()->name
             ))->toOthers();
+
+            // Hapus notif rejected lama buat handover ini biar nggak duplikat di badge
+            NotificationHelper::markAsReadByReference('return_rejected', 'sales_return', $handoverId);
+
+            // 💾 DB NOTIF
+            NotificationHelper::notifySales(
+                $firstItem->sales_id,
+                'return_rejected',
+                'Return Rejected',
+                'All items in your return were rejected. Reason: ' . $request->reject_reason,
+                '/sales/returns',
+                'sales_return',
+                $handoverId
+            );
         }
+
+        // Hapus badge Admin karena udah kelar semua
+        NotificationHelper::markAsReadByReference('new_return', 'sales_return', $handoverId);
 
         return response()->json(['success' => true]);
     }
