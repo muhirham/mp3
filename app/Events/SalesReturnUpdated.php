@@ -27,8 +27,8 @@ class SalesReturnUpdated implements ShouldBroadcast
      */
     public function __construct($warehouseId, $salesId, $handoverId, $updateType = 'general', $salesName = '')
     {
-        $this->warehouseId = $warehouseId;
-        $this->salesId     = $salesId;
+        $this->warehouseId = (int) $warehouseId;
+        $this->salesId     = (int) $salesId;
         $this->handoverId  = $handoverId;
         $this->updateType  = $updateType;
         $this->salesName   = $salesName;

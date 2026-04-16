@@ -726,4 +726,14 @@ Route::post('/warehouse/stock-requests/{id}/reject', [StockRequestApprovalContro
         ->name('bom.show.page')
         ->middleware('menu:bom');
 
+    /* ===== NOTIFICATIONS ===== */
+    Route::prefix('notifications')->group(function () {
+        Route::get('/unread-count',       [\App\Http\Controllers\NotificationController::class, 'unreadCount'])->name('notifications.unread_count');
+        Route::get('/',                   [\App\Http\Controllers\NotificationController::class, 'index'])->name('notifications.index');
+        Route::post('/mark-all-read',     [\App\Http\Controllers\NotificationController::class, 'markAllRead'])->name('notifications.mark_all_read');
+        Route::post('/mark-read-by-type', [\App\Http\Controllers\NotificationController::class, 'markReadByType'])->name('notifications.mark_read_by_type');
+        Route::get('/badge',              [\App\Http\Controllers\NotificationController::class, 'badgeByType'])->name('notifications.badge');
+        Route::post('/{id}/read',         [\App\Http\Controllers\NotificationController::class, 'markRead'])->name('notifications.mark_read');
+    });
+
 });

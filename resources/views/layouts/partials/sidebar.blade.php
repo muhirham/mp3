@@ -79,9 +79,9 @@ $isGroupActive = function ($groupKey, $list) {
                 <ul class="menu-sub">
                     @foreach($list as $it)
                         <li id="menu-item-{{ $it['key'] }}" class="menu-item {{ request()->routeIs($it['route'].'*') ? 'active' : '' }}">
-                            <a href="{{ $rl($it['route']) }}" class="menu-link">
-                                <div>{{ $it['label'] }}</div>
-                                <div class="badge-container ms-auto"></div> {{-- Tempat angka real-time --}}
+                            <a href="{{ $rl($it['route']) }}" class="menu-link d-flex align-items-center">
+                                <div class="text-truncate">{{ $it['label'] }}</div>
+                                <div class="badge-container ms-auto d-flex align-items-center"></div> {{-- Tempat angka real-time --}}
                             </a>
                         </li>
                     @endforeach

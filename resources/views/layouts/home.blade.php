@@ -5,6 +5,7 @@
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+        <meta name="csrf-token" content="{{ csrf_token() }}" />
         <title>@yield('title', 'Dashboard')</title>
 
         {{-- Favicon --}}
@@ -140,28 +141,94 @@
 
                         // ✅ SUPERADMIN & ADMIN: dapet semua event apapun tipenya
                         if (isSuperOrAdmin) {
+                            console.log('[Debug] Super/Admin access granted. Refreshing table & badges...');
                             if (window.refreshReturnTable) window.refreshReturnTable();
+                            if (window.refreshSidebarBadges) window.refreshSidebarBadges();
                             return;
                         }
 
                         // ✅ WAREHOUSE ADMIN: reload untuk KEDUA tipe event (new_return & status_updated)
-                        // Misal: Superadmin approve/reject → WH Admin harus ikut update
                         if (isManagement) {
-                            if (parseInt(e.warehouseId) === myWarehouseId) {
+                            console.log('[Debug] Warehouse Admin check:', { eventWH: e.warehouseId, myWH: myWarehouseId });
+                            if (e.warehouseId == myWarehouseId) {
                                 if (window.refreshReturnTable) window.refreshReturnTable();
+                                if (window.refreshSidebarBadges) window.refreshSidebarBadges();
+                            } else {
+                                console.warn('[Debug] Warehouse ID mismatch. Event ignored.');
                             }
                             return;
                         }
 
                         // ✅ SALES: reload kalau status return mereka berubah
-                        if (e.updateType === 'status_updated' && parseInt(e.salesId) === currentUserId) {
-                            if (window.refreshReturnTable) window.refreshReturnTable();
+                        if (e.updateType === 'status_updated') {
+                            console.log('[Debug] Sales check:', { eventSales: e.salesId, currentSales: currentUserId });
+                            if (e.salesId == currentUserId) {
+                                if (window.refreshReturnTable) window.refreshReturnTable();
+                                if (window.refreshSidebarBadges) window.refreshSidebarBadges();
+                            } else {
+                                console.warn('[Debug] Sales ID mismatch. Event ignored.');
+                            }
                         }
                     });
             }
         });
     </script>
-        @stack('styles')
+    {{-- 🔔 SIDEBAR BADGE SYSTEM --}}
+    <script>
+        // Map: menu key → notification type(s) yang relevan
+        const SIDEBAR_BADGE_MAP = {
+            'sales_return_approval': 'new_return',          // WH Admin & Superadmin
+            'sales_return'         : 'return_rejected',     // Sales (perlu resubmit)
+        };
+
+        // Fetch badge count dari server dan inject ke sidebar
+        function refreshSidebarBadges() {
+            Object.entries(SIDEBAR_BADGE_MAP).forEach(([menuKey, type]) => {
+                const container = document.querySelector(`#menu-item-${menuKey} .badge-container`);
+                if (!container) return;
+
+                fetch(`/notifications/badge?type=${type}`, {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.count > 0) {
+                        container.innerHTML = `<span class="badge rounded-pill bg-danger" style="font-size:10px;min-width:18px;">${data.count}</span>`;
+                    } else {
+                        container.innerHTML = '';
+                    }
+                })
+                .catch(() => {}); // silent fail
+            });
+        }
+
+        // Auto-clear badge saat user buka halaman yang relevan
+        function clearBadgeOnOpen(menuKey, type) {
+            const isActive = document.querySelector(`#menu-item-${menuKey}.active`);
+            if (!isActive) return;
+
+            fetch('/notifications/mark-read-by-type', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ type })
+            }).catch(() => {});
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            // Load badge angka dari DB saat halaman dibuka
+            refreshSidebarBadges();
+            // Badge TIDAK di-clear saat dibuka — hanya hilang saat ada action (approve/reject)
+        });
+
+        // Expose global agar bisa dipanggil dari Echo listener
+        window.refreshSidebarBadges = refreshSidebarBadges;
+    </script>
+
+    @stack('styles')
     </head>
 
     <body>
