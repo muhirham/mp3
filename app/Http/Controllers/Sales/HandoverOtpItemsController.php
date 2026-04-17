@@ -111,14 +111,25 @@ class HandoverOtpItemsController extends Controller
      */
     public function verify(Request $request)
     {
-        $request->validate(['otp_code' => 'required']);
+        $request->validate([
+            'otp_code'    => 'required',
+            'handover_id' => 'sometimes|exists:sales_handovers,id'
+        ]);
+
         $me = $request->user();
         $inputOtp = trim($request->otp_code);
-        $handovers = SalesHandover::where('sales_id', $me->id)
-            ->whereIn('status', ['waiting_morning_otp', 'on_sales', 'waiting_evening_otp'])
-            ->get();
+        $targetId = $request->handover_id;
 
+        $query = SalesHandover::where('sales_id', $me->id)
+            ->whereIn('status', ['waiting_morning_otp', 'on_sales', 'waiting_evening_otp']);
+
+        if ($targetId) {
+            $query->where('id', $targetId);
+        }
+
+        $handovers = $query->get();
         $matched = null;
+
         foreach ($handovers as $ho) {
             [$plain, $hash] = $this->parseOtpValue($ho->morning_otp_hash);
             if (! $plain && ! $hash) {
@@ -129,14 +140,24 @@ class HandoverOtpItemsController extends Controller
                 break;
             }
         }
+
         if (! $matched) {
-            return response()->json(['success' => false, 'message' => 'OTP invalid'], 422);
+            $msg = 'OTP invalid';
+            if ($targetId) {
+                $hdo = SalesHandover::find($targetId);
+                $msg = "OTP is incorrect for handover {$hdo->code}.";
+            }
+            return response()->json(['success' => false, 'message' => $msg], 422);
         }
+
         $request->session()->put('sales_active_handover_id', $matched->id);
         $request->session()->put('sales_handover_otp_verified_' . $matched->id, true);
 
-        // Tembak sinyal real-time: Biar Admin WH di laptop juga tau kalau ini udah verified
-        broadcast(new \App\Events\HandoverUpdated($matched->sales_id, $matched->id, 'verified'));
+        // 🔔 Bersihkan notifikasi "OTP Pagi Sent" karena sudah diverifikasi oleh Sales
+        \App\Helpers\NotificationHelper::markAsReadByReference('handover_otp_sent', 'sales_handovers', $matched->id);
+
+        // 🔥 SINYAL: Biar Admin WH di laptop juga tau kalau ini udah verified
+        broadcast(new \App\Events\HandoverUpdated($matched->sales_id, $matched->warehouse_id, $matched->id, 'verified'));
 
         return response()->json(['success' => true]);
     }
@@ -171,7 +192,7 @@ class HandoverOtpItemsController extends Controller
         $itemsInput = $request->input('items', []);
 
         try {
-            DB::transaction(function () use ($handover, $itemsInput, $request, $isFinal) {
+            DB::transaction(function () use ($handover, $itemsInput, $request, $isFinal, $me) {
                 $touched = 0;
                 $totalSold = 0;
 
@@ -310,10 +331,26 @@ class HandoverOtpItemsController extends Controller
                     $handover->evening_filled_at = $isFinal ? now() : null;
                     $handover->save();
 
-                    // 🔥 SINYAL: Kasih tau Admin WH kalau Sales udah submit payment/draft
-                    broadcast(new \App\Events\HandoverUpdated($handover->sales_id, $handover->id, $isFinal ? 'payment_submitted' : 'payment_draft_saved'));
+                    if ($isFinal) {
+                        // 🔔 Tambahkan notifikasi database untuk Admin WH
+                        \App\Helpers\NotificationHelper::notifyWarehouse(
+                            $handover->warehouse_id,
+                            'handover_payment_submitted',
+                            'Setoran Sore (Approval)',
+                            "Sales {$me->name} telah mengirim setoran sore untuk {$handover->code}. Silakan verifikasi.",
+                            route('sales.handover.evening', ['handover_id' => $handover->id]),
+                            'sales_handovers',
+                            $handover->id
+                        );
+
+                        // 🔔 Bersihkan notifikasi "rejected" jika ini adalah submit perbaikan
+                        \App\Helpers\NotificationHelper::markAsReadByReference('handover_payment_rejected', 'sales_handovers', $handover->id);
+                    }
                 }
             });
+
+            // 🔥 SINYAL: Kasih tau Admin WH kalau Sales udah submit payment/draft (di luar transaction)
+            broadcast(new \App\Events\HandoverUpdated($handover->sales_id, $handover->warehouse_id, $handover->id, $isFinal ? 'payment_submitted' : 'payment_draft_saved'));
 
             $msg = $isFinal ? 'Submitted' : 'Draft saved';
             if (request()->ajax()) {

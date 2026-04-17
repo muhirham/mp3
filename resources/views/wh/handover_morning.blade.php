@@ -424,23 +424,100 @@
         }
     });
 
-    document.getElementById('formIssue')?.addEventListener('submit', function(e){
-        let ok = true;
-        [...tbody.querySelectorAll('tr')].forEach(tr => {
-        const pid = tr.querySelector('.sel-product')?.value;
-        const qty = parseInt(tr.querySelector('.inp-qty')?.value || '0', 10);
-        if (!pid || !qty || qty <= 0) ok = false;
-        });
-        if (!ok) {
-        e.preventDefault();
-        alert('Ensure every item has a valid product and quantity.');
-        }
-    });
+        // 🔥 AJAX Submission buat Create HDO Pagi
+        document.getElementById('formIssue')?.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const form = this;
 
-    // init awal (row pertama)
-    reindexRows();
-    [...tbody.querySelectorAll('tr')].forEach(tr => recomputeRow(tr));
-    recomputeGrand();
+            // Optional: Tambahin validasi frontend lagi di sini cok kalau mau
+            let ok = true;
+            [...tbody.querySelectorAll('tr')].forEach(tr => {
+                const pid = tr.querySelector('.sel-product')?.value;
+                const qty = parseInt(tr.querySelector('.inp-qty')?.value || '0', 10);
+                if (!pid || !qty || qty <= 0) ok = false;
+            });
+            if (!ok) {
+                Swal.fire({ icon: 'error', title: 'Invalid Items', text: 'Ensure every item has a valid product and quantity.' });
+                if (window.resetSubmitButton) window.resetSubmitButton(form);
+                return;
+            }
+
+            const formData = new FormData(form);
+            
+            Swal.fire({
+                title: 'Creating Handover...',
+                text: 'Please wait while we prepare the items and OTP.',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    Swal.fire({ icon: 'success', title: 'Success', text: result.message });
+                    // Segerin list HDO nunggu verifikasi di bawah
+                    if (window.refreshMorningStatus) await window.refreshMorningStatus();
+                } else {
+                    Swal.fire({ icon: 'error', title: 'Failed', text: result.message || 'Error occurred.' });
+                }
+            } catch (err) {
+                console.error('AJAX Error:', err);
+                Swal.fire({ icon: 'error', title: 'Connection Error', text: 'Failed to reach server.' });
+            } finally {
+                if (window.resetSubmitButton) window.resetSubmitButton(form);
+            }
+        });
+
+        // 🔥 AJAX Submission buat Verifikasi OTP Pagi (Warehouse Side)
+        document.addEventListener('submit', async function(e) {
+            const form = e.target;
+            if (!form.action.includes('morning/verify')) return; // Tangkap form verifikasi
+            
+            e.preventDefault();
+
+            const formData = new FormData(form);
+            
+            Swal.fire({
+                title: 'Verifying OTP...',
+                text: 'Processing stock movement and locking data.',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    Swal.fire({ icon: 'success', title: 'Verified!', text: result.message });
+                    // Segerin UI biar dropdown nunggu verifikasi update
+                    if (window.refreshMorningStatus) await window.refreshMorningStatus();
+                } else {
+                    Swal.fire({ icon: 'error', title: 'Failed', text: result.message || 'Invalid OTP code.' });
+                }
+            } catch (err) {
+                console.error('AJAX Error:', err);
+                Swal.fire({ icon: 'error', title: 'Connection Error', text: 'Failed to reach server.' });
+            } finally {
+                if (window.resetSubmitButton) window.resetSubmitButton(form);
+            }
+        });
+
+        reindexRows();
+        [...tbody.querySelectorAll('tr')].forEach(tr => recomputeRow(tr));
+        recomputeGrand();
     })();
     </script>
 

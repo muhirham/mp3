@@ -15,15 +15,17 @@ class HandoverUpdated implements ShouldBroadcast
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public $salesId;
+    public $warehouseId;
     public $handoverId;
     public $updateType;
 
     /**
      * Create a new event instance.
      */
-    public function __construct($salesId, $handoverId = null, $updateType = 'general')
+    public function __construct($salesId, $warehouseId = null, $handoverId = null, $updateType = 'general')
     {
         $this->salesId = $salesId;
+        $this->warehouseId = $warehouseId;
         $this->handoverId = $handoverId;
         $this->updateType = $updateType;
     }

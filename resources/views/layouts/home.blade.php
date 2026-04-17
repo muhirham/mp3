@@ -177,8 +177,11 @@
     <script>
         // Map: menu key → notification type(s) yang relevan
         const SIDEBAR_BADGE_MAP = {
-            'sales_return_approval': 'new_return',          // WH Admin & Superadmin
-            'sales_return'         : 'return_rejected',     // Sales (perlu resubmit)
+            'sales_return_approval': 'new_return',                            // WH Admin & Superadmin
+            'sales_return'         : 'return_rejected',                       // Sales (perlu resubmit)
+            'wh_reconcile'         : 'handover_payment_submitted',            // WH Admin
+            'sales_otp'            : 'handover_otp_sent,handover_payment_rejected', // Sales (Issued Stock History)
+            'sales-handover-otp'   : 'handover_otp_sent',                       // Sales (Handover Verification)
         };
 
         // Fetch badge count dari server dan inject ke sidebar
