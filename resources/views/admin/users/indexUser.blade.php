@@ -45,12 +45,12 @@
 
                         @if(auth()->user()->hasPermission('users.export'))
                             <div class="btn-group">
-                                <button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                                <button class="btn btn-secondary dropdown-toggle" data-bs-toggle="dropdown">
                                     <i class="bx bx-export me-1"></i> Export
                                 </button>
                                 <ul class="dropdown-menu dropdown-menu-end">
-                                    <li><a class="dropdown-item" href="" id="btnExportCSV">CSV</a></li>
-                                    <li><a class="dropdown-item" href="" id="btnExportPrint">Print</a></li>
+                                    <li><a class="dropdown-item" href="#" id="btnExportExcel">Excel</a></li>
+                                    <li><a class="dropdown-item" href="#" id="btnExportPrint">Print</a></li>
                                 </ul>
                             </div>
                         @endif
@@ -152,15 +152,15 @@
 
                                 <td>{{ $roleText ?: '-' }}</td>
                                 <td>{{ $u->warehouse?->warehouse_name ?? '-' }}</td>
-                                <td>
+                                <td class="txt-nowrap">
                                     @if ($u->status === 'active')
                                         <span class="badge bg-success">Active</span>
                                     @else
                                         <span class="badge bg-secondary">Inactive</span>
                                     @endif
                                 </td>
-                                <td>{{ $u->created_at?->format('Y-m-d') }}</td>
-                                <td>{{ $u->updated_at?->format('Y-m-d H:i') }}</td>
+                                <td class="txt-nowrap">{{ $u->created_at?->format('Y-m-d') }}</td>
+                                <td class="txt-nowrap">{{ $u->updated_at?->format('Y-m-d H:i') }}</td>
                                 <td>
                                     <div class="d-flex gap-1">
                                         @if(auth()->user()->hasPermission('users.update'))
@@ -453,20 +453,121 @@
             z-index: 20000 !important;
         }
 
-        /* Kecilkan tampilan tabel Users */
+        /* 📱 RESPONSIVE & STATIC TABLE FIX */
+        .table-responsive {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            width: 100%;
+        }
+
         #tblUsers {
-            font-size: 0.75rem;
+            font-size: 0.8rem;
+            width: 100% !important;
+            margin: 0 !important;
+            border-collapse: collapse;
         }
 
-        #tblUsers thead th,
-        #tblUsers tbody t-space: nowrap;
-        padding: .35rem .45rem;
+        #tblUsers thead th {
+            background-color: var(--bg-body);
+            white-space: nowrap;
+            text-transform: uppercase;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 12px 10px;
+            border-bottom: 2px solid var(--border);
         }
 
-        #tblUsers th:nth-child(8),
-        #tblUsers td:nth-child(8) {
+        #tblUsers tbody td {
+            padding: 10px;
+            vertical-align: middle;
+            border-bottom: 1px solid var(--border);
+            /* Izinkan wrap di kolom teks panjang biar tabel gak "melar" ke samping */
+            white-space: normal; 
+        }
+
+        /* Kolom yang wajib 1 baris (nanti kita kasih class text-nowrap di HTML) */
+        .txt-nowrap {
+            white-space: nowrap !important;
+        }
+
+        /* Batasi lebar kolom ID & Status & Dates */
+        #tblUsers th:nth-child(2), #tblUsers td:nth-child(2) { width: 50px; text-align: center; }
+        #tblUsers th:nth-child(11), #tblUsers td:nth-child(11) { width: 80px; text-align: center; }
+        #tblUsers th:nth-child(12), #tblUsers td:nth-child(12),
+        #tblUsers th:nth-child(13), #tblUsers td:nth-child(13) { width: 100px; white-space: nowrap; }
+
+        /* 🔥 FIX ACTIONS COLUMN (Statik di ujung kanan) */
+        #tblUsers th:last-child, 
+        #tblUsers td:last-child {
+            width: 90px !important;
+            min-width: 90px !important;
             text-align: center;
-            width: 70px;
+            white-space: nowrap !important;
+        }
+        
+        .btn-icon {
+            width: 28px;
+            height: 28px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 🖨️ PRINT OPTIMIZATION (Biar Bersih) */
+        @media print {
+            /* Sembunyikan semua elemen UI */
+            .layout-menu, 
+            .layout-navbar, 
+            .footer,
+            .card.mb-3, /* Filter & Toolbar */
+            .btn,
+            .btn-group,
+            .dropdown-menu,
+            .dataTables_length,
+            .dataTables_filter,
+            .dataTables_info,
+            .dataTables_paginate,
+            .modal {
+                display: none !important;
+            }
+
+            /* Atur Body & Container biar Full Width */
+            body, .container-xxl, .content-wrapper, .layout-page, .layout-container {
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #fff !important;
+            }
+
+            /* Tampilkan Tabel Secara Penuh */
+            .card {
+                border: none !important;
+                box-shadow: none !important;
+            }
+
+            .table-responsive {
+                overflow: visible !important;
+            }
+
+            #tblUsers {
+                width: 100% !important;
+                border: 1px solid #000 !important;
+                font-size: 10pt !important;
+            }
+
+            #tblUsers th, #tblUsers td {
+                border: 1px solid #ddd !important;
+                padding: 6px !important;
+                color: #000 !important;
+                white-space: normal !important; /* Biar kalau teks kepanjangan dia turun pas di print */
+            }
+
+            /* Sembunyikan kolom checkbox & Actions pas print */
+            #tblUsers th:first-child, #tblUsers td:first-child,
+            #tblUsers th:last-child, #tblUsers td:last-child {
+                display: none !important;
+            }
         }
 
         #pageLength,
@@ -559,43 +660,32 @@
                 });
             });
 
-            // Export CSV
-            $('#btnExportCSV').on('click', function(e) {
+            // Export Excel (Backend)
+            $('#btnExportExcel').on('click', function(e) {
                 e.preventDefault();
-                const headers = ['ID', 'Name', 'Username', 'Email', 'Phone', 'Position', 'Roles',
-                    'Warehouse', 'Status', 'Created', 'Updated'
-                ];
-                let csv = headers.join(',') + '\n';
-                $('#tblUsers tbody tr:visible').each(function() {
-                    const t = $(this).find('td');
-                    csv += [
-                        t.eq(1).text().trim(),
-                        t.eq(2).text().trim(),
-                        t.eq(3).text().trim(),
-                        t.eq(4).text().trim(),
-                        t.eq(5).text().trim(),
-                        t.eq(6).text().trim(),
-                        t.eq(8).text().trim(),
-                        t.eq(9).text().trim(),
-                        t.eq(10).text().trim(),
-                        t.eq(11).text().trim(),
-                        t.eq(12).text().trim()
-                    ].join(',') + '\n';
-                });
-                const blob = new Blob([csv], {
-                    type: 'text/csv;charset=utf-8;'
-                });
-                const url = URL.createObjectURL(blob);
-                $('<a>').attr({
-                    href: url,
-                    download: 'users.csv'
-                })[0].click();
-                setTimeout(() => URL.revokeObjectURL(url), 500);
+                const role   = $('#f_role').val();
+                const status = $('#f_status').val();
+                const search = $('#globalSearch').val();
+
+                let url = "{{ route('users.exportExcel') }}";
+                let params = new URLSearchParams();
+                if(role)   params.append('role', role);
+                if(status) params.append('status', status);
+                if(search) params.append('search', search);
+
+                window.location.href = url + '?' + params.toString();
             });
+
 
             $('#btnExportPrint').on('click', function(e) {
                 e.preventDefault();
-                window.print();
+                // Tutup dropdown sebelum print agar tidak ikut kecetak
+                $('.dropdown-toggle').dropdown('hide');
+                
+                // Small delay biar dropdown beneran ketutup dulu
+                setTimeout(() => {
+                    window.print();
+                }, 200);
             });
 
             // toggle warehouse on add

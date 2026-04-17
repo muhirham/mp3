@@ -10,6 +10,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use App\Exports\UsersExport;
+use Maatwebsite\Excel\Facades\Excel;
 
 class UserController extends Controller
 {
@@ -280,5 +282,51 @@ class UserController extends Controller
             'success' => 'Status updated.',
             'status' => $user->status
         ]);
+    }
+
+    public function exportExcel(Request $request)
+    {
+        $me = $this->ensureCanManageUsers('users.export');
+        $isWarehouse = $me->hasRole('warehouse');
+
+        $query = User::with(['warehouse', 'roles'])->orderBy('id');
+
+        // Filter Warehouse (Sama dengan Logic Index)
+        if ($isWarehouse) {
+            $query->where(function ($q) use ($me) {
+                $q->where('id', $me->id)
+                  ->orWhere(function ($qq) use ($me) {
+                      $qq->where('warehouse_id', $me->warehouse_id)
+                         ->whereHas('roles', function ($r) {
+                             $r->where('slug', 'sales');
+                         });
+                  });
+            });
+        }
+
+        // Additional Filters dari UI
+        if ($request->filled('role')) {
+            $query->whereHas('roles', function($q) use ($request) {
+                $q->where('name', $request->role);
+            });
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('username', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('phone', 'like', "%{$search}%");
+            });
+        }
+
+        $users = $query->get();
+
+        return Excel::download(new UsersExport($users), 'users_report_'.date('Ymd_His').'.xlsx');
     }
 }

@@ -161,6 +161,9 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::post('users/bulk-destroy', [UserController::class, 'bulkDestroy'])
         ->name('users.bulk-destroy')
         ->middleware('menu:users');
+    Route::get('users/export/excel', [UserController::class, 'exportExcel'])
+        ->name('users.exportExcel')
+        ->middleware('menu:users');
 
     /* === Stock Level (shared) – key: wh_stocklevel === */
     Route::get('/stock-level',           [StockLevelController::class, 'index'])
