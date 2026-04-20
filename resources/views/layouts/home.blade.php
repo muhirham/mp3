@@ -95,143 +95,367 @@
 
         @vite(['resources/js/app.js'])
 
-    {{-- KURIR GLOBAL (Real-time Handover & Stock & Sales Return) --}}
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            if (window.Echo) {
-                const currentUserId = @json(auth()->id());
-                const isManagement  = @json(auth()->user()->hasRole('admin') || auth()->user()->hasRole('superadmin') || auth()->user()->hasRole('warehouse'));
-                const isSuperOrAdmin = @json(auth()->user()->hasRole('admin') || auth()->user()->hasRole('superadmin'));
-                const myWarehouseId = @json(auth()->user()->warehouse_id);
 
-                window.Echo.channel('sales-channel')
-                    .listen('.handover-updated', (e) => {
-                        console.log('Real-time Signal Received:', e);
-                        
-                        // 1. Logic buat Sidebar & Dashboard: Selalu update angka kalau relevant
-                        if (e.salesId == currentUserId || isManagement) {
-                            if (window.refreshSidebarBadges) {
-                                window.refreshSidebarBadges();
+        {{-- 🔔 CONSOLIDATED REAL-TIME NOTIFICATION SYSTEM (Echo + Sound + Navbar + Sidebar) --}}
+        <script>
+            // Map: menu key → notification type(s) yang relevan buat sidebar badge
+            const SIDEBAR_BADGE_MAP = {
+                'sales_return_approval': 'new_return', // WH Admin & Superadmin
+                'sales_return': 'return_rejected', // Sales (perlu resubmit)
+                'wh_reconcile': 'handover_payment_submitted', // WH Admin
+                'sales_otp': 'TASK_issued_stock', // Sales (Issued Stock History)
+                'sales-handover-otp': 'TASK_waiting_otp', // Sales (Handover Verification)
+                'sales_request_approval': 'TASK_pending_stock_request', // WH Admin (Approval)
+                'sales_request': 'stock_request_approved,stock_request_rejected', // Sales (Request)
+            };
+
+            const NOTIF_SOUND_URL = "{{ asset('assets/sounds/notif.mp3') }}";
+
+            let lastNotifTime = 0;
+
+            function playNotificationSound() {
+                const now = Date.now();
+                if (now - lastNotifTime < 1500) return; // Cooldown 1.5s to prevent noise if multi-tab/event
+                lastNotifTime = now;
+
+                const audio = new Audio(NOTIF_SOUND_URL);
+                audio.play().then(() => {
+                    console.log('🔔 [Notif] Sound played successfully');
+                }).catch(e => {
+                    console.warn('🔔 [Notif] Autoplay blocked or file error:', e);
+                });
+            }
+
+            function refreshSidebarBadges() {
+                Object.entries(SIDEBAR_BADGE_MAP).forEach(([menuKey, type]) => {
+                    const container = document.querySelector(`#menu-item-${menuKey} .badge-container`);
+                    if (!container) return;
+
+                    fetch(`/notifications/badge?type=${type}`, {
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest'
                             }
-                        }
+                        })
+                        .then(r => r.json())
+                        .then(data => {
+                            container.innerHTML = (data.count > 0) ?
+                                `<span class="badge rounded-pill bg-danger" style="font-size:10px;min-width:18px;">${data.count}</span>` :
+                                '';
+                        });
+                });
+            }
 
-                        // 2. Logic buat Sales (HP): Buka Modal atau Update Tabel
-                        if (e.salesId == currentUserId) {
-                             if (e.updateType === 'otp_sent') {
-                                 if (window.triggerOtpModal) window.triggerOtpModal();
-                                 if (window.loadHdoList) window.loadHdoList();
-                             }
-                             if (['verified', 'payment_decided', 'payment_draft_saved'].includes(e.updateType)) {
-                                 if (window.refreshHandoverTable) window.refreshHandoverTable();
-                             }
-                        }
-
-                        // 3. Logic buat Admin (Laptop): Update list approval sore
-                        if (isManagement && window.location.href.indexOf('handover') > -1) {
-                             if (e.updateType === 'payment_submitted') {
-                                 if (window.refreshEveningList) window.refreshEveningList();
-                             }
-                             if (e.updateType === 'verified') {
-                                 if (window.refreshMorningStatus) window.refreshMorningStatus();
-                             }
+            function fetchNavbarNotifications() {
+                fetch('/notifications', {
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
                         }
                     })
-                    .listen('.sales-return-updated', (e) => {
-                        console.log('[SalesReturn Global] Event received:', e);
+                    .then(r => r.json())
+                    .then(data => {
+                        const list = document.getElementById('navbarNotificationList');
+                        const badge = document.getElementById('navbarNotificationBadge');
+                        if (!list || !badge) return;
 
-                        // ✅ SUPERADMIN & ADMIN: dapet semua event apapun tipenya
-                        if (isSuperOrAdmin) {
-                            console.log('[Debug] Super/Admin access granted. Refreshing table & badges...');
-                            if (window.refreshReturnTable) window.refreshReturnTable();
-                            if (window.refreshSidebarBadges) window.refreshSidebarBadges();
+                        const unreadCount = data.unread_count || 0;
+                        if (unreadCount > 0) {
+                            badge.innerText = unreadCount;
+                            badge.classList.remove('d-none');
+                        } else {
+                            badge.classList.add('d-none');
+                        }
+
+                        if (data.notifications.length === 0) {
+                            list.innerHTML =
+                                '<li class="list-group-item text-center py-4 text-muted">No notifications yet.</li>';
                             return;
                         }
 
-                        // ✅ WAREHOUSE ADMIN: reload untuk KEDUA tipe event (new_return & status_updated)
-                        if (isManagement) {
-                            console.log('[Debug] Warehouse Admin check:', { eventWH: e.warehouseId, myWH: myWarehouseId });
-                            if (e.warehouseId == myWarehouseId) {
-                                if (window.refreshReturnTable) window.refreshReturnTable();
-                                if (window.refreshSidebarBadges) window.refreshSidebarBadges();
-                            } else {
-                                console.warn('[Debug] Warehouse ID mismatch. Event ignored.');
-                            }
-                            return;
+                        // Kita pisah: Penting (Unread) vs Lainnya (Read) ala screenshot
+                        const unreadNotifs = data.notifications.filter(n => !n.is_read);
+                        const readNotifs = data.notifications.filter(n => n.is_read);
+
+                        let finalHtml = '';
+
+                        if (unreadNotifs.length > 0) {
+                            finalHtml +=
+                                `<li class="dropdown-header bg-light py-2 fw-semibold" style="font-size:11px; color:#696cff;">Penting</li>`;
+                            finalHtml += unreadNotifs.map(n => renderNotifItem(n)).join('');
                         }
 
-                        // ✅ SALES: reload kalau status return mereka berubah
-                        if (e.updateType === 'status_updated') {
-                            console.log('[Debug] Sales check:', { eventSales: e.salesId, currentSales: currentUserId });
-                            if (e.salesId == currentUserId) {
-                                if (window.refreshReturnTable) window.refreshReturnTable();
-                                if (window.refreshSidebarBadges) window.refreshSidebarBadges();
-                            } else {
-                                console.warn('[Debug] Sales ID mismatch. Event ignored.');
-                            }
+                        if (readNotifs.length > 0) {
+                            finalHtml +=
+                                `<li class="dropdown-header bg-light py-2 fw-semibold" style="font-size:11px; color:#8592a3;">Notifikasi lainnya</li>`;
+                            finalHtml += readNotifs.map(n => renderNotifItem(n)).join('');
                         }
+
+                        list.innerHTML = finalHtml ||
+                            '<li class="list-group-item text-center py-4 text-muted">No notifications yet.</li>';
                     });
             }
-        });
-    </script>
-    {{-- 🔔 SIDEBAR BADGE SYSTEM --}}
-    <script>
-        // Map: menu key → notification type(s) yang relevan
-        const SIDEBAR_BADGE_MAP = {
-            'sales_return_approval': 'new_return',                            // WH Admin & Superadmin
-            'sales_return'         : 'return_rejected',                       // Sales (perlu resubmit)
-            'wh_reconcile'         : 'handover_payment_submitted',            // WH Admin
-            'sales_otp'            : 'handover_otp_sent,handover_payment_rejected', // Sales (Issued Stock History)
-            'sales-handover-otp'   : 'handover_otp_sent',                       // Sales (Handover Verification)
-        };
 
-        // Fetch badge count dari server dan inject ke sidebar
-        function refreshSidebarBadges() {
-            Object.entries(SIDEBAR_BADGE_MAP).forEach(([menuKey, type]) => {
-                const container = document.querySelector(`#menu-item-${menuKey} .badge-container`);
-                if (!container) return;
-
-                fetch(`/notifications/badge?type=${type}`, {
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-                })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.count > 0) {
-                        container.innerHTML = `<span class="badge rounded-pill bg-danger" style="font-size:10px;min-width:18px;">${data.count}</span>`;
-                    } else {
-                        container.innerHTML = '';
+            function renderNotifItem(n) {
+                // Mapping Type ke Icon & Warna ala Dashboard Premium
+                const config = {
+                    'stock_request_approved': {
+                        icon: 'bx-check-circle',
+                        color: 'bg-label-success',
+                        text: 'text-success'
+                    },
+                    'stock_request_rejected': {
+                        icon: 'bx-error-circle',
+                        color: 'bg-label-danger',
+                        text: 'text-danger'
+                    },
+                    'new_stock_request': {
+                        icon: 'bx-cart',
+                        color: 'bg-label-primary',
+                        text: 'text-primary'
+                    },
+                    'handover_payment_rejected': {
+                        icon: 'bx-x-circle',
+                        color: 'bg-label-danger',
+                        text: 'text-danger'
+                    },
+                    'handover_payment_submitted': {
+                        icon: 'bx-dollar-circle',
+                        color: 'bg-label-info',
+                        text: 'text-info'
+                    },
+                    'new_return': {
+                        icon: 'bx-redo',
+                        color: 'bg-label-warning',
+                        text: 'text-warning'
+                    },
+                    'return_rejected': {
+                        icon: 'bx-undo',
+                        color: 'bg-label-danger',
+                        text: 'text-danger'
+                    },
+                    'default': {
+                        icon: 'bx-notification',
+                        color: 'bg-label-secondary',
+                        text: 'text-secondary'
                     }
-                })
-                .catch(() => {}); // silent fail
+                };
+
+                const setting = config[n.type] || config['default'];
+
+                return `
+                <li class="list-group-item list-group-item-action dropdown-notifications-item ${n.is_read ? '' : 'unread'}" 
+                    onclick="handleNotifClick('${n.id}', '${n.url}')">
+                    <div class="d-flex align-items-center position-relative">
+                        ${!n.is_read ? '<span class="notif-dot"></span>' : ''}
+                        <div class="avatar-wrapper me-3">
+                            <div class="avatar-initial rounded-circle ${setting.color} ${setting.text} d-flex align-items-center justify-content-center" 
+                                 style="width: 40px; height: 40px; font-size:20px;">
+                                <i class="bx ${setting.icon}"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1 overflow-hidden">
+                            <h6 class="mb-0 text-truncate" style="font-size:13px; font-weight: ${n.is_read ? '400' : '600'}">${n.title}</h6>
+                            <p class="mb-0 text-muted text-truncate" style="font-size:12px">${n.body || ''}</p>
+                            <small class="text-muted" style="font-size:11px">${n.time_ago}</small>
+                        </div>
+                    </div>
+                </li>
+            `;
+            }
+
+            function handleNotifClick(id, url) {
+                fetch(`/notifications/${id}/read`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                }).finally(() => {
+                    if (url) window.location.href = url;
+                    else fetchNavbarNotifications();
+                });
+            }
+
+            document.addEventListener('DOMContentLoaded', function() {
+                // Initial Load
+                refreshSidebarBadges();
+                fetchNavbarNotifications();
+
+                // Init Tooltips
+                const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+                tooltipTriggerList.map(function(tooltipTriggerEl) {
+                    return new bootstrap.Tooltip(tooltipTriggerEl);
+                });
+
+                // Initialize Echo Listeners
+                if (typeof Echo !== 'undefined') {
+                    const me = @json(auth()->user());
+                    const isManagement = @json(auth()->user()->hasRole('admin') || auth()->user()->hasRole('superadmin') || auth()->user()->hasRole('warehouse'));
+                    const myWhId = @json(auth()->user()->warehouse_id);
+
+                    if (me) {
+                        Echo.channel('sales-channel')
+                            .listen('.handover-updated', (e) => {
+                                console.log('📡 [Signal] Handover:', e);
+
+                                const isManagement = @json(auth()->user()->hasRole('admin') || auth()->user()->hasRole('superadmin') || auth()->user()->hasRole('warehouse'));
+                                const myWhId = @json(auth()->user()->warehouse_id);
+
+                                const isRelevant = (e.salesId == me.id) ||
+                                    (isManagement && e.warehouseId == myWhId) ||
+                                    (@json(auth()->user()->hasRole('admin') || auth()->user()->hasRole('superadmin')));
+
+                                if (isRelevant) {
+                                    // 🔊 Play sound IMMEDIATELY for responsiveness
+                                    playNotificationSound();
+
+                                    refreshSidebarBadges();
+                                    fetchNavbarNotifications();
+
+                                    // Update Tables/Modals dynamically if needed
+                                    if (e.salesId == me.id) {
+                                        if (e.updateType === 'otp_sent' && window.triggerOtpModal) window
+                                            .triggerOtpModal();
+                                        if (window.refreshHandoverTable) window.refreshHandoverTable();
+                                    }
+                                    if (isManagement) {
+                                        if (e.updateType === 'payment_submitted' && window.refreshEveningList)
+                                            window.refreshEveningList();
+                                        if (e.updateType === 'verified' && window.refreshMorningStatus) window
+                                            .refreshMorningStatus();
+                                    }
+
+                                    // Global Event Bus for any page to hook into
+                                    window.dispatchEvent(new CustomEvent('reverb:handover-updated', {
+                                        detail: e
+                                    }));
+                                }
+                            })
+                            .listen('.sales-return-updated', (e) => {
+                                console.log('📡 [Signal] Sales Return:', e);
+
+                                const isManagement = @json(auth()->user()->hasRole('admin') || auth()->user()->hasRole('superadmin') || auth()->user()->hasRole('warehouse'));
+                                const myWhId = @json(auth()->user()->warehouse_id);
+
+                                const isRelevant = (e.salesId == me.id) ||
+                                    (isManagement && e.warehouseId == myWhId) ||
+                                    (@json(auth()->user()->hasRole('admin') || auth()->user()->hasRole('superadmin')));
+
+                                if (isRelevant) {
+                                    playNotificationSound();
+
+                                    refreshSidebarBadges();
+                                    fetchNavbarNotifications();
+                                    if (window.refreshReturnTable) window.refreshReturnTable();
+
+                                    // Global Event Bus
+                                    window.dispatchEvent(new CustomEvent('reverb:sales-return-updated', {
+                                        detail: e
+                                    }));
+                                }
+                            })
+                            .listen('.stock-request-updated', (e) => {
+                                console.log('📡 [Signal] Stock Request:', e);
+
+                                // Simple logic for stock request (refresh UI if relevant)
+                                // Play sound if management/relevant
+                                playNotificationSound();
+                                refreshSidebarBadges();
+                                fetchNavbarNotifications();
+
+                                // Dispatch for pages like approval list to reload their table
+                                window.dispatchEvent(new CustomEvent('reverb:stock-request-updated', {
+                                    detail: e
+                                }));
+                            });
+                    }
+                }
+
+                // Mark All Read Handler
+                const markAllBtn = document.getElementById('markAllReadBtn');
+                if (markAllBtn) {
+                    markAllBtn.addEventListener('click', function() {
+                        fetch('/notifications/mark-all-read', {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')
+                                    .content,
+                                'X-Requested-With': 'XMLHttpRequest'
+                            }
+                        }).then(() => {
+                            fetchNavbarNotifications();
+                            refreshSidebarBadges();
+                        });
+                    });
+                }
             });
-        }
 
-        // Auto-clear badge saat user buka halaman yang relevan
-        function clearBadgeOnOpen(menuKey, type) {
-            const isActive = document.querySelector(`#menu-item-${menuKey}.active`);
-            if (!isActive) return;
+            // Global exposing
+            window.refreshSidebarBadges = refreshSidebarBadges;
+            window.fetchNavbarNotifications = fetchNavbarNotifications;
+            window.handleNotifClick = handleNotifClick;
+            window.playNotificationSound = playNotificationSound;
+        </script>
 
-            fetch('/notifications/mark-read-by-type', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: JSON.stringify({ type })
-            }).catch(() => {});
-        }
+        <style>
+            .dropdown-notifications-list {
+                max-height: 480px;
+                overflow-y: auto;
+                scrollbar-width: thin;
+                /* Firefox */
+            }
 
-        document.addEventListener('DOMContentLoaded', function () {
-            // Load badge angka dari DB saat halaman dibuka
-            refreshSidebarBadges();
-            // Badge TIDAK di-clear saat dibuka — hanya hilang saat ada action (approve/reject)
-        });
+            /* Custom Scrollbar for Chrome/Safari */
+            .dropdown-notifications-list::-webkit-scrollbar {
+                width: 5px;
+            }
 
-        // Expose global agar bisa dipanggil dari Echo listener
-        window.refreshSidebarBadges = refreshSidebarBadges;
-    </script>
+            .dropdown-notifications-list::-webkit-scrollbar-track {
+                background: transparent;
+            }
 
-    @stack('styles')
+            .dropdown-notifications-list::-webkit-scrollbar-thumb {
+                background: #cbd5e1;
+                border-radius: 10px;
+            }
+
+            .dropdown-notifications-list::-webkit-scrollbar-thumb:hover {
+                background: #94a3b8;
+            }
+
+            .dropdown-notifications-item {
+                cursor: pointer;
+                transition: all 0.2s;
+                padding: 12px 20px !important;
+                border-bottom: 1px solid rgba(0, 0, 0, 0.03);
+            }
+
+            .dropdown-notifications-item:hover {
+                background-color: rgba(69, 71, 255, 0.04);
+            }
+
+            .dropdown-notifications-item.unread {
+                background-color: #f4f6ff;
+                /* Tint biru sangat muda ala screenshot */
+            }
+
+            .dropdown-notifications-item.unread:hover {
+                background-color: #ebf0ff;
+            }
+
+            .dropdown-notifications-item .notif-dot {
+                position: absolute;
+                left: -12px;
+                top: 50%;
+                transform: translateY(-50%);
+                width: 8px;
+                height: 8px;
+                background: #696cff;
+                border-radius: 50%;
+                display: inline-block;
+                box-shadow: 0 0 0 2px #fff;
+            }
+        </style>
+        @stack('styles')
     </head>
 
     <body>
@@ -288,7 +512,7 @@
             window.resetSubmitButton = function(form) {
                 if (!form) return;
                 form.dataset.submitting = 'false';
-                
+
                 // Cari semua tombol yang mungkin dipake buat submit
                 const btns = form.querySelectorAll('button[type="submit"], button.btn, input[type="submit"]');
                 btns.forEach(btn => {
@@ -298,7 +522,7 @@
                         btn.style.opacity = '1';
                         // Balikin lebar asli kalau tadi kita paksa set
                         btn.style.width = btn.dataset.originalWidth || '';
-                        
+
                         delete btn.dataset.originalHtml;
                         delete btn.dataset.originalWidth;
                     }
@@ -314,7 +538,7 @@
                 }
 
                 const btn = e.submitter || form.querySelector('button[type="submit"]');
-                
+
                 if (!e.defaultPrevented) {
                     form.dataset.submitting = 'true';
                 }
@@ -337,7 +561,9 @@
                 }
 
                 // Failsafe 10 detik
-                setTimeout(() => { if (form.dataset.submitting === 'true') window.resetSubmitButton(form); }, 10000);
+                setTimeout(() => {
+                    if (form.dataset.submitting === 'true') window.resetSubmitButton(form);
+                }, 10000);
             });
         </script>
     </body>

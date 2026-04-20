@@ -142,14 +142,16 @@
                                     </div>
                                     <div class="col-md-2">
                                         <label class="form-label">Qty</label>
-                                        <input type="number" name="quantity[]" class="form-control" required min="1">
+                                        <input type="number" name="quantity[]" class="form-control" required
+                                            min="1">
                                     </div>
                                     <div class="col-md-4">
                                         <label class="form-label">Note</label>
                                         <input type="text" name="note[]" class="form-control" placeholder="Optional">
                                     </div>
                                     <div class="col-md-1">
-                                        <button type="button" class="btn btn-outline-danger btn-sm removeRow w-100">×</button>
+                                        <button type="button"
+                                            class="btn btn-outline-danger btn-sm removeRow w-100">×</button>
                                     </div>
                                 </div>
                             </div>
@@ -203,23 +205,31 @@
                 columns: [{
                         data: 'date',
                         name: 'date',
-                        createdCell: function(td) { $(td).attr('data-label', 'Date'); }
+                        createdCell: function(td) {
+                            $(td).attr('data-label', 'Date');
+                        }
                     },
                     {
                         data: 'warehouse',
                         name: 'warehouse',
-                        createdCell: function(td) { $(td).attr('data-label', 'Warehouse'); }
+                        createdCell: function(td) {
+                            $(td).attr('data-label', 'Warehouse');
+                        }
                     },
                     {
                         data: 'count',
                         name: 'count',
-                        createdCell: function(td) { $(td).attr('data-label', 'Items'); }
+                        createdCell: function(td) {
+                            $(td).attr('data-label', 'Items');
+                        }
                     },
                     {
                         data: 'status',
                         name: 'status',
                         orderable: false,
-                        createdCell: function(td) { $(td).attr('data-label', 'Status'); }
+                        createdCell: function(td) {
+                            $(td).attr('data-label', 'Status');
+                        }
                     },
                     {
                         data: 'actions',
@@ -269,7 +279,8 @@
             // Detail Logic
             $('#requestsTable').on('click', '.detailBtn', function() {
                 const group = $(this).data('group');
-                $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span>');
+                $(this).prop('disabled', true).html(
+                    '<span class="spinner-border spinner-border-sm"></span>');
 
                 fetch(`{{ route('warehouse.stock-requests.detail') }}?group=${encodeURIComponent(group)}`)
                     .then(res => res.json())
@@ -309,50 +320,53 @@
                 const btn = form.find('button[type="submit"]');
                 const modal = bootstrap.Modal.getInstance(document.getElementById('requestModal'));
 
-                btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Processing...');
+                btn.prop('disabled', true).html(
+                    '<span class="spinner-border spinner-border-sm"></span> Processing...');
 
                 fetch(form.attr('action'), {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: form.serialize()
-                })
-                .then(async res => {
-                    if (res.redirected) {
-                        // Kalau sukses biasanya diredirect, tapi kita mau handle AJAX
-                        return { success: true };
-                    }
-                    const data = await res.json();
-                    if (!res.ok) throw data;
-                    return data;
-                })
-                .then(data => {
-                    modal.hide();
-                    form[0].reset();
-                    table.draw();
-                    
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Request Sent',
-                        text: 'Your stock request has been submitted successfully.',
-                        timer: 2000,
-                        showConfirmButton: false
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: form.serialize()
+                    })
+                    .then(async res => {
+                        if (res.redirected) {
+                            // Kalau sukses biasanya diredirect, tapi kita mau handle AJAX
+                            return {
+                                success: true
+                            };
+                        }
+                        const data = await res.json();
+                        if (!res.ok) throw data;
+                        return data;
+                    })
+                    .then(data => {
+                        modal.hide();
+                        form[0].reset();
+                        table.draw();
+
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Request Sent',
+                            text: 'Your stock request has been submitted successfully.',
+                            timer: 2000,
+                            showConfirmButton: false
+                        });
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Failed',
+                            text: err.message || 'An error occurred while submitting.'
+                        });
+                    })
+                    .finally(() => {
+                        btn.prop('disabled', false).text('Submit Request');
                     });
-                })
-                .catch(err => {
-                    console.error(err);
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Failed',
-                        text: err.message || 'An error occurred while submitting.'
-                    });
-                })
-                .finally(() => {
-                    btn.prop('disabled', false).text('Submit Request');
-                });
             });
 
             @if (session('success'))

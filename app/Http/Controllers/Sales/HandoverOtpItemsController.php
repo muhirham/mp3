@@ -330,27 +330,27 @@ class HandoverOtpItemsController extends Controller
                     $handover->evening_filled_by_sales = $isFinal;
                     $handover->evening_filled_at = $isFinal ? now() : null;
                     $handover->save();
-
-                    if ($isFinal) {
-                        // 🔔 Tambahkan notifikasi database untuk Admin WH
-                        \App\Helpers\NotificationHelper::notifyWarehouse(
-                            $handover->warehouse_id,
-                            'handover_payment_submitted',
-                            'Setoran Sore (Approval)',
-                            "Sales {$me->name} telah mengirim setoran sore untuk {$handover->code}. Silakan verifikasi.",
-                            route('sales.handover.evening', ['handover_id' => $handover->id]),
-                            'sales_handovers',
-                            $handover->id
-                        );
-
-                        // 🔔 Bersihkan notifikasi "rejected" jika ini adalah submit perbaikan
-                        \App\Helpers\NotificationHelper::markAsReadByReference('handover_payment_rejected', 'sales_handovers', $handover->id);
-                    }
                 }
             });
 
-            // 🔥 SINYAL: Kasih tau Admin WH kalau Sales udah submit payment/draft (di luar transaction)
+            // 🔥 SINYAL: Kasih tau Admin WH kalau Sales udah submit payment/draft (di luar transaction, SEBELUM notif DB yang berat)
             broadcast(new \App\Events\HandoverUpdated($handover->sales_id, $handover->warehouse_id, $handover->id, $isFinal ? 'payment_submitted' : 'payment_draft_saved'));
+
+            if ($isFinal) {
+                // 🔔 Notifikasi database untuk Admin WH (kerjakan setelah sinyal suara biar berasa cepet)
+                \App\Helpers\NotificationHelper::notifyWarehouse(
+                    $handover->warehouse_id,
+                    'handover_payment_submitted',
+                    'Setoran Sore (Approval)',
+                    "Sales {$me->name} telah mengirim setoran sore untuk {$handover->code}. Silakan verifikasi.",
+                    route('sales.handover.evening', ['handover_id' => $handover->id]),
+                    'sales_handovers',
+                    $handover->id
+                );
+
+                // 🔔 Bersihkan notifikasi "rejected" jika ini adalah submit perbaikan
+                \App\Helpers\NotificationHelper::markAsReadByReference('handover_payment_rejected', 'sales_handovers', $handover->id);
+            }
 
             $msg = $isFinal ? 'Submitted' : 'Draft saved';
             if (request()->ajax()) {

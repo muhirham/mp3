@@ -242,11 +242,22 @@ class StockRequestApprovalController extends Controller
                 'sales_handover_id' => $handover->id,
             ]);
 
-            // Tembak sinyal real-time!
-            broadcast(new \App\Events\StockRequestUpdated());
-
             return $handover;
         });
+
+        // 🔥 SINYAL: Tembak real-time di luar transaction biar cepet & aman
+        broadcast(new \App\Events\StockRequestUpdated());
+
+        // 🔔 Kirim notifikasi database ke Sales
+        \App\Helpers\NotificationHelper::notifySales(
+            $stockRequest->user_id,
+            'stock_request_approved',
+            'Permintaan Stok Disetujui',
+            "Permintaan stok Anda baru saja disetujui oleh Gudang. Item telah otomatis ditambahkan ke Handover " . $handover->code . ".",
+            route('sales-request.index'),
+            'stock_requests',
+            $stockRequest->id
+        );
 
         return response()->json([
             'success' => true,
@@ -283,6 +294,17 @@ class StockRequestApprovalController extends Controller
 
         // Tembak sinyal real-time!
         broadcast(new \App\Events\StockRequestUpdated());
+
+        // 🔔 Kirim notifikasi database ke Sales
+        \App\Helpers\NotificationHelper::notifySales(
+            $stockRequest->user_id,
+            'stock_request_rejected',
+            'Permintaan Stok Ditolak',
+            "Permintaan stok Anda ditolak oleh Gudang dengan alasan: " . $request->approval_note,
+            route('sales-request.index'),
+            'stock_requests',
+            $stockRequest->id
+        );
 
         return response()->json([
             'success' => true,

@@ -12,7 +12,12 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        // $schedule->command('inspire')->hourly();
+        // Sapu bersih notifikasi yang sudah dibaca dan umurnya lebih dari 7 hari
+        $schedule->call(function () {
+            \App\Models\Notification::where('is_read', true)
+                ->where('created_at', '<', now()->subDays(7))
+                ->delete();
+        })->daily();
     }
 
     /**

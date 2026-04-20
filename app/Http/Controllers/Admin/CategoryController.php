@@ -122,12 +122,6 @@ class CategoryController extends Controller
     {
         abort_unless(auth()->user()->hasPermission('category.delete'), 403);
 
-        if ($category->products()->count() > 0) {
-            return response()->json([
-                'error' => 'Cannot delete category. There are products associated with this category.'
-            ], 422);
-        }
-
         $category->delete();
 
         return response()->json(['success' => 'Category deleted']);

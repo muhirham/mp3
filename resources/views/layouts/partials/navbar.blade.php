@@ -33,7 +33,41 @@
       </div>
     </div>
 
-    {{-- USER DROPDOWN --}}
+    {{-- NOTIFICATION DROPDOWN --}}
+    <ul class="navbar-nav flex-row align-items-center ms-auto">
+      <li class="nav-item dropdown-notifications navbar-dropdown dropdown me-3 me-xl-1">
+        <a class="nav-link dropdown-toggle hide-arrow" href="javascript:void(0);" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" id="navbarNotificationDropdown">
+          <i class="bx bx-bell bx-sm"></i>
+          <span class="badge bg-danger rounded-pill badge-notifications d-none" id="navbarNotificationBadge">0</span>
+        </a>
+        <ul class="dropdown-menu dropdown-menu-end py-0" style="width: 350px;">
+          <li class="dropdown-menu-header border-bottom">
+            <div class="dropdown-header d-flex align-items-center py-3">
+              <h5 class="text-body mb-0 me-auto">Notifications</h5>
+              <a href="javascript:void(0)" class="dropdown-notifications-all text-body" data-bs-toggle="tooltip" data-bs-placement="top" title="Mark all as read" id="markAllReadBtn">
+                <i class="bx fs-4 bx-envelope-open"></i>
+              </a>
+            </div>
+          </li>
+          <li class="dropdown-notifications-list scrollable-container">
+            <ul class="list-group list-group-flush" id="navbarNotificationList">
+              {{-- Notif items will be injected by JS --}}
+              <li class="list-group-item list-group-item-action dropdown-notifications-item">
+                <div class="d-flex">
+                  <div class="flex-grow-1">
+                    <h6 class="mb-1">Loading notifications...</h6>
+                  </div>
+                </div>
+              </li>
+            </ul>
+          </li>
+          <li class="dropdown-menu-footer border-top p-3">
+            <button class="btn btn-primary btn-sm w-100">View all notifications</button>
+          </li>
+        </ul>
+      </li>
+
+      {{-- USER DROPDOWN --}}
     <ul class="navbar-nav flex-row align-items-center ms-auto">
       <li class="nav-item dropdown dropdown-user">
         <a class="nav-link dropdown-toggle hide-arrow" href="#" data-bs-toggle="dropdown">
