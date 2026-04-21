@@ -19,7 +19,7 @@ id,name,username,email,phone,position,signature_path,password,warehouse_id,statu
 19,"NIKO IRAWAN",Niko_Irawan,nikoirawan00@gmail.com,089521202061,"Sales Area Sijunjung",signatures/SNzebi6a4UDuSe6h9I39OphZsL0gX6oe6EdvdCe2.jpg,$2y$12$9EhiA1mCftWKWLS78O0VQ.KPGGY6QQQSMLI5zP9WkR6ydfxKUPwFy,3,active,sales
 20,"DICKI FEBERIADI",Dicki_Feberiadi,dickifeberiadi@gmail.com,0895352993977,"Sales Area Koto Baru",signatures/eAHxEPjVmxyobStjZ8tl1im7wlHegfQNyV0JpqDV.jpg,$2y$12$wrvqieotjLYl4BpjSNnzDeovGXgoMg1dYqe6C3wYbbR./MoVAgCWq,3,active,sales
 21,"Chenthia Budiharto",Chenthia_Budiharto,chenthia.budiharto@mandau.id,,,,$2y$12$Wb9vimgsb.rjN7E.bu.rKehgvECJW.6wL86gfIgtXALx1Qgng9gHO,,active,superadmin
-22,Andi,Andi_sales,Andi_sales@gmail.com,,,,$2y$12$svYzH6G3mzow/WwIJxvGTeWTykd7jeT6FzZBWpPYQR9d1.EgsDKK2,1,active,sales
+22,Andi,Andi_sales,Andi_sales@gmail.com,085765328975,Sales,signatures/SNzebi6a4UDuSe6h9I39OphZsL0gX6oe6EdvdCe2.jpg,$2y$12$svYzH6G3mzow/WwIJxvGTeWTykd7jeT6FzZBWpPYQR9d1.EgsDKK2,1,active,sales
 24,"Ajif Agustian",Sales_Mandiangin,ajifagustian3@gmail.com,089521202052,Sales,,$2y$12$qJMMgHZn2BxsTAMboLkBUupwK1qMm1dBaCYaiUjAWjKvcASCnB26K,1,active,sales
 25,"Hendra Marpaung",Sales_AmpekAngkek,fahimna11889@gmail.com,08974551415,Sales,,$2y$12$W1jD5zlEVq/kJsB03VvjduYRCu1rD/1jJSULOTIOSipxC92SkwJW6,1,active,sales
 26,"Arif Febri Hendi",Sales_Tigobaleh,ariffebrihendi@gmail.com,089517965930,Sales,,$2y$12$Jr2wfWax6dm60BrSH4RyPOAPtAp51mp50aOjQ9lVvX.GG61ESl.Qm,1,active,sales
