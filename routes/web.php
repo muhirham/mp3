@@ -98,6 +98,9 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('products/next-code', [ProductController::class, 'nextCode'])
         ->name('products.next_code')
         ->middleware('menu:products');
+    Route::get('products/export-seeder', [ProductController::class, 'exportSeeder'])
+        ->name('products.export.seeder')
+        ->middleware('menu:products');
     Route::get('products/{product}/warehouse-targets', [ProductController::class, 'warehouseTargets'])
         ->name('products.warehouse_targets')
         ->middleware('menu:products');
@@ -163,6 +166,9 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->middleware('menu:users');
     Route::get('users/export/excel', [UserController::class, 'exportExcel'])
         ->name('users.exportExcel')
+        ->middleware('menu:users');
+    Route::get('users/seeder-csv', [UserController::class, 'exportSeeder'])
+        ->name('users.export.seeder')
         ->middleware('menu:users');
 
     /* === Stock Level (shared) – key: wh_stocklevel === */

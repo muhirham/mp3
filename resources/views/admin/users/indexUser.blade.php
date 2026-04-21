@@ -50,6 +50,7 @@
                                 </button>
                                 <ul class="dropdown-menu dropdown-menu-end">
                                     <li><a class="dropdown-item" href="#" id="btnExportExcel">Excel</a></li>
+                                    <li><a class="dropdown-item" href="{{ route('users.export.seeder') }}">Export Seeder (CSV)</a></li>
                                     <li><a class="dropdown-item" href="#" id="btnExportPrint">Print</a></li>
                                 </ul>
                             </div>

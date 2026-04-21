@@ -16,9 +16,9 @@ class StockLevel extends Model
     ];
 
     protected $casts = [
-        'owner_id'  => 'int',
-        'product_id'=> 'int',
-        'quantity'  => 'int',
+        'owner_id'   => 'integer',
+        'product_id' => 'integer',
+        'quantity'   => 'integer',
     ];
 
     // ===== Relasi =====

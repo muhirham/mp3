@@ -14,6 +14,10 @@ class StockMovement extends Model
         'to_type', 'to_id', 'quantity',
         'status', 'approved_by', 'approved_at', 'note'
     ];
+ 
+    protected $casts = [
+        'quantity' => 'integer',
+    ];
 
     public function product()
     {

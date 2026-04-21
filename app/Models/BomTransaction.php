@@ -20,7 +20,7 @@ class BomTransaction extends Model
 
     protected $casts = [
         'production_qty' => 'integer',
-        'total_cost'     => 'float',
+        'total_cost'     => 'decimal:2',
     ];
 
     /*

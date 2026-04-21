@@ -329,4 +329,48 @@ class UserController extends Controller
 
         return Excel::download(new UsersExport($users), 'users_report_'.date('Ymd_His').'.xlsx');
     }
+
+    public function exportSeeder(Request $request)
+    {
+        $this->ensureCanManageUsers('users.export');
+ 
+        $users = User::with('roles')->orderBy('id')->get();
+        $filename = "users_seeder_" . date('Ymd_His') . ".csv";
+ 
+        $callback = function() use ($users) {
+            $handle = fopen('php://output', 'w');
+            
+            // Header
+            fputcsv($handle, [
+                'id', 'name', 'username', 'email', 'phone', 'position', 
+                'signature_path', 'password', 'warehouse_id', 'status', 'role_slugs'
+            ]);
+ 
+            foreach ($users as $user) {
+                fputcsv($handle, [
+                    $user->id,
+                    $user->name,
+                    $user->username,
+                    $user->email,
+                    $user->phone,
+                    $user->position,
+                    $user->signature_path,
+                    $user->password,
+                    $user->warehouse_id,
+                    $user->status,
+                    $user->roles->pluck('slug')->implode(','),
+                ]);
+            }
+ 
+            fclose($handle);
+        };
+ 
+        return response()->stream($callback, 200, [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"$filename\"",
+            'Pragma'              => 'no-cache',
+            'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+            'Expires'             => '0',
+        ]);
+    }
 }

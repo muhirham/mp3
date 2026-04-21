@@ -12,6 +12,14 @@ class SalesReport extends Model
         'damaged_goods', 'goods_returned',
         'notes', 'status', 'approved_by', 'approved_at'
     ];
+ 
+    protected $casts = [
+        'total_sold'      => 'integer',
+        'total_revenue'   => 'integer',
+        'stock_remaining' => 'integer',
+        'damaged_goods'   => 'integer',
+        'goods_returned'  => 'integer',
+    ];
 
     public function sales()
     {

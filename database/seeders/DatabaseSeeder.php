@@ -43,11 +43,13 @@ class DatabaseSeeder extends Seeder
             CompanySeeder::class,
             RoleSeeder::class,
             WarehouseSeeder::class,
-            UserSeeder::class,
+            // UserSeeder::class, // Diganti MasterUserSeeder (CSV)
+            MasterUserSeeder::class,
             CategorySeeder::class,
             SupplierSeeder::class,
             PackageSeeder::class,
-            // ProductSeeder::class,
+            // ProductSeeder::class, // Diganti MasterProductSeeder (CSV)
+            MasterProductSeeder::class,
 
             // SYSTEM
             OperationAdminSeeder::class,

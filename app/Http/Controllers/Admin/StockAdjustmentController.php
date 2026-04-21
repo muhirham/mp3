@@ -258,10 +258,10 @@ class StockAdjustmentController extends Controller
 
             'items'              => 'required|array|min:1',
             'items.*.product_id' => 'required|exists:products,id',
-            'items.*.qty_after'  => 'nullable|integer|min:0',
+            'items.*.qty_after'  => 'nullable|numeric|min:0',
             'items.*.notes'      => 'nullable|string',
-            'items.*.purchasing_price' => 'nullable|integer|min:0',
-            'items.*.selling_price'    => 'nullable|integer|min:0',
+            'items.*.purchasing_price' => 'nullable|numeric|min:0',
+            'items.*.selling_price'    => 'nullable|numeric|min:0',
         ];
 
         $data = $request->validate($rules);
