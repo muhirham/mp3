@@ -10,11 +10,6 @@ class Category extends Model
         'category_code', 'category_name', 'description',
     ];
 
-    public function products()
-    {
-        return $this->hasMany(Product::class);
-    }
-
     /**
      * Generate kode kategori berikutnya, misal: CAT-001, CAT-002, dst.
      */

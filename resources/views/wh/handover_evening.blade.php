@@ -175,13 +175,7 @@
             Reconcile (Approval Payment)
         </h4>
 
-        {{-- FLASH MESSAGE --}}
-        @if (session('success'))
-            <div class="alert alert-success">{{ session('success') }}</div>
-        @endif
-        @if (session('error'))
-            <div class="alert alert-danger">{{ session('error') }}</div>
-        @endif
+        {{-- Flash messages handled by SweetAlert below --}}
 
         <div id="eveningReconciliationContainer">
             {{-- ================== PILIH HANDOVER UNTUK APPROVAL ================== --}}
@@ -700,7 +694,8 @@
                 icon: 'success',
                 title: 'Success',
                 html: {!! json_encode(session('success')) !!},
-                allowOutsideClick: true
+                confirmButtonText: 'OK',
+                allowOutsideClick: true,
             });
         </script>
     @endif
@@ -710,7 +705,8 @@
             Swal.fire({
                 icon: 'error',
                 title: 'Failed',
-                html: {!! json_encode(session('error')) !!}
+                html: {!! json_encode(session('error')) !!},
+                confirmButtonText: 'OK',
             });
         </script>
     @endif

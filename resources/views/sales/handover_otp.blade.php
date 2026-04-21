@@ -211,7 +211,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const res = await fetch(verifyUrl, {
             method: 'POST',
             headers: {'X-CSRF-TOKEN': token,'X-Requested-With': 'XMLHttpRequest','Content-Type': 'application/json'},
-            body: JSON.stringify({otp_code: code})
+            body: JSON.stringify({
+                otp_code: code,
+                handover_id: handoverId
+            })
         });
         let json;
         try { json = await res.json(); } catch (e) { throw new Error('Server returned an invalid response.'); }
@@ -418,20 +421,6 @@ document.addEventListener('DOMContentLoaded', function() {
             selectedSubmitMode = this.dataset.submitMode || 'draft';
             if (submitModeInput) submitModeInput.value = selectedSubmitMode;
         });
-    });
-
-    form.addEventListener('submit', function(e) {
-        e.preventDefault();
-        if (submitModeInput) submitModeInput.value = selectedSubmitMode;
-        const isFinalSubmit = selectedSubmitMode === 'submit';
-        Swal.fire({
-            title: isFinalSubmit ? 'Submit closing to Admin WH?' : 'Save draft sales data?',
-            text: isFinalSubmit ? 'After submit, the sold items will be locked for warehouse admin approval.' : 'Draft will stay editable so you can continue selling the remaining items.',
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonText: isFinalSubmit ? 'Yes, Submit' : 'Yes, Save Draft',
-            cancelButtonText: 'Review Again'
-        }).then((result) => { if (result.isConfirmed) form.submit(); });
     });
 
     // GLOBAL SEARCH FILTER

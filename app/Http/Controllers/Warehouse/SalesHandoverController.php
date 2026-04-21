@@ -463,12 +463,26 @@ EOT;
             */
 
             // Tembak sinyal real-time: OTP Pagi terkirim!
-            broadcast(new \App\Events\HandoverUpdated($sales->id, $handover->id, 'otp_sent'));
+            broadcast(new \App\Events\HandoverUpdated($sales->id, $handover->warehouse_id, $handover->id, 'otp_sent'));
 
-            return back()->with(
-                'success',
-                "Handover {$handover->code} created successfully. Morning OTP is ready for use."
+            // 🔔 Tambahkan notifikasi database untuk Sales
+            \App\Helpers\NotificationHelper::notifySales(
+                $sales->id,
+                'handover_otp_sent',
+                'Titipan Barang Pagi',
+                "Handover {$handover->code} telah disiapkan. Silakan verifikasi barang bawaan Anda.",
+                route('sales.otp.items', ['handover_id' => $handover->id]),
+                'sales_handovers',
+                $handover->id
             );
+
+            $msg = "Handover {$handover->code} created successfully. Morning OTP is ready for use.";
+
+            if (request()->ajax()) {
+                return response()->json(['success' => true, 'message' => $msg]);
+            }
+
+            return back()->with('success', $msg);
     }
     /**
      * Verifikasi OTP Pagi:
@@ -605,18 +619,26 @@ EOT;
             DB::commit();
 
             // Tembak sinyal real-time: OTP Sukses Terverifikasi (Barang resmi dibawa)
-            broadcast(new \App\Events\HandoverUpdated($handover->sales_id, $handover->id, 'verified'));
+            broadcast(new \App\Events\HandoverUpdated($handover->sales_id, $handover->warehouse_id, $handover->id, 'verified'));
+
+            // 🔔 Bersihkan notifikasi "OTP Pagi Sent" karena sudah diverifikasi
+            \App\Helpers\NotificationHelper::markAsReadByReference('handover_otp_sent', 'sales_handovers', $handover->id);
 
         } catch (\Throwable $e) {
             DB::rollBack();
 
-            return back()->with('error', 'Morning OTP verification failed: ' . $e->getMessage());
+            $errMsg = 'Morning OTP verification failed: ' . $e->getMessage();
+            if (request()->ajax()) {
+                return response()->json(['success' => false, 'message' => $errMsg], 500);
+            }
+            return back()->with('error', $errMsg);
         }
 
-        return back()->with(
-            'success',
-            "Morning OTP verified. Stock successfully moved to sales and initial values saved."
-        );
+        $msg = "Morning OTP verified. Stock successfully moved to sales and initial values saved.";
+        if (request()->ajax()) {
+            return response()->json(['success' => true, 'message' => $msg]);
+        }
+        return back()->with('success', $msg);
     }
     /**
      * HALAMAN SORE:
@@ -1924,7 +1946,23 @@ EOT;
         }
 
         // 🔥 SINYAL: Kasih tau Sales kalau Admin udah kasih keputusan (Approve/Reject)
-        broadcast(new \App\Events\HandoverUpdated($handover->sales_id, $handover->id, 'payment_decided'));
+        broadcast(new \App\Events\HandoverUpdated($handover->sales_id, $handover->warehouse_id, $handover->id, 'payment_decided'));
+
+        // 🔔 Bersihkan notifikasi "payment_submitted" karena Admin WH sudah mengambil keputusan
+        \App\Helpers\NotificationHelper::markAsReadByReference('handover_payment_submitted', 'sales_handovers', $handover->id);
+
+        // 🔔 Jika ada yang REJECTED (Belum Closed), kasih tau Sales biar benerin
+        if (!$isClosed && $rejectedCount > 0) {
+            \App\Helpers\NotificationHelper::notifySales(
+                $handover->sales_id,
+                'handover_payment_rejected',
+                'Setoran Sore Direvisi',
+                "Beberapa item di Handover {$handover->code} ditolak oleh Gudang. Silakan perbaiki data setoran Anda.",
+                route('sales.otp.items', ['handover_id' => $handover->id]),
+                'sales_handovers',
+                $handover->id
+            );
+        }
 
         // ✅ Message yang informatif sesuai hasil
         $msg = "Approval saved. {$approvedCount} item(s) approved." .

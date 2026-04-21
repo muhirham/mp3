@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Notification;
+use App\Models\SalesHandover;
+use App\Models\StockRequest;
 use Illuminate\Http\Request;
 
 class NotificationController extends Controller
@@ -84,18 +86,53 @@ class NotificationController extends Controller
      */
     public function badgeByType(Request $request)
     {
-        $type = $request->type;
+        $typeString = $request->type;
+        $userId = auth()->id();
+        $totalCount = 0;
 
-        $query = Notification::where('user_id', auth()->id())
-            ->where('is_read', false);
-
-        if ($type) {
-            // Support multiple types: ?type=new_return,return_resubmit
-            $types = explode(',', $type);
-            $query->whereIn('type', $types);
+        if (!$typeString) {
+            return response()->json(['count' => 0]);
         }
 
-        return response()->json(['count' => $query->count()]);
+        $types = explode(',', $typeString);
+
+        foreach ($types as $type) {
+            $type = trim($type);
+
+            if ($type === 'TASK_waiting_otp') {
+                $totalCount += SalesHandover::where('sales_id', $userId)
+                    ->where('status', 'waiting_morning_otp')
+                    ->count();
+            } elseif ($type === 'TASK_pending_stock_request') {
+                $whId = auth()->user()->warehouse_id;
+                $query = StockRequest::where('status', 'pending');
+                
+                // Jika bukan superadmin, filter per gudang dia
+                if (!auth()->user()->hasRole('superadmin')) {
+                    $query->where('warehouse_id', $whId);
+                }
+
+                $totalCount += $query->count();
+
+            } elseif ($type === 'TASK_issued_stock') {
+                // Count handovers that are currently being managed by sales (On Sales or Waiting Approval)
+                $totalCount += SalesHandover::where('sales_id', $userId)
+                    ->whereIn('status', ['on_sales', 'waiting_evening_otp'])
+                    ->count();
+            } elseif ($type === 'TASK_on_sales') {
+                $totalCount += SalesHandover::where('sales_id', $userId)
+                    ->where('status', 'on_sales')
+                    ->count();
+            } else {
+                // Notifikasi unread biasa
+                $totalCount += Notification::where('user_id', $userId)
+                    ->where('type', $type)
+                    ->where('is_read', false)
+                    ->count();
+            }
+        }
+
+        return response()->json(['count' => $totalCount]);
     }
 
     /**

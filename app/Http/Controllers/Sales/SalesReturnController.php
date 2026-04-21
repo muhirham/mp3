@@ -214,7 +214,7 @@ class SalesReturnController extends Controller
             }
         });
 
-        // 🔥 BROADCAST: Kasih tau Admin WH ada return baru
+        // 🔥 BROADCAST: Kasih tau Admin WH ada return baru (PRIORITAS SUARA)
         $me = auth()->user();
         broadcast(new SalesReturnUpdated(
             $me->warehouse_id,
@@ -373,7 +373,7 @@ class SalesReturnController extends Controller
             ]);
         });
 
-        // 🔥 BROADCAST: Kasih tau Sales status-nya berubah
+        // 🔥 BROADCAST: Kasih tau Sales status-nya berubah (PRIORITAS SUARA)
         broadcast(new SalesReturnUpdated(
             $salesReturn->warehouse_id,
             $salesReturn->sales_id,
@@ -390,7 +390,7 @@ class SalesReturnController extends Controller
             NotificationHelper::markAsReadByReference('new_return', 'sales_return', $salesReturn->handover_id);
         }
 
-        // Hapus notif approved lama buat handover ini (biar nggak numpuk, walau sidebar nggak pake tipe ini)
+        // Hapus notif approved lama buat handover ini
         NotificationHelper::markAsReadByReference('return_approved', 'sales_return', $salesReturn->handover_id);
 
         // 💾 DB NOTIF
@@ -422,7 +422,7 @@ class SalesReturnController extends Controller
             'reason' => $request->reject_reason,
         ]);
 
-        // 🔥 BROADCAST: Kasih tau Sales status-nya di-reject
+        // 🔥 BROADCAST: Kasih tau Sales status-nya di-reject (PRIORITAS SUARA)
         broadcast(new SalesReturnUpdated(
             $salesReturn->warehouse_id,
             $salesReturn->sales_id,
@@ -535,7 +535,7 @@ class SalesReturnController extends Controller
             }
         });
 
-        // 🔥 BROADCAST: Kasih tau Admin WH ada resubmit baru
+        // 🔥 BROADCAST: Kasih tau Admin WH ada resubmit baru (PRIORITAS SUARA)
         $me = auth()->user();
         broadcast(new SalesReturnUpdated(
             $me->warehouse_id,
@@ -634,6 +634,7 @@ class SalesReturnController extends Controller
             // 🔥 BROADCAST: Kasih tau Sales semua approved (ambil info dari item pertama)
             if ($items->isNotEmpty()) {
                 $first = $items->first();
+                // Sinyal suara dulu
                 broadcast(new SalesReturnUpdated(
                     $first->warehouse_id,
                     $first->sales_id,
@@ -685,7 +686,7 @@ class SalesReturnController extends Controller
             }
         });
 
-        // 🔥 BROADCAST: Kasih tau Sales semua di-reject
+        // 🔥 BROADCAST: Kasih tau Sales semua di-reject (PRIORITAS SUARA)
         if ($firstItem) {
             broadcast(new SalesReturnUpdated(
                 $firstItem->warehouse_id,

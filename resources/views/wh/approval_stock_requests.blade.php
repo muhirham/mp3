@@ -91,7 +91,8 @@
                                 @endforeach
                             </select>
                         @else
-                            <input type="text" class="form-control" value="{{ $me->warehouse->warehouse_name }}" disabled>
+                            <input type="text" class="form-control" value="{{ $me->warehouse->warehouse_name }}"
+                                disabled>
                             <input type="hidden" id="warehouseFilter" value="{{ $me->warehouse_id }}">
                         @endif
                     </div>
@@ -167,22 +168,30 @@
                 columns: [{
                         data: 'date',
                         name: 'date',
-                        createdCell: function(td) { $(td).attr('data-label', 'Date'); }
+                        createdCell: function(td) {
+                            $(td).attr('data-label', 'Date');
+                        }
                     },
                     {
                         data: 'sales',
                         name: 'sales',
-                        createdCell: function(td) { $(td).attr('data-label', 'Sales'); }
+                        createdCell: function(td) {
+                            $(td).attr('data-label', 'Sales');
+                        }
                     },
                     {
                         data: 'warehouse',
                         name: 'warehouse',
-                        createdCell: function(td) { $(td).attr('data-label', 'Warehouse'); }
+                        createdCell: function(td) {
+                            $(td).attr('data-label', 'Warehouse');
+                        }
                     },
                     {
                         data: 'count',
                         name: 'count',
-                        createdCell: function(td) { $(td).attr('data-label', 'Items'); }
+                        createdCell: function(td) {
+                            $(td).attr('data-label', 'Items');
+                        }
                     },
                     {
                         data: 'status',
@@ -194,7 +203,9 @@
                             if (data === 'rejected') badge = 'bg-danger';
                             return `<span class="badge ${badge}">${data.toUpperCase()}</span>`;
                         },
-                        createdCell: function(td) { $(td).attr('data-label', 'Status'); }
+                        createdCell: function(td) {
+                            $(td).attr('data-label', 'Status');
+                        }
                     },
                     {
                         data: 'actions',
@@ -225,7 +236,8 @@
             // Detail button handling (Event Delegation for DataTables)
             $('#requestsTable').on('click', '.detailBtn', function() {
                 const group = $(this).data('group');
-                $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span>');
+                $(this).prop('disabled', true).html(
+                    '<span class="spinner-border spinner-border-sm"></span>');
 
                 fetch(`/warehouse/stock-requests/detail?group=${encodeURIComponent(group)}`)
                     .then(async res => {
@@ -294,45 +306,57 @@
                             inputPlaceholder: 'Enter rejection reason',
                             allowOutsideClick: false,
                             showCancelButton: true,
-                            customClass: { popup: 'swal-front' },
-                            didOpen: () => { $('.swal2-container').css('z-index', '30000'); },
-                            inputValidator: (value) => { if (!value) return 'Note is required'; }
+                            customClass: {
+                                popup: 'swal-front'
+                            },
+                            didOpen: () => {
+                                $('.swal2-container').css('z-index', '30000');
+                            },
+                            inputValidator: (value) => {
+                                if (!value) return 'Note is required';
+                            }
                         }).then((result) => {
                             if (result.isConfirmed) {
                                 fetch(`/warehouse/stock-requests/${id}/reject`, {
-                                    method: 'POST',
-                                    headers: {
-                                        'X-CSRF-TOKEN': csrfToken,
-                                        'Content-Type': 'application/json',
-                                        'Accept': 'application/json'
-                                    },
-                                    body: JSON.stringify({ approval_note: result.value })
-                                })
-                                .then(async res => {
-                                    const data = await res.json();
-                                    if (!res.ok) throw data;
-                                    return data;
-                                })
-                                .then(() => {
-                                    const target = selectedItems.find(x => x.id == id);
-                                    if (target) target.status = 'rejected';
-                                    renderItems();
-                                    table.draw(false);
-                                    
-                                    Swal.fire({ 
-                                        icon: 'success', 
-                                        title: 'Rejected', 
-                                        timer: 1200, 
-                                        showConfirmButton: false 
-                                    }).then(() => {
-                                        const anyPending = selectedItems.some(i => i.status === 'pending');
-                                        if (anyPending) {
-                                            detailModal.show();
-                                        }
+                                        method: 'POST',
+                                        headers: {
+                                            'X-CSRF-TOKEN': csrfToken,
+                                            'Content-Type': 'application/json',
+                                            'Accept': 'application/json'
+                                        },
+                                        body: JSON.stringify({
+                                            approval_note: result.value
+                                        })
+                                    })
+                                    .then(async res => {
+                                        const data = await res.json();
+                                        if (!res.ok) throw data;
+                                        return data;
+                                    })
+                                    .then(() => {
+                                        const target = selectedItems.find(x => x.id ==
+                                            id);
+                                        if (target) target.status = 'rejected';
+                                        renderItems();
+                                        table.draw(false);
+
+                                        Swal.fire({
+                                            icon: 'success',
+                                            title: 'Rejected',
+                                            timer: 1200,
+                                            showConfirmButton: false
+                                        }).then(() => {
+                                            const anyPending = selectedItems
+                                                .some(i => i.status ===
+                                                    'pending');
+                                            if (anyPending) {
+                                                detailModal.show();
+                                            }
+                                        });
                                     });
-                                });
                             } else {
-                                const anyPending = selectedItems.some(i => i.status === 'pending');
+                                const anyPending = selectedItems.some(i => i.status ===
+                                    'pending');
                                 if (anyPending) detailModal.show();
                             }
                         });
@@ -352,8 +376,12 @@
                         text: "This will create a new Handover Order (HDO).",
                         icon: 'question',
                         showCancelButton: true,
-                        customClass: { popup: 'swal-front' },
-                        didOpen: () => { $('.swal2-container').css('z-index', '30000'); }
+                        customClass: {
+                            popup: 'swal-front'
+                        },
+                        didOpen: () => {
+                            $('.swal2-container').css('z-index', '30000');
+                        }
                     });
 
                     if (!confirm.isConfirmed) {
@@ -364,21 +392,26 @@
 
                     Swal.fire({
                         title: 'Processing...',
-                        didOpen: () => { Swal.showLoading(); }
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
                     });
 
                     let handoverId = null;
                     try {
                         for (const item of remain) {
-                            const response = await fetch(`/warehouse/stock-requests/${item.id}/approve`, {
-                                method: 'POST',
-                                headers: {
-                                    'X-CSRF-TOKEN': csrfToken,
-                                    'Content-Type': 'application/json',
-                                    'Accept': 'application/json'
-                                },
-                                body: JSON.stringify({ handover_id: handoverId })
-                            });
+                            const response = await fetch(
+                                `/warehouse/stock-requests/${item.id}/approve`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'X-CSRF-TOKEN': csrfToken,
+                                        'Content-Type': 'application/json',
+                                        'Accept': 'application/json'
+                                    },
+                                    body: JSON.stringify({
+                                        handover_id: handoverId
+                                    })
+                                });
 
                             const data = await response.json();
                             if (!response.ok) throw data;
@@ -391,18 +424,24 @@
                         table.draw(false);
 
                         if (handoverId) {
-                            window.open(`/sales/handover/morning?handover_id=${handoverId}`, '_blank');
+                            window.open(`/sales/handover/morning?handover_id=${handoverId}`,
+                                '_blank');
                         }
 
-                        Swal.fire({ icon: 'success', title: 'Approval completed', timer: 1200, showConfirmButton: false }).then(() => {
-                            const anyPending = selectedItems.some(i => i.status === 'pending');
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Approval completed',
+                            timer: 1200,
+                            showConfirmButton: false
+                        }).then(() => {
+                            const anyPending = selectedItems.some(i => i.status ===
+                                'pending');
                             if (anyPending) {
                                 detailModal.show();
                             }
                         });
 
                     } catch (err) {
-                        detailModal.show();
                         Swal.fire({
                             icon: 'warning',
                             title: 'Cannot approve',
@@ -412,14 +451,11 @@
                 }, 200);
             });
 
-            // LISTENER REAL-TIME (PoC)
-            if (window.Echo) {
-                window.Echo.channel('sales-channel')
-                    .listen('.stock-request-updated', (e) => {
-                        console.log('Real-time Update Received: WH Approval');
-                        table.draw(false); // reload datatable
-                    });
-            }
+            // LISTENER REAL-TIME (via Global Event Bus)
+            window.addEventListener('reverb:stock-request-updated', (e) => {
+                console.log('Real-time Update Received: WH Approval (via Event Bus)');
+                if (typeof table !== 'undefined') table.draw(false);
+            });
         });
     </script>
 @endpush

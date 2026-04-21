@@ -144,6 +144,15 @@ class StockRequestController extends Controller
         // Tembak sinyal real-time biar Admin WH dapet notif!
         broadcast(new \App\Events\StockRequestUpdated());
 
+        // 🔔 Kirim notifikasi database ke Admin Gudang
+        \App\Helpers\NotificationHelper::notifyWarehouse(
+            $warehouseId,
+            'new_stock_request',
+            'Permintaan Stok Baru',
+            auth()->user()->name . " meminta stok barang baru.",
+            route('warehouse.stock-requests.index')
+        );
+
         if ($request->ajax()) {
             return response()->json(['success' => true, 'message' => 'Request created successfully']);
         }
