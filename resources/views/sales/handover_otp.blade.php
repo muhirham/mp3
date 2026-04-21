@@ -167,12 +167,35 @@
                                 </td>
                                 <td data-label="Amount">
                                     <div class="grid2">
-                                        <div class="ibox"><label class="ilabel">Cash Amount</label><input type="number" class="form-control form-control-sm" name="items[{{ $row->id }}][payment_cash_amount]" min="0" max="{{ $maxNominal }}" value="{{ $cashAmountValue }}" @disabled($isLocked)></div>
-                                        <div class="ibox"><label class="ilabel">Transfer Amount</label><input type="number" class="form-control form-control-sm" name="items[{{ $row->id }}][payment_transfer_amount]" min="0" max="{{ $maxNominal }}" value="{{ $transferAmountValue }}" @disabled($isLocked)></div>
+                                        <div class="ibox"><label class="ilabel">Cash Amount</label><input type="number" class="form-control form-control-sm" name="items[{{ $row->id }}][payment_cash_amount]" min="0" max="{{ $maxNominal }}" value="{{ $cashAmountValue }}" readonly @disabled($isLocked)></div>
+                                        <div class="ibox"><label class="ilabel">Transfer Amount</label><input type="number" class="form-control form-control-sm" name="items[{{ $row->id }}][payment_transfer_amount]" min="0" max="{{ $maxNominal }}" value="{{ $transferAmountValue }}" readonly @disabled($isLocked)></div>
                                     </div>
                                     <div class="note mt-2">Cash and transfer can be filled separately or together. Transfer proof is mandatory during final submission to Admin WH.</div>
                                 </td>
-                                <td data-label="Transfer Proof"><div class="proof">@if ($row->payment_transfer_proof_path)<a href="{{ asset('storage/'.$row->payment_transfer_proof_path) }}" target="_blank">View Proof</a>@endif<input type="file" class="form-control form-control-sm" name="items[{{ $row->id }}][payment_proof]" @disabled($isLocked)></div></td>
+                                <td data-label="Transfer Proof">
+                                    <div class="proof">
+                                        @php
+                                            $allProofs = [];
+                                            if ($row->payment_transfer_proof_path) $allProofs[] = $row->payment_transfer_proof_path;
+                                            if (is_array($row->payment_transfer_proof_paths)) {
+                                                foreach($row->payment_transfer_proof_paths as $p) {
+                                                    if (is_string($p)) $allProofs[] = $p;
+                                                    elseif (is_array($p) && !empty($p['path'])) $allProofs[] = $p['path'];
+                                                }
+                                            }
+                                            $allProofs = array_unique($allProofs);
+                                        @endphp
+                                        @foreach ($allProofs as $p)
+                                            <a href="{{ asset('storage/'.$p) }}" target="_blank" class="d-block mb-2 text-success fw-bold">
+                                                <i class="bx bx-check-circle"></i> View Proof
+                                            </a>
+                                        @endforeach
+                                        <input type="file" class="form-control form-control-sm" name="items[{{ $row->id }}][payment_proof]" @disabled($isLocked)>
+                                        @if (count($allProofs) > 0)
+                                            <div class="small text-muted mt-1">File already attached. Upload again to replace.</div>
+                                        @endif
+                                    </div>
+                                </td>
                                 <td data-label="Payment Status"><div class="status"><span class="badge {{ $payBadge }}">{{ strtoupper($payStatusKey) }}</span>@if ($row->payment_status === 'rejected' && $row->payment_reject_reason)<div class="small text-danger mt-2">{{ $row->payment_reject_reason }}</div>@endif</div></td>
                             </tr>
                         @endforeach
@@ -406,14 +429,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
         cashQtyInput.addEventListener('input', syncSplitQty);
         transferQtyInput.addEventListener('input', syncSplitQty);
-        cashAmountInput.addEventListener('input', function() {
-            const cashQty = clampNumber(cashQtyInput.value, 0, maxQty);
-            this.value = clampNumber(this.value, 0, cashQty * unitPrice);
-        });
-        transferAmountInput.addEventListener('input', function() {
-            const transferQty = clampNumber(transferQtyInput.value, 0, maxQty);
-            this.value = clampNumber(this.value, 0, transferQty * unitPrice);
-        });
     });
 
     submitButtons.forEach(button => {

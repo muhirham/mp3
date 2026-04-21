@@ -260,12 +260,15 @@ class HandoverOtpItemsController extends Controller
                     $cashAmount = max(0, (int) ($row['payment_cash_amount'] ?? 0));
                     $transferAmount = max(0, (int) ($row['payment_transfer_amount'] ?? 0));
 
-                    // Nominal validation
-                    if ($cashAmount > ($unitPrice * $cashQty)) {
-                        throw new \RuntimeException("Cash amount exceeds allowed value for item #{$item->id}");
+                    // Nominal validation: Must be exactly Qty * NetPrice
+                    $discountPerUnit = (int) ($item->discount_per_unit ?? 0);
+                    $netPrice = max(0, $unitPrice - $discountPerUnit);
+
+                    if ($cashAmount !== ($netPrice * $cashQty)) {
+                        throw new \RuntimeException("Cash amount must be exactly " . ($netPrice * $cashQty) . " for item #{$item->id}");
                     }
-                    if ($transferAmount > ($unitPrice * $transferQty)) {
-                        throw new \RuntimeException("Transfer amount exceeds allowed value for item #{$item->id}");
+                    if ($transferAmount !== ($netPrice * $transferQty)) {
+                        throw new \RuntimeException("Transfer amount must be exactly " . ($netPrice * $transferQty) . " for item #{$item->id}");
                     }
 
                     // Proof required when there is a transfer payment
