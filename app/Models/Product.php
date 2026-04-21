@@ -24,6 +24,11 @@ class Product extends Model
         'package_id',
         'is_active',
     ];
+    protected $casts = [
+        'purchasing_price' => 'integer',
+        'selling_price'    => 'integer',
+        'is_active'       => 'boolean',
+    ];
 
     /*
     |--------------------------------------------------------------------------

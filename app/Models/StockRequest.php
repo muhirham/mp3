@@ -17,6 +17,11 @@ class StockRequest extends Model
         'sales_handover_id',
         'note'
     ];
+ 
+    protected $casts = [
+        'quantity_requested' => 'integer',
+        'quantity_approved'  => 'integer',
+    ];
 
     /* ================= RELATION ================= */
 

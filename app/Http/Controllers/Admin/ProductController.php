@@ -576,4 +576,61 @@ public function datatable(Request $request)
 
         return 'Warehouse berikut tidak dilepas karena stoknya masih ada: ' . implode(', ', $blockedWarehouses);
     }
+ 
+    public function exportSeeder(Request $request)
+    {
+        $this->ensureProductPermission('products.view');
+ 
+        $products = Product::orderBy('id')->get();
+        $filename = "products_seeder_" . date('Ymd_His') . ".csv";
+ 
+        $callback = function() use ($products) {
+            $handle = fopen('php://output', 'w');
+            
+            // Header
+            fputcsv($handle, [
+                'id', 
+                'product_code', 
+                'name', 
+                'category_id', 
+                'product_type', 
+                'description', 
+                'purchasing_price', 
+                'selling_price', 
+                'standard_cost', 
+                'stock_minimum', 
+                'supplier_id', 
+                'package_id', 
+                'is_active'
+            ]);
+ 
+            foreach ($products as $p) {
+                fputcsv($handle, [
+                    $p->id,
+                    $p->product_code,
+                    $p->name,
+                    $p->category_id,
+                    $p->product_type,
+                    $p->description,
+                    $p->purchasing_price,
+                    $p->selling_price,
+                    $p->standard_cost,
+                    $p->stock_minimum,
+                    $p->supplier_id,
+                    $p->package_id,
+                    $p->is_active ? 1 : 0
+                ]);
+            }
+ 
+            fclose($handle);
+        };
+ 
+        return response()->stream($callback, 200, [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"$filename\"",
+            'Pragma'              => 'no-cache',
+            'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+            'Expires'             => '0',
+        ]);
+    }
 }

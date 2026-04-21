@@ -27,6 +27,7 @@ class DamagedStock extends Model
     ];
 
     protected $casts = [
+        'quantity'    => 'integer',
         'approved_at' => 'datetime',
         'resolved_at' => 'datetime',
     ];

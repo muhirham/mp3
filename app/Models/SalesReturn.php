@@ -11,6 +11,10 @@ class SalesReturn extends Model
         'quantity', 'condition', 'reason',
         'status', 'approved_by', 'approved_at'
     ];
+ 
+    protected $casts = [
+        'quantity' => 'integer',
+    ];
 
     public function sales()
     {

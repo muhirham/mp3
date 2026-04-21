@@ -18,6 +18,16 @@ class StockAdjustmentItem extends Model
         'selling_price_after',
         'notes',
     ];
+ 
+    protected $casts = [
+        'qty_before'            => 'integer',
+        'qty_after'             => 'integer',
+        'qty_diff'              => 'integer',
+        'purchase_price_before' => 'integer',
+        'purchase_price_after'  => 'integer',
+        'selling_price_before'  => 'integer',
+        'selling_price_after'   => 'integer',
+    ];
 
     public function adjustment()
     {

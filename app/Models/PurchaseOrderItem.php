@@ -10,6 +10,15 @@ class PurchaseOrderItem extends Model
 
     // PENTING: request_id, product_id, warehouse_id, dst harus boleh diisi
     protected $guarded = []; // atau pakai $fillable sesuai kebutuhan
+ 
+    protected $casts = [
+        'qty_ordered'  => 'integer',
+        'qty_received' => 'integer',
+        'unit_price'   => 'decimal:2',
+        'subtotal'     => 'decimal:2',
+        'tax_amount'   => 'decimal:2',
+        'discount_amount' => 'decimal:2',
+    ];
 
     public function po()
     {

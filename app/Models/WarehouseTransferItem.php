@@ -26,7 +26,9 @@ class WarehouseTransferItem extends Model
 
 
     protected $casts = [
-        'quantity'      => 'integer',
+        'qty_transfer'  => 'integer',
+        'qty_good'      => 'integer',
+        'qty_damaged'   => 'integer',
         'unit_cost'     => 'decimal:2',
         'subtotal_cost' => 'decimal:2',
     ];
@@ -48,7 +50,7 @@ class WarehouseTransferItem extends Model
     protected static function booted()
     {
         static::saving(function ($item) {
-            $item->subtotal_cost = $item->quantity * $item->unit_cost;
+            $item->subtotal_cost = $item->qty_transfer * $item->unit_cost;
         });
     }
 }
