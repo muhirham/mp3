@@ -79,6 +79,9 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->middleware('menu:roles');
 
     // key: warehouses
+    Route::get('warehouses/seeder-csv', [WarehouseController::class, 'exportSeeder'])
+        ->name('warehouses.export.seeder')
+        ->middleware('menu:warehouses');
     Route::resource('warehouses', WarehouseController::class)
         ->only(['index', 'store', 'update', 'destroy'])
         ->middleware('menu:warehouses');

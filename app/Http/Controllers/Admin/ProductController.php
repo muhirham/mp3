@@ -593,6 +593,7 @@ public function datatable(Request $request)
                 'product_code', 
                 'name', 
                 'category_id', 
+                'category_code',
                 'product_type', 
                 'description', 
                 'purchasing_price', 
@@ -600,7 +601,9 @@ public function datatable(Request $request)
                 'standard_cost', 
                 'stock_minimum', 
                 'supplier_id', 
+                'supplier_name',
                 'package_id', 
+                'package_name',
                 'is_active'
             ]);
  
@@ -610,6 +613,7 @@ public function datatable(Request $request)
                     $p->product_code,
                     $p->name,
                     $p->category_id,
+                    $p->category?->category_code,
                     $p->product_type,
                     $p->description,
                     $p->purchasing_price,
@@ -617,7 +621,9 @@ public function datatable(Request $request)
                     $p->standard_cost,
                     $p->stock_minimum,
                     $p->supplier_id,
+                    $p->supplier?->name,
                     $p->package_id,
+                    $p->package?->package_name,
                     $p->is_active ? 1 : 0
                 ]);
             }

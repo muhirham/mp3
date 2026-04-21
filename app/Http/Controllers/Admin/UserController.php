@@ -341,24 +341,26 @@ class UserController extends Controller
             $handle = fopen('php://output', 'w');
             
             // Header
-            fputcsv($handle, [
-                'id', 'name', 'username', 'email', 'phone', 'position', 
-                'signature_path', 'password', 'warehouse_id', 'status', 'role_slugs'
-            ]);
+            fputcsv($handle, ['id', 'name', 'username', 'email', 'phone', 'position', 'signature_path', 'password', 'warehouse_id', 'warehouse_code', 'status', 'role_slugs']);
  
-            foreach ($users as $user) {
+            foreach ($users as $u) {
+                // Get role slugs
+                $roles = $u->roles->pluck('slug')->toArray();
+                $roleSlugs = implode(',', $roles);
+ 
                 fputcsv($handle, [
-                    $user->id,
-                    $user->name,
-                    $user->username,
-                    $user->email,
-                    $user->phone,
-                    $user->position,
-                    $user->signature_path,
-                    $user->password,
-                    $user->warehouse_id,
-                    $user->status,
-                    $user->roles->pluck('slug')->implode(','),
+                    $u->id,
+                    $u->name,
+                    $u->username,
+                    $u->email,
+                    $u->phone,
+                    $u->position,
+                    $u->signature_path,
+                    $u->password,
+                    $u->warehouse_id,
+                    $u->warehouse?->warehouse_code, // Resolving code
+                    $u->status,
+                    $roleSlugs
                 ]);
             }
  
