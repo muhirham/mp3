@@ -61,9 +61,9 @@ class MasterUserSeeder extends Seeder
                     [
                         'name'           => $data['name'],
                         'email'          => $data['email'],
-                        'phone'          => $data['phone'] ?? null,
-                        'position'       => $data['position'] ?? null,
-                        'signature_path' => $data['signature_path'] ?? null,
+                        'phone'          => !empty($data['phone']) ? $data['phone'] : null,
+                        'position'       => !empty($data['position']) ? $data['position'] : null,
+                        'signature_path' => !empty($data['signature_path']) ? $data['signature_path'] : null,
                         'password'       => $data['password'], // Pake Hash yang udah ada di CSV
                         'warehouse_id'   => $warehouseId,
                         'status'         => $data['status'] ?? 'active',

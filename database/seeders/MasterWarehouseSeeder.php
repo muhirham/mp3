@@ -10,7 +10,7 @@ class MasterWarehouseSeeder extends Seeder
 {
     public function run(): void
     {
-        $csvFile = database_path('seeders/csv/warehouses_seeder.csv');
+        $csvFile = database_path('seeders/csv/warehouses_master.csv');
  
         if (!file_exists($csvFile)) {
             Log::warning("File CSV Warehouse tidak ditemukan di: $csvFile");
@@ -29,6 +29,7 @@ class MasterWarehouseSeeder extends Seeder
                     Warehouse::updateOrCreate(
                         ['warehouse_code' => $row['warehouse_code']],
                         [
+                            'id'             => $row['id'] ?? null,
                             'warehouse_name' => $row['warehouse_name'],
                             'address'        => $row['address'],
                             'note'           => $row['note']

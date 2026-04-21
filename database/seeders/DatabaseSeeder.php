@@ -44,7 +44,7 @@ class DatabaseSeeder extends Seeder
             RoleSeeder::class,
  
             // 2. MASTER DATA (CORE BASE)
-            WarehouseSeeder::class,
+            // WarehouseSeeder::class,
             CategorySeeder::class,
             SupplierSeeder::class,
             PackageSeeder::class,
