@@ -2,6 +2,20 @@
 
         @section('content')
         <meta name="csrf-token" content="{{ csrf_token() }}">
+        <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+        <style>
+            .select2-container .select2-selection--single {
+                height: 38px !important;
+                border: 1px solid #d9dee3 !important;
+            }
+            .select2-container--default .select2-selection--single .select2-selection__rendered {
+                line-height: 38px !important;
+                padding-left: 12px;
+            }
+            .select2-container--default .select2-selection--single .select2-selection__arrow {
+                height: 36px !important;
+            }
+        </style>
 
         @php
             $me    = $me ?? auth()->user();
@@ -193,6 +207,7 @@
         @endsection
 
         @push('scripts')
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>
         const warehouseSelect = document.querySelector('select[name="warehouse_id"]');
         const salesSelect     = document.querySelector('select[name="sales_id"]');
@@ -214,6 +229,7 @@
                     </option>`;
                 });
                 sel.innerHTML = html;
+                $(sel).select2({ width: '100%', dropdownParent: $(sel).closest('td') });
             });
         }
 
@@ -409,6 +425,7 @@
             </button>
         </td>`;
         tbody.appendChild(tr);
+        $(tr).find('.sel-product').select2({ width: '100%', dropdownParent: $(tr).find('td').first() });
         reindexRows();
         recomputeRow(tr);
         recomputeGrand();
@@ -462,6 +479,14 @@
 
                 if (result.success) {
                     Swal.fire({ icon: 'success', title: 'Success', text: result.message });
+                    
+                    // 🔥 RESET FORM & UI (Clean up after success)
+                    form.reset();
+                    tbody.innerHTML = '';
+                    btnAddRow.click(); // Add one fresh row
+                    reindexRows();
+                    recomputeGrand();
+
                     // Segerin list HDO nunggu verifikasi di bawah
                     if (window.refreshMorningStatus) await window.refreshMorningStatus();
                 } else {
@@ -516,6 +541,7 @@
         });
 
         reindexRows();
+        $('.sel-product').select2({ width: '100%' });
         [...tbody.querySelectorAll('tr')].forEach(tr => recomputeRow(tr));
         recomputeGrand();
     })();
