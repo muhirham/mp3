@@ -28,5 +28,10 @@ class CategorySeeder extends Seeder
             ['category_code' => 'CAT-AST'],
             ['category_name' => 'Aset & Perangkat', 'description' => 'Modem, brankas, dll']
         );
+ 
+        Category::updateOrCreate(
+            ['category_code' => 'CAT-PRJ'],
+            ['category_name' => 'Project', 'description' => 'Backlog Project']
+        );
     }
 }

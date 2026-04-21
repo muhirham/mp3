@@ -120,4 +120,33 @@ class WarehouseController extends Controller
 
         return response()->noContent();
     }
+
+    public function exportSeeder()
+    {
+        abort_unless(auth()->user()->hasPermission('warehouse.view'), 403);
+ 
+        $rows = Warehouse::orderBy('id')->get();
+        $filename = "warehouses_seeder_" . date('Ymd_His') . ".csv";
+ 
+        $callback = function() use ($rows) {
+            $handle = fopen('php://output', 'w');
+            fputcsv($handle, ['id', 'warehouse_code', 'warehouse_name', 'address', 'note']);
+ 
+            foreach ($rows as $r) {
+                fputcsv($handle, [
+                    $r->id,
+                    $r->warehouse_code,
+                    $r->warehouse_name,
+                    $r->address,
+                    $r->note
+                ]);
+            }
+            fclose($handle);
+        };
+ 
+        return response()->stream($callback, 200, [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"$filename\"",
+        ]);
+    }
 }

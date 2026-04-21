@@ -18,11 +18,16 @@
                     <h4 class="fw-bold mb-1">Warehouses</h4>
                     <p class="mb-0 text-muted small">Manage warehouse locations and depot details.</p>
                 </div>
-                @if(auth()->user()->hasPermission('warehouse.create'))
-                    <button class="btn btn-primary px-3 shadow-none" id="btnShowAdd">
-                        <i class="bx bx-plus me-1"></i> Add Warehouse
-                    </button>
-                @endif
+                <div class="d-flex gap-2">
+                    @if(auth()->user()->hasPermission('warehouse.create'))
+                        <a href="{{ route('warehouses.export.seeder') }}" class="btn btn-outline-secondary">
+                            <i class="bx bx-export me-1"></i> Export Seeder
+                        </a>
+                        <button class="btn btn-primary px-3 shadow-none" id="btnShowAdd">
+                            <i class="bx bx-plus me-1"></i> Add Warehouse
+                        </button>
+                    @endif
+                </div>
             </div>
 
             {{-- Filters Bar --}}

@@ -44,18 +44,28 @@ class MasterUserSeeder extends Seeder
             while (($row = fgetcsv($file)) !== false) {
                 $data = array_combine($header, $row);
  
+                // Resolve Warehouse ID via Warehouse Code (lebih robust)
+                $warehouseId = null;
+                if (!empty($data['warehouse_code'])) {
+                    $warehouseId = \App\Models\Warehouse::where('warehouse_code', $data['warehouse_code'])->value('id');
+                }
+ 
+                // Fallback ke ID lama kalau code gak ketemu (backward compatibility)
+                if (!$warehouseId && !empty($data['warehouse_id'])) {
+                    $warehouseId = $data['warehouse_id'];
+                }
+ 
                 // Mapping kolom sesuai database lo
                 $user = User::updateOrCreate(
                     ['username' => $data['username']], // Unik berdasarkan username
                     [
-                        'id'             => $data['id'],
                         'name'           => $data['name'],
                         'email'          => $data['email'],
                         'phone'          => $data['phone'] ?? null,
                         'position'       => $data['position'] ?? null,
                         'signature_path' => $data['signature_path'] ?? null,
                         'password'       => $data['password'], // Pake Hash yang udah ada di CSV
-                        'warehouse_id'   => !empty($data['warehouse_id']) ? $data['warehouse_id'] : null,
+                        'warehouse_id'   => $warehouseId,
                         'status'         => $data['status'] ?? 'active',
                     ]
                 );

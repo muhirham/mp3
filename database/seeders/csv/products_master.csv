@@ -1,13 +1,28 @@
 id,product_code,name,category_id,product_type,description,purchasing_price,selling_price,standard_cost,stock_minimum,supplier_id,package_id,is_active
-1,0079-P,VO-BLANK-MINI3-CSS,1,BOM,"Voucher Fisik Kosong",500,500,500.00,10,1,1,1
-2,0001-P,"Saldo Pulsa",2,material,"Saldo Pulsa Elektronik",1,1,1.00,1000000,1,3,1
-3,0002-P,"Kartu Perdana Kosong",3,material,"Stock Kartu Perdana Kosong",1000,1000,1000.00,500,1,3,1
-4,0081-P,VO-ELC,1,BOM,"Voucher Saldo Elektronik",1000,5000,1000.00,10,1,2,1
-5,0087-P,"Sewa Depo",4,normal,"Sewa Depo MP3",500000,500000,500000.00,1,1,2,1
-6,0088-P,"Filling Cabinet",4,normal,"Filling Cabinet MP3",500000,500000,500000.00,1,1,2,1
-7,0089-P,"Finger Print",4,normal,"Finger Print MP3",150000,150000,150000.00,1,1,2,1
-8,0090-P,"Modem Hifi Nokia",4,normal,"Modem Hifi Nokia MP3",250000,250000,250000.00,1,1,2,1
-9,0091-P,Brangkas,4,normal,"Brangkas MP3",5000000,5000000,5000000.00,1,1,2,1
-10,0092-P,"Modem Pool 16 Port",4,normal,"Modem Pool 16 Port MP3",4500000,4500000,4500000.00,1,1,2,1
-11,0093-P,"Total Asset",4,normal,"Total Asset",51500000,51500000,51500000.00,1,1,1,1
-12,0094-P,"HKM 0127+",4,normal,"Modem 4G WIFI Router HKM 0127+",368000,368000,368000.00,1,1,2,1
+8,PRD-008,"Project SP 3GB3D Januari 2026",5,normal,"Backlog Januari 2026",10000,10000,10000.00,50,1,2,1
+9,PRD-009,"Project SP 3GB3D Febuary 2026",5,normal,"Backlog Febuary 2026",10000,10000,10000.00,50,1,2,1
+10,PRD-010,"Project SP 3GB3D Maret 2026",5,normal,"Backlog Maret 2026",10000,10000,10000.00,50,1,2,1
+11,PRD-011,"Project SP 5GB3D (Saldo) Januari 2026",5,normal,"Backlog Januari 2026",10000,10000,10000.00,50,1,2,1
+12,PRD-012,"Voucher kosong Januari 2026",5,normal,"Backlog Voucher Januari 2026",10000,10000,10000.00,50,1,2,1
+13,PRD-013,"Project SP 5GB3D (Saldo) February 2026",5,normal,"Backlog saldo February",10000,10000,10000.00,50,1,2,1
+14,PRD-014,"Voucher kosong February 2026",5,normal,"Backlog Voucer February 2026",10000,10000,10000.00,50,1,2,1
+15,PRD-015,"Voucher kosong Maret 2026",5,normal,"Backlog Voucher Maret 2026",10000,10000,10000.00,50,1,2,1
+16,PRD-016,"SP 3GB 30 D REGULER",5,normal,"Backlog Project  Maret 2026",10000,10000,10000.00,50,1,2,1
+17,PRD-017,"Trade Supply (Saldo) January 2026",5,normal,"Trade Supply (Saldo) January 2026",1,1,1.00,50,1,2,1
+18,PRD-018,"Voucher 5 GB 3D February 2026",1,normal,"Voucher February",10701,10701,10701.00,50,1,2,1
+19,PRD-019,"Voucher Blank February 2026",1,normal,"Voucher February 2026",500,500,500.00,50,1,2,1
+20,PRD-020,"PERDANA ORI 3GB 30D February 2026",3,normal,"February 2026",29000,29000,29000.00,50,1,2,1
+21,PRD-021,"PERDANA ORI 3GB 30D Maret 2026",3,normal,"Backlog Maret 2026",29000,29000,29000.00,50,1,2,1
+22,PRD-022,"Voucher 5 GB 3D Maret 2026",1,normal,"Backlog Voucher 2026",12300,12300,12300.00,50,1,2,1
+23,PRD-023,"Voucher 6 GB 2D Maret 2026",1,normal,"Backlog Voucher Maret 2026",9500,9500,9500.00,50,1,2,1
+24,PRD-024,"Voucher 12 GB 7D Maret 2026",1,normal,"Backlog Maret 2026",23500,23500,23500.00,50,1,2,1
+25,PRD-025,"Trymee April 2026",3,normal,"Trymee April 2026",10000,10000,10000.00,50,1,2,1
+26,PRD-026,"Trade Supply (Saldo) April 2026",2,normal,"Trade supply April 2026",1,1,1.00,50,1,3,1
+27,PRD-027,"Hifi Rabit",4,normal,"Hifi Rabit April 2026",350000,350000,350000.00,50,1,2,1
+28,PRD-028,HKM0172+,4,normal,Wifi,368000,368000,368000.00,1,1,2,1
+29,PRD-029,"Voucher Blank",1,material,"Voucher Blank",500,500,500.00,1,1,2,1
+30,PRD-030,"Voucher Blank 9GB 7D",1,normal,"Voucher Blank 9GB 7D",500,500,500.00,1,1,2,1
+31,PRD-031,"Voucher Blank 3GB 3D",1,normal,"Voucher Blank 3GB 3D",500,500,500.00,1,1,2,1
+32,PRD-032,"Trade Supply (Saldo) February 2026",2,normal,"Backlog February 2026",1,1,1.00,1,1,2,1
+33,PRD-033,"Trade Supply (Saldo) Maret 2026",2,normal,"Backlog Maret 2026",1,1,1.00,1,1,2,1
+34,PRD-034,"KPK Reguler",3,normal,"Kartu Perdana Kosong",10000,10000,10000.00,1,1,2,1
