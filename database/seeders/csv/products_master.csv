@@ -1,28 +1,17 @@
-id,product_code,name,category_id,product_type,description,purchasing_price,selling_price,standard_cost,stock_minimum,supplier_id,package_id,is_active
-8,PRD-008,"Project SP 3GB3D Januari 2026",5,normal,"Backlog Januari 2026",10000,10000,10000.00,50,1,2,1
-9,PRD-009,"Project SP 3GB3D Febuary 2026",5,normal,"Backlog Febuary 2026",10000,10000,10000.00,50,1,2,1
-10,PRD-010,"Project SP 3GB3D Maret 2026",5,normal,"Backlog Maret 2026",10000,10000,10000.00,50,1,2,1
-11,PRD-011,"Project SP 5GB3D (Saldo) Januari 2026",5,normal,"Backlog Januari 2026",10000,10000,10000.00,50,1,2,1
-12,PRD-012,"Voucher kosong Januari 2026",5,normal,"Backlog Voucher Januari 2026",10000,10000,10000.00,50,1,2,1
-13,PRD-013,"Project SP 5GB3D (Saldo) February 2026",5,normal,"Backlog saldo February",10000,10000,10000.00,50,1,2,1
-14,PRD-014,"Voucher kosong February 2026",5,normal,"Backlog Voucer February 2026",10000,10000,10000.00,50,1,2,1
-15,PRD-015,"Voucher kosong Maret 2026",5,normal,"Backlog Voucher Maret 2026",10000,10000,10000.00,50,1,2,1
-16,PRD-016,"SP 3GB 30 D REGULER",5,normal,"Backlog Project  Maret 2026",10000,10000,10000.00,50,1,2,1
-17,PRD-017,"Trade Supply (Saldo) January 2026",5,normal,"Trade Supply (Saldo) January 2026",1,1,1.00,50,1,2,1
-18,PRD-018,"Voucher 5 GB 3D February 2026",1,normal,"Voucher February",10701,10701,10701.00,50,1,2,1
-19,PRD-019,"Voucher Blank February 2026",1,normal,"Voucher February 2026",500,500,500.00,50,1,2,1
-20,PRD-020,"PERDANA ORI 3GB 30D February 2026",3,normal,"February 2026",29000,29000,29000.00,50,1,2,1
-21,PRD-021,"PERDANA ORI 3GB 30D Maret 2026",3,normal,"Backlog Maret 2026",29000,29000,29000.00,50,1,2,1
-22,PRD-022,"Voucher 5 GB 3D Maret 2026",1,normal,"Backlog Voucher 2026",12300,12300,12300.00,50,1,2,1
-23,PRD-023,"Voucher 6 GB 2D Maret 2026",1,normal,"Backlog Voucher Maret 2026",9500,9500,9500.00,50,1,2,1
-24,PRD-024,"Voucher 12 GB 7D Maret 2026",1,normal,"Backlog Maret 2026",23500,23500,23500.00,50,1,2,1
-25,PRD-025,"Trymee April 2026",3,normal,"Trymee April 2026",10000,10000,10000.00,50,1,2,1
-26,PRD-026,"Trade Supply (Saldo) April 2026",2,normal,"Trade supply April 2026",1,1,1.00,50,1,3,1
-27,PRD-027,"Hifi Rabit",4,normal,"Hifi Rabit April 2026",350000,350000,350000.00,50,1,2,1
-28,PRD-028,HKM0172+,4,normal,Wifi,368000,368000,368000.00,1,1,2,1
-29,PRD-029,"Voucher Blank",1,material,"Voucher Blank",500,500,500.00,1,1,2,1
-30,PRD-030,"Voucher Blank 9GB 7D",1,normal,"Voucher Blank 9GB 7D",500,500,500.00,1,1,2,1
-31,PRD-031,"Voucher Blank 3GB 3D",1,normal,"Voucher Blank 3GB 3D",500,500,500.00,1,1,2,1
-32,PRD-032,"Trade Supply (Saldo) February 2026",2,normal,"Backlog February 2026",1,1,1.00,1,1,2,1
-33,PRD-033,"Trade Supply (Saldo) Maret 2026",2,normal,"Backlog Maret 2026",1,1,1.00,1,1,2,1
-34,PRD-034,"KPK Reguler",3,normal,"Kartu Perdana Kosong",10000,10000,10000.00,1,1,2,1
+id,product_code,name,category_id,category_code,product_type,description,purchasing_price,selling_price,standard_cost,stock_minimum,supplier_id,supplier_name,package_id,package_name,is_active
+10,PRD-017,"Trade Supply (Saldo) January 2026",2,CAT-SLD,normal,"Trade Supply (Saldo) January 2026",1,1,1.00,50,1,"PT Indosat Ooredoo Hutchison Tbk (IOH)",2,PCS,1
+11,PRD-018,"Trade Supply (Saldo) Februari 2026",1,CAT-VCR,normal,"Voucher February",10701,10701,10701.00,50,1,"PT Indosat Ooredoo Hutchison Tbk (IOH)",2,PCS,1
+12,PRD-019,"Trade Supply (Voucher) Februari 2026",1,CAT-VCR,normal,"Voucher February 2026",500,500,500.00,50,1,"PT Indosat Ooredoo Hutchison Tbk (IOH)",2,PCS,1
+13,PRD-020,"PERDANA ORI 3GB 30D February 2026",3,CAT-KPK,normal,"February 2026",29000,29000,29000.00,50,1,"PT Indosat Ooredoo Hutchison Tbk (IOH)",2,PCS,1
+14,PRD-021,"PERDANA ORI 3GB 30D Maret 2026",3,CAT-KPK,normal,"Backlog Maret 2026",29000,29000,29000.00,50,1,"PT Indosat Ooredoo Hutchison Tbk (IOH)",2,PCS,1
+15,PRD-022,"Voucher 5 GB 3D Maret 2026",1,CAT-VCR,normal,"Backlog Voucher 2026",12300,12300,12300.00,50,1,"PT Indosat Ooredoo Hutchison Tbk (IOH)",2,PCS,1
+16,PRD-023,"Voucher 6 GB 2D Maret 2026",1,CAT-VCR,normal,"Backlog Voucher Maret 2026",9500,9500,9500.00,50,1,"PT Indosat Ooredoo Hutchison Tbk (IOH)",2,PCS,1
+17,PRD-024,"Voucher 12 GB 7D Maret 2026",1,CAT-VCR,normal,"Backlog Maret 2026",23500,23500,23500.00,50,1,"PT Indosat Ooredoo Hutchison Tbk (IOH)",2,PCS,1
+18,PRD-025,"Trymee Maret 2026",3,CAT-KPK,normal,"Trymee April 2026",10000,10000,10000.00,50,1,"PT Indosat Ooredoo Hutchison Tbk (IOH)",2,PCS,1
+19,PRD-026,"Trade Supply (Saldo) April 2026",2,CAT-SLD,normal,"Trade supply April 2026",1,1,1.00,50,1,"PT Indosat Ooredoo Hutchison Tbk (IOH)",2,PCS,1
+20,PRD-027,"Hifi Rabit",4,CAT-AST,normal,"Hifi Rabit April 2026",350000,350000,350000.00,50,1,"PT Indosat Ooredoo Hutchison Tbk (IOH)",2,PCS,1
+21,PRD-028,HKM0172+,4,CAT-AST,normal,Wifi,368000,368000,368000.00,1,1,"PT Indosat Ooredoo Hutchison Tbk (IOH)",2,PCS,1
+22,PRD-029,"Voucher Blank",1,CAT-VCR,material,"Voucher Blank",500,500,500.00,1,1,"PT Indosat Ooredoo Hutchison Tbk (IOH)",2,PCS,1
+23,PRD-030,"Voucher Blank 9GB 7D",1,CAT-VCR,normal,"Voucher Blank 9GB 7D",500,500,500.00,1,1,"PT Indosat Ooredoo Hutchison Tbk (IOH)",2,PCS,1
+24,PRD-031,"Voucher Blank 3GB 3D",1,CAT-VCR,normal,"Voucher Blank 3GB 3D",500,500,500.00,1,1,"PT Indosat Ooredoo Hutchison Tbk (IOH)",2,PCS,1
+27,PRD-034,"KPK Regular",3,CAT-KPK,normal,"Kartu Perdana Kosong",10000,10000,10000.00,1,1,"PT Indosat Ooredoo Hutchison Tbk (IOH)",2,PCS,1
