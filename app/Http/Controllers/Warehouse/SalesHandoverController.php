@@ -146,21 +146,22 @@ class SalesHandoverController extends Controller
         $whId = $request->warehouse_id;
         if(!$whId) return response()->json(['items' => []]);
 
-        $stockMap = DB::table('stock_levels')
+        $stockLevels = DB::table('stock_levels')
             ->where('owner_type', 'warehouse')
             ->where('owner_id', $whId)
             ->pluck('quantity', 'product_id')
             ->toArray();
 
-        $products = Product::orderBy('name')
+        $products = Product::whereIn('id', array_keys($stockLevels))
+            ->orderBy('name')
             ->get(['id', 'name', 'product_code', 'selling_price'])
-            ->map(function($p) use ($stockMap) {
+            ->map(function($p) use ($stockLevels) {
                 return [
                     'id'              => $p->id,
                     'name'            => $p->name,
                     'product_code'    => $p->product_code,
                     'selling_price'   => (int) $p->selling_price,
-                    'warehouse_stock' => (int) ($stockMap[$p->id] ?? 0),
+                    'warehouse_stock' => (int) ($stockLevels[$p->id] ?? 0),
                 ];
             });
 
@@ -216,7 +217,7 @@ class SalesHandoverController extends Controller
             ->groupBy('product_id');
 
         $products = Product::query()
-            ->leftJoinSub($warehouseStockSub, 'warehouse_stocks', function ($join) {
+            ->joinSub($warehouseStockSub, 'warehouse_stocks', function ($join) {
                 $join->on('warehouse_stocks.product_id', '=', 'products.id');
             })
             ->select(
@@ -1184,7 +1185,7 @@ EOT;
                 }
                 
                 foreach ($h->items as $it) {
-                    $originalStart += (int) ($it->line_total_start ?? ((int) $it->qty_start * (int) $it->unit_price));
+                    $originalStart += (int)($it->qty_start * $it->unit_price);
                     
                     // Diskon: Prioritaskan diskon barang TERJUAL untuk report yang akurat
                     if ($h->status === 'closed') {
@@ -1219,10 +1220,7 @@ EOT;
                     'status_label'       => $stLabel,
                     'status_badge_class' => $badgeClass,
                     'amount_dispatched'  => $this->formatRp($dispatched),
-                    // Ori Price: Tampilkan total harga modal (qty_sold * unit_price) jika closed agar match
-                    'amount_original'    => $h->status === 'closed' 
-                                            ? $this->formatRp($real + ($discountStart > 0 ? $discountStart : 0))
-                                            : $this->formatRp($originalStart),
+                    'amount_original'    => $this->formatRp($originalStart),
                     'amount_discount'    => $discountStart > 0 ? $this->formatRp($discountStart) : '0',
                     // Terjual dan Selisih Stok hanya muncul kalau sudah closed
                     'amount_sold'        => $h->status === 'closed' ? $this->formatRp($real) : null,
