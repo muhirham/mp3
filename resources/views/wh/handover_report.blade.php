@@ -252,7 +252,8 @@
                         <button type="button" id="btnExportSales" class="btn btn-success w-100 px-2" title="Export Excel">
                             <i class="bx bx-download"></i> Export
                         </button>
-                        <button type="button" id="btnResetFilters" class="btn btn-outline-secondary w-100 px-2" title="Reset Filters">
+                        <button type="button" id="btnResetFilters" class="btn btn-outline-secondary w-100 px-2"
+                            title="Reset Filters">
                             <i class="bx bx-refresh"></i>
                         </button>
                     </div>

@@ -1185,7 +1185,7 @@ EOT;
                 }
                 
                 foreach ($h->items as $it) {
-                    $originalStart += (int) ($it->line_total_start ?? ((int) $it->qty_start * (int) $it->unit_price));
+                    $originalStart += (int)($it->qty_start * $it->unit_price);
                     
                     // Diskon: Prioritaskan diskon barang TERJUAL untuk report yang akurat
                     if ($h->status === 'closed') {
@@ -1220,10 +1220,7 @@ EOT;
                     'status_label'       => $stLabel,
                     'status_badge_class' => $badgeClass,
                     'amount_dispatched'  => $this->formatRp($dispatched),
-                    // Ori Price: Tampilkan total harga modal (qty_sold * unit_price) jika closed agar match
-                    'amount_original'    => $h->status === 'closed' 
-                                            ? $this->formatRp($real + ($discountStart > 0 ? $discountStart : 0))
-                                            : $this->formatRp($originalStart),
+                    'amount_original'    => $this->formatRp($originalStart),
                     'amount_discount'    => $discountStart > 0 ? $this->formatRp($discountStart) : '0',
                     // Terjual dan Selisih Stok hanya muncul kalau sudah closed
                     'amount_sold'        => $h->status === 'closed' ? $this->formatRp($real) : null,
