@@ -508,47 +508,39 @@
 
         <!-- Global Anti Double-Click & Submit Loader -->
         <script>
-            // 🔥 Fungsi Sapu Bersih: Reset SEMUA tombol di form biar nggak ada yang muter terus
+            // ✅ FUNGSI SAPU BERSIH GLOBAL: Reset tombol biar nggak macet
             window.resetSubmitButton = function(form) {
                 if (!form) return;
                 form.dataset.submitting = 'false';
 
-                // Cari semua tombol yang mungkin dipake buat submit
                 const btns = form.querySelectorAll('button[type="submit"], button.btn, input[type="submit"]');
                 btns.forEach(btn => {
                     if (btn.dataset.originalHtml) {
                         btn.innerHTML = btn.dataset.originalHtml;
                         btn.style.pointerEvents = 'auto';
                         btn.style.opacity = '1';
-                        // Balikin lebar asli kalau tadi kita paksa set
                         btn.style.width = btn.dataset.originalWidth || '';
 
                         delete btn.dataset.originalHtml;
                         delete btn.dataset.originalWidth;
                     }
+                    btn.disabled = false; // Failsafe buat button yang di-disabled manual
                 });
             };
 
             document.addEventListener('submit', function(e) {
                 const form = e.target;
-
                 if (form.dataset.submitting === 'true') {
                     e.preventDefault();
                     return;
                 }
 
                 const btn = e.submitter || form.querySelector('button[type="submit"]');
-
-                if (!e.defaultPrevented) {
-                    form.dataset.submitting = 'true';
-                }
-
                 if (btn && !btn.dataset.originalHtml) {
-                    // Simpan state asli
+                    form.dataset.submitting = 'true';
                     btn.dataset.originalHtml = btn.innerHTML;
                     btn.dataset.originalWidth = btn.style.getPropertyValue('width') || '';
 
-                    // Biar nggak melar, kita kunci lebarnya ke lebar saat ini (computed)
                     const currentWidth = btn.getBoundingClientRect().width;
                     btn.style.width = currentWidth + 'px';
 
@@ -560,11 +552,27 @@
                     }
                 }
 
-                // Failsafe 10 detik
                 setTimeout(() => {
                     if (form.dataset.submitting === 'true') window.resetSubmitButton(form);
                 }, 10000);
             });
+
+            // ✅ 1. RESET UNTUK JQUERY AJAX
+            if (window.jQuery) {
+                $(document).ajaxComplete(function() {
+                    document.querySelectorAll('form[data-submitting="true"]').forEach(form => window.resetSubmitButton(form));
+                });
+            }
+
+            // ✅ 2. RESET UNTUK NATIVE FETCH (Sering dipake di menu baru)
+            const originalFetch = window.fetch;
+            window.fetch = async (...args) => {
+                try {
+                    return await originalFetch(...args);
+                } finally {
+                    document.querySelectorAll('form[data-submitting="true"]').forEach(form => window.resetSubmitButton(form));
+                }
+            };
         </script>
     </body>
 
