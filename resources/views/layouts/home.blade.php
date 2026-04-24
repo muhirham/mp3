@@ -107,6 +107,7 @@
                 'sales-handover-otp': 'TASK_waiting_otp', // Sales (Handover Verification)
                 'sales_request_approval': 'TASK_pending_stock_request', // WH Admin (Approval)
                 'sales_request': 'stock_request_approved,stock_request_rejected', // Sales (Request)
+                'wh_transfers': 'TASK_pending_transfer', // WH Transfer (Pending/Approved)
             };
 
             const NOTIF_SOUND_URL = "{{ asset('assets/sounds/notif.mp3') }}";
@@ -232,6 +233,11 @@
                         color: 'bg-label-danger',
                         text: 'text-danger'
                     },
+                    'warehouse_transfer': {
+                        icon: 'bx-transfer',
+                        color: 'bg-label-info',
+                        text: 'text-info'
+                    },
                     'default': {
                         icon: 'bx-notification',
                         color: 'bg-label-secondary',
@@ -289,20 +295,18 @@
                 // Initialize Echo Listeners
                 if (typeof Echo !== 'undefined') {
                     const me = @json(auth()->user());
-                    const isManagement = @json(auth()->user()->hasRole('admin') || auth()->user()->hasRole('superadmin') || auth()->user()->hasRole('warehouse'));
-                    const myWhId = @json(auth()->user()->warehouse_id);
+                    const isManagement = @json(auth()->user()->hasRole(['admin', 'superadmin', 'warehouse']));
+                    const myWhId = Number(@json(auth()->user()->warehouse_id));
 
                     if (me) {
+                        // 1. Sales Channel
                         Echo.channel('sales-channel')
                             .listen('.handover-updated', (e) => {
                                 console.log('📡 [Signal] Handover:', e);
 
-                                const isManagement = @json(auth()->user()->hasRole('admin') || auth()->user()->hasRole('superadmin') || auth()->user()->hasRole('warehouse'));
-                                const myWhId = @json(auth()->user()->warehouse_id);
-
                                 const isRelevant = (e.salesId == me.id) ||
                                     (isManagement && e.warehouseId == myWhId) ||
-                                    (@json(auth()->user()->hasRole('admin') || auth()->user()->hasRole('superadmin')));
+                                    (@json(auth()->user()->hasRole(['admin', 'superadmin'])));
 
                                 if (isRelevant) {
                                     // 🔊 Play sound IMMEDIATELY for responsiveness
@@ -333,12 +337,9 @@
                             .listen('.sales-return-updated', (e) => {
                                 console.log('📡 [Signal] Sales Return:', e);
 
-                                const isManagement = @json(auth()->user()->hasRole('admin') || auth()->user()->hasRole('superadmin') || auth()->user()->hasRole('warehouse'));
-                                const myWhId = @json(auth()->user()->warehouse_id);
-
                                 const isRelevant = (e.salesId == me.id) ||
                                     (isManagement && e.warehouseId == myWhId) ||
-                                    (@json(auth()->user()->hasRole('admin') || auth()->user()->hasRole('superadmin')));
+                                    (@json(auth()->user()->hasRole(['admin', 'superadmin'])));
 
                                 if (isRelevant) {
                                     playNotificationSound();
@@ -366,6 +367,45 @@
                                 window.dispatchEvent(new CustomEvent('reverb:stock-request-updated', {
                                     detail: e
                                 }));
+                            });
+
+                        // 2. Warehouse Transfer Channel (PISAH CHANNEL COK!)
+                        Echo.channel('warehouse-transfer-channel')
+                            .listen('.warehouse-transfer-updated', (e) => {
+                                console.log('📡 [Signal] Warehouse Transfer Received:', e);
+
+                                // Paksa jadi Number biar nggak salah bandingin '1' vs 1
+                                const myWhId = Number(@json(auth()->user()->warehouse_id));
+                                const isManagement = @json(auth()->user()->hasRole(['admin', 'superadmin']));
+                                
+                                const sourceWhId = Number(e.sourceWarehouseId);
+                                const destWhId = Number(e.destinationWarehouseId);
+
+                                // Relevan jika:
+                                // 1. Saya Management (Admin/Superadmin) - Harus liat SEMUA.
+                                // 2. Saya Gudang Asal (Source)
+                                // 3. Saya Gudang Tujuan (Destination)
+                                const isRelevant = isManagement ||
+                                    (sourceWhId === myWhId) ||
+                                    (destWhId === myWhId);
+
+                                if (isRelevant) {
+                                    // Jalankan UI Update dulu (Prioritas)
+                                    refreshSidebarBadges();
+                                    fetchNavbarNotifications();
+
+                                    // Trigger reload buat halaman index transfer
+                                    window.dispatchEvent(new CustomEvent('reverb:warehouse-transfer-updated', {
+                                        detail: e
+                                    }));
+
+                                    // Coba putar suara, kalau gagal (misal 404 atau diblokir browser) jangan bikin error se-script
+                                    try {
+                                        playNotificationSound();
+                                    } catch (err) {
+                                        console.warn('🔇 Gagal putar suara notif:', err.message);
+                                    }
+                                }
                             });
                     }
                 }

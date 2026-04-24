@@ -43,7 +43,22 @@
                 width: 10%;
                 text-align: center;
             }
+
+            /* Select2 Custom Theme for Sneat */
+            .select2-container--bootstrap-5 .select2-selection {
+                border-color: #d9dee3 !important;
+                border-radius: 0.375rem !important;
+                height: calc(1.53em + 0.875rem + 2px) !important;
+                display: flex !important;
+                align-items: center !important;
+            }
+            .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered {
+                color: #566a7f !important;
+                padding-left: 0.875rem !important;
+            }
         </style>
+        <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
     @endpush
 
 
@@ -70,7 +85,7 @@
 
                         <div class="col-md-3">
                             <label class="form-label">Status</label><br>
-                            <span class="badge bg-info text-uppercase">
+                            <span id="statusBadge" class="badge bg-info text-uppercase">
                                 {{ $transfer->status }}
                             </span>
                         </div>
@@ -99,43 +114,11 @@
             @endif
 
             {{-- ================= ACTION (APPROVAL) ================= --}}
-            <div class="card mb-3">
-                <div class="card-body d-flex flex-wrap gap-2">
-
-                    {{-- APPROVE + REJECT (PADANG) --}}
-                    @if ($canApproveDestination)
-                        <button class="btn btn-success btn-approve-transfer"
-                            data-action="{{ route('warehouse-transfer-forms.approve.destination', $transfer->id) }}">
-                            <i class="bx bx-check-circle"></i> Approve
-                        </button>
-
-                        <button class="btn btn-outline-danger btn-reject-transfer"
-                            data-action="{{ route('warehouse-transfer-forms.reject.destination', $transfer->id) }}">
-                            <i class="bx bx-x-circle"></i> Reject
-                        </button>
-                    @endif
-
-
-                    {{-- PRINT DELIVERY NOTE --}}
-                    @if ($canPrintSJ)
-                        <button id="btnPrintSJ" class="btn btn-outline-primary">
-                            <i class="bx bx-printer"></i> Delivery Note
-                        </button>
-                    @endif
-
-                    {{-- GR --}}
-                    @if ($canGrSource)
-                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#mdlGRTransfer">
-                            <i class="bx bx-download"></i> Goods Received
-                        </button>
-                    @endif
-
-                </div>
+            <div id="transferActions" class="card mb-3">
+                @include('wh.partials.transfer_actions')
             </div>
 
-            @if ($canPrintSJ)
-                <iframe id="iframePrintSJ" src="" style="display:none;"></iframe>
-            @endif
+            <iframe id="iframePrintSJ" src="" style="display:none;"></iframe>
 
             {{-- ================= ITEMS (CREATE MODE) ================= --}}
             @if (!$transfer->exists)
@@ -408,7 +391,7 @@
             {{-- ================= LOG ================= --}}
             <h5 class="mt-4">Activity Log</h5>
 
-            <ul class="list-group">
+            <ul id="activityLogList" class="list-group">
                 @forelse ($transfer->logs as $log)
                     <li class="list-group-item">
                         <div class="d-flex justify-content-between">
@@ -436,6 +419,8 @@
 
     @if (!$transfer->exists)
         @push('scripts')
+            <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
             <script>
                 document.addEventListener('DOMContentLoaded', function() {
 
@@ -525,32 +510,47 @@
                                 select.innerHTML = `<option value="">-- select --</option>`;
 
                                 products.forEach(p => {
+                                    const stockLabel = parseInt(p.available_stock || 0);
                                     select.innerHTML += `
-                        <option value="${p.id}"
-                            data-stock="${p.available_stock}"
-                            data-price="${p.purchasing_price}">
-                            ${p.product_code} - ${p.name}
-                        </option>
-                    `;
+                                        <option value="${p.id}"
+                                            data-stock="${p.available_stock}"
+                                            data-price="${p.purchasing_price}">
+                                            ${p.name} (${p.product_code}) | WH Stock: ${stockLabel}
+                                        </option>
+                                    `;
+                                });
+
+                                // Initialize Select2
+                                $(select).select2({
+                                    theme: 'bootstrap-5',
+                                    placeholder: '-- Select Product --',
+                                    allowClear: true,
+                                    width: '100%'
+                                });
+
+                                // ✅ AUTO FOCUS SEARCH: Langsung ngetik pas diklik
+                                $(select).on('select2:open', function(e) {
+                                    const searchField = document.querySelector('.select2-search__field');
+                                    if (searchField) searchField.focus();
+                                });
+
+                                // Handle selection via Select2 event
+                                $(select).on('select2:select', function(e) {
+                                    const data = e.params.data.element.dataset;
+                                    const tr_jq = $(this).closest('tr');
+
+                                    const stock = parseInt(data.stock || 0);
+                                    const price = parseInt(data.price || 0);
+
+                                    tr_jq.find('.stock').text(stock.toLocaleString('en-US'));
+                                    tr_jq.find('.price').text(price.toLocaleString('en-US'));
+
+                                    calc(tr_jq[0]);
                                 });
                             });
                     }
 
                     /* ================= EVENT DELEGATION ================= */
-                    document.addEventListener('change', e => {
-                        if (e.target.classList.contains('product-select')) {
-                            const tr = e.target.closest('tr');
-                            const opt = e.target.selectedOptions[0];
-
-                            const stock = parseInt(opt.dataset.stock || 0);
-                            const price = parseInt(opt.dataset.price || 0);
-
-                            tr.querySelector('.stock').innerText = stock.toLocaleString('en-US');
-                            tr.querySelector('.price').innerText = price.toLocaleString('en-US');
-
-                            calc(tr);
-                        }
-                    });
 
                     document.addEventListener('input', e => {
                         if (e.target.classList.contains('qty')) {
@@ -589,58 +589,6 @@
     @push('scripts')
         <script>
             document.addEventListener('DOMContentLoaded', function() {
-
-                /* ================= APPROVE ================= */
-                document.querySelectorAll('.btn-approve-transfer').forEach(btn => {
-                    btn.addEventListener('click', () => {
-                        Swal.fire({
-                            icon: 'question',
-                            title: 'Approve Transfer?',
-                            showCancelButton: true,
-                            confirmButtonText: 'Approve',
-                            cancelButtonText: 'Cancel'
-                        }).then(res => {
-                            if (!res.isConfirmed) return;
-
-                            const f = document.createElement('form');
-                            f.method = 'POST';
-                            f.action = btn.dataset.action;
-                            f.innerHTML = `
-                        <input type="hidden" name="_token" value="{{ csrf_token() }}">
-                    `;
-                            document.body.appendChild(f);
-                            f.submit();
-                        });
-                    });
-                });
-
-                /* ================= REJECT ================= */
-                document.querySelectorAll('.btn-reject-transfer').forEach(btn => {
-                    btn.addEventListener('click', () => {
-                        Swal.fire({
-                            title: 'Reject Transfer',
-                            input: 'textarea',
-                            inputPlaceholder: 'Reason is required',
-                            showCancelButton: true,
-                            confirmButtonText: 'Reject',
-                            cancelButtonText: 'Cancel',
-                            inputValidator: v => !v && 'Reason is required'
-                        }).then(res => {
-                            if (!res.isConfirmed) return;
-
-                            const f = document.createElement('form');
-                            f.method = 'POST';
-                            f.action = btn.dataset.action;
-                            f.innerHTML = `
-                        <input type="hidden" name="_token" value="{{ csrf_token() }}">
-                        <input type="hidden" name="reason" value="${res.value}">
-                    `;
-                            document.body.appendChild(f);
-                            f.submit();
-                        });
-                    });
-                });
-
                 /* ================= VALIDASI GR MODAL ================= */
                 const mdlGr = document.getElementById('mdlGRTransfer');
                 if (mdlGr) {
@@ -735,23 +683,153 @@
         @endif
     @endpush
 
-    @if ($transfer->exists && $canPrintSJ)
+    @if ($transfer->exists)
         @push('scripts')
             <script>
                 document.addEventListener('DOMContentLoaded', function() {
-                    const btn = document.getElementById('btnPrintSJ');
-                    const iframe = document.getElementById('iframePrintSJ');
+                    /* ================= EVENT DELEGATION (ZERO REFRESH) ================= */
+                    document.addEventListener('click', function(e) {
+                        const btnApprove = e.target.closest('.btn-approve-transfer');
+                        const btnReject = e.target.closest('.btn-reject-transfer');
+                        const btnPrint = e.target.closest('#btnPrintSJ');
 
-                    if (!btn || !iframe) return;
+                        // 1. APPROVE
+                        if (btnApprove) {
+                            Swal.fire({
+                                icon: 'question',
+                                title: 'Approve Transfer?',
+                                showCancelButton: true,
+                                confirmButtonText: 'Approve',
+                                cancelButtonText: 'Cancel'
+                            }).then(res => {
+                                if (!res.isConfirmed) return;
+                                
+                                // AJAX Submit
+                                fetch(btnApprove.dataset.action, {
+                                    method: 'POST',
+                                    headers: {
+                                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                        'X-Requested-With': 'XMLHttpRequest'
+                                    }
+                                }).then(r => r.json()).then(data => {
+                                    if (data.success) {
+                                        showSuccess(data.message);
+                                        refreshTransferActions(); // Sedot HTML baru
+                                    } else {
+                                        showError(data.message);
+                                    }
+                                });
+                            });
+                        }
 
-                    btn.addEventListener('click', function() {
-                        iframe.src = "{{ route('warehouse-transfer.print-sj', $transfer->id) }}";
+                        // 2. REJECT
+                        if (btnReject) {
+                            Swal.fire({
+                                title: 'Reject Transfer',
+                                input: 'textarea',
+                                inputPlaceholder: 'Reason is required',
+                                showCancelButton: true,
+                                confirmButtonText: 'Reject',
+                                cancelButtonText: 'Cancel',
+                                inputValidator: v => !v && 'Reason is required'
+                            }).then(res => {
+                                if (!res.isConfirmed) return;
 
-                        iframe.onload = function() {
-                            iframe.contentWindow.focus();
-                            iframe.contentWindow.print();
-                        };
+                                fetch(btnReject.dataset.action, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                        'X-Requested-With': 'XMLHttpRequest'
+                                    },
+                                    body: JSON.stringify({ reason: res.value })
+                                }).then(r => r.json()).then(data => {
+                                    if (data.success) {
+                                        showSuccess(data.message);
+                                        refreshTransferActions(); // Sedot HTML baru
+                                    } else {
+                                        showError(data.message);
+                                    }
+                                });
+                            });
+                        }
+
+                        // 3. PRINT
+                        if (btnPrint) {
+                            const iframe = document.getElementById('iframePrintSJ');
+                            if (iframe) {
+                                iframe.src = "{{ route('warehouse-transfer.print-sj', $transfer->id) }}";
+                                iframe.onload = function() {
+                                    iframe.contentWindow.focus();
+                                    iframe.contentWindow.print();
+                                };
+                            }
+                        }
                     });
+
+                    // 📡 Listen to Reverb signal for this specific transfer
+                    // 📡 Listen to Reverb signal for this specific transfer
+                    window.addEventListener('reverb:warehouse-transfer-updated', (e) => {
+                        console.log('📡 [Signal] Detail Page detected update:', e.detail);
+                        const currentId = @json($transfer->id);
+                        
+                        if (e.detail && e.detail.transferId == currentId) {
+                            const newStatus = e.detail.status;
+                            const badge = document.getElementById('statusBadge');
+
+                            // 1. Update Badge Text & Color
+                            if (badge) {
+                                badge.innerText = newStatus;
+                                badge.className = 'badge text-uppercase'; // Reset classes
+                                if (['rejected', 'canceled'].includes(newStatus.toLowerCase())) {
+                                    badge.classList.add('bg-danger');
+                                } else if (newStatus.toLowerCase() === 'approved') {
+                                    badge.classList.add('bg-success');
+                                } else if (newStatus.toLowerCase() === 'completed') {
+                                    badge.classList.add('bg-primary');
+                                } else {
+                                    badge.classList.add('bg-info');
+                                }
+                            }
+
+                            // 2. Refresh Actions (Sedot HTML)
+                            if (window.refreshTransferActions) window.refreshTransferActions();
+
+                            // 3. Add to Log Dinamis
+                            const logList = document.getElementById('activityLogList');
+                            if (logList) {
+                                const now = new Date().toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }).replace(',', '');
+                                const li = document.createElement('li');
+                                li.className = 'list-group-item bg-light-primary'; // Beri highlight dikit
+                                li.innerHTML = `
+                                    <div class="d-flex justify-content-between">
+                                        <strong>${newStatus.toUpperCase()} (REAL-TIME)</strong>
+                                        <small class="text-muted">${now}</small>
+                                    </div>
+                                    <div class="small">By: System / Reverb</div>
+                                `;
+                                logList.prepend(li);
+                            }
+
+                            // Optional: Sound
+                            try { playNotificationSound(); } catch(err) {}
+
+                            console.log('✅ UI updated dynamically for status:', newStatus);
+                        }
+                    });
+
+                    // 🔄 Fungsi Sedot HTML Parsial
+                    window.refreshTransferActions = function() {
+                        fetch("{{ route('warehouse-transfer-forms.show', $transfer->id) }}?partial=actions")
+                            .then(r => r.text())
+                            .then(html => {
+                                const container = document.getElementById('transferActions');
+                                if (container) {
+                                    container.innerHTML = html;
+                                    console.log('✅ Action buttons refreshed seamlessly');
+                                }
+                            });
+                    };
                 });
             </script>
         @endpush

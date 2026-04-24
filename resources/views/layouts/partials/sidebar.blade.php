@@ -38,7 +38,6 @@ $isGroupActive = function ($groupKey, $list) {
 };
 @endphp
 
-<link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
 
 <aside id="layout-menu" class="layout-menu menu-vertical menu bg-menu-theme">
     <div class="app-brand demo">
