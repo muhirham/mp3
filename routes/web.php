@@ -390,6 +390,10 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->name('sales.handover.morning.verify')
         ->middleware('menu:wh_issue');
 
+    Route::post('/sales/handover/morning/cancel', [SalesHandoverController::class, 'cancelMorningHandover'])
+        ->name('sales.handover.morning.cancel')
+        ->middleware('menu:wh_issue');
+
     // SORE
     Route::get('/sales/handover/evening', [SalesHandoverController::class, 'eveningForm'])
         ->name('sales.handover.evening')

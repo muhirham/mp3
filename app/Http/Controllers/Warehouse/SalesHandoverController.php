@@ -676,6 +676,50 @@ EOT;
         }
         return back()->with('success', $msg);
     }
+
+    /**
+     * CANCEL HANDOVER (PAGI):
+     * Cuma bisa kalo status masih waiting_morning_otp
+     * Belum ada stok kepotong, jadi cuma ubah status aja.
+     */
+    public function cancelMorningHandover(Request $request)
+    {
+        $handoverId = $request->input('handover_id');
+        if (!$handoverId) {
+            return response()->json(['success' => false, 'message' => 'Handover ID is required.'], 400);
+        }
+
+        $handover = SalesHandover::find($handoverId);
+        if (!$handover) {
+            return response()->json(['success' => false, 'message' => 'Handover not found.'], 404);
+        }
+
+        if ($handover->status !== 'waiting_morning_otp') {
+            return response()->json(['success' => false, 'message' => 'Only handovers waiting for morning OTP can be cancelled.'], 400);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $handoverCode = $handover->code;
+            // Kita hapus permanen biar nomor urut bisa dipake lagi
+            $handover->delete();
+
+            // 🔔 Bersihkan notifikasi terkait
+            \App\Helpers\NotificationHelper::markAsReadByReference('handover_otp_sent', 'sales_handovers', $handoverId);
+
+            // 🔥 Tembak sinyal real-time: Handover di-cancel/hapus
+            broadcast(new \App\Events\HandoverUpdated($handover->sales_id, $handover->warehouse_id, $handoverId, 'cancelled'));
+
+            DB::commit();
+
+            return response()->json(['success' => true, 'message' => "Handover {$handoverCode} has been deleted/cancelled. You can create a new one with the same sequence if this was the last record today."]);
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => 'Failed to cancel handover: ' . $e->getMessage()], 500);
+        }
+    }
     /**
      * HALAMAN SORE:
      * - pilih handover status on_sales => input qty_returned (SALES)

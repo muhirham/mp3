@@ -197,10 +197,13 @@
                     <input type="text" name="otp_code" class="form-control"
                             inputmode="numeric" pattern="[0-9]*" placeholder="6 digits" required>
                     </div>
-                    <div class="col-md-4">
-                    <button type="submit" class="btn btn-success w-100 mt-3 mt-md-0">
-                        Verify OTP &amp; Lock Stock
-                    </button>
+                    <div class="col-md-4 d-flex gap-2">
+                        <button type="submit" class="btn btn-success flex-grow-1 mt-3 mt-md-0">
+                            Verify OTP &amp; Lock Stock
+                        </button>
+                        <button type="button" class="btn btn-outline-danger mt-3 mt-md-0" id="btnCancelMorning">
+                            <i class="bx bx-x-circle"></i> Cancel
+                        </button>
                     </div>
                 </form>
                 <div class="form-text mt-2">
@@ -571,6 +574,60 @@
                 Swal.fire({ icon: 'error', title: 'Connection Error', text: 'Failed to reach server.' });
             } finally {
                 if (window.resetSubmitButton) window.resetSubmitButton(form);
+            }
+        });
+
+        // 🔥 AJAX Cancel Handover Pagi (Warehouse Side) - Pake Event Delegation biar gak ilang pas refresh
+        document.addEventListener('click', async function(e) {
+            const btn = e.target.closest('#btnCancelMorning');
+            if (!btn) return;
+
+            const handoverId = document.querySelector('select[name="handover_id"]').value;
+            if (!handoverId) {
+                Swal.fire({ icon: 'warning', title: 'Oops', text: 'Please select a handover to cancel.' });
+                return;
+            }
+
+            const confirm = await Swal.fire({
+                title: 'Are you sure?',
+                text: "This will DELETE the handover permanently so you can reuse the sequence number. Stock will NOT be affected.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Yes, delete it!'
+            });
+
+            if (!confirm.isConfirmed) return;
+
+            Swal.fire({
+                title: 'Deleting...',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            try {
+                const response = await fetch("{{ route('sales.handover.morning.cancel') }}", {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ handover_id: handoverId })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    Swal.fire({ icon: 'success', title: 'Deleted', text: result.message });
+                    if (window.refreshMorningStatus) await window.refreshMorningStatus();
+                } else {
+                    Swal.fire({ icon: 'error', title: 'Failed', text: result.message || 'Error occurred.' });
+                }
+            } catch (err) {
+                console.error('AJAX Error:', err);
+                Swal.fire({ icon: 'error', title: 'Connection Error', text: 'Failed to reach server.' });
             }
         });
 
