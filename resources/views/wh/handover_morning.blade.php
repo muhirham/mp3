@@ -89,11 +89,11 @@
                 <table class="table table-sm align-middle" id="tblItems">
                     <thead>
                     <tr>
-                    <th style="width:45%">Product</th>
+                    <th style="width:35%">Product</th>
                     <th style="width:10%">Qty</th>
                     <th style="width:15%">Price</th>
-                    <th style="width:15%">Discount</th>
-                    <th style="width:20%">Total</th>
+                    <th style="width:25%">Discount</th>
+                    <th style="width:15%">Total</th>
 
                     <th style="width:5%"></th>
                     </tr>
@@ -129,11 +129,18 @@
                         <input type="text" class="form-control inp-price" readonly>
                     </td>
                     <td>
-                        <input type="number"
-                            class="form-control inp-discount"
-                            name="items[{{ $i }}][discount_per_unit]"
-                            min="0"
-                            value="{{ $draft?->discount_per_unit ?? 0 }}">
+                        <div class="input-group input-group-sm">
+                            <select name="items[{{ $i }}][discount_mode]" class="form-select sel-discount-mode" style="max-width: 80px;">
+                                <option value="unit" @selected(($draft?->discount_mode ?? 'unit') == 'unit')>Unit</option>
+                                <option value="fixed" @selected(($draft?->discount_mode ?? '') == 'fixed')>Fixed</option>
+                            </select>
+                            <input type="number"
+                                class="form-control inp-discount"
+                                name="{{ ($draft?->discount_mode ?? 'unit') == 'fixed' ? 'items['.$i.'][discount_fixed_amount]' : 'items['.$i.'][discount_per_unit]' }}"
+                                min="0"
+                                value="{{ ($draft?->discount_mode ?? 'unit') == 'unit' ? ($draft?->discount_per_unit ?? 0) : ($draft?->discount_fixed_amount ?? 0) }}"
+                                placeholder="Value">
+                        </div>
                     </td>
                     <td>
                         <input type="text" class="form-control inp-total" readonly>
@@ -315,12 +322,23 @@
     // reindex semua row supaya name items[0]..items[n] selalu rapi
     function reindexRows(){
         [...tbody.querySelectorAll('tr')].forEach((tr, idx) => {
-        const sel = tr.querySelector('.sel-product');
-        const qty = tr.querySelector('.inp-qty');
-        if (sel) sel.name = `items[${idx}][product_id]`;
-        if (qty) qty.name = `items[${idx}][qty]`;
-        const disc = tr.querySelector('.inp-discount');
-        if (disc) disc.name = `items[${idx}][discount_per_unit]`;
+            const sel = tr.querySelector('.sel-product');
+            const qty = tr.querySelector('.inp-qty');
+            const mode = tr.querySelector('.sel-discount-mode');
+            const disc = tr.querySelector('.inp-discount');
+
+            if (sel) sel.name = `items[${idx}][product_id]`;
+            if (qty) qty.name = `items[${idx}][qty]`;
+            if (mode) mode.name = `items[${idx}][discount_mode]`;
+            if (disc) {
+                // Mapping name berdasarkan mode biar controller nggak bingung
+                const currentMode = mode?.value || 'unit';
+                if (currentMode === 'fixed') {
+                    disc.name = `items[${idx}][discount_fixed_amount]`;
+                } else {
+                    disc.name = `items[${idx}][discount_per_unit]`;
+                }
+            }
         });
     }
 
@@ -329,14 +347,21 @@
         const priceInput = tr.querySelector('.inp-price');
         const totalInput = tr.querySelector('.inp-total');
         const discountEl = tr.querySelector('.inp-discount');
+        const modeEl     = tr.querySelector('.sel-discount-mode');
         const select     = tr.querySelector('.sel-product');
 
         const qty      = parseInt(qtyInput.value || '0', 10);
         const price    = parseInt(select.selectedOptions[0]?.dataset.price || '0', 10);
         const discount = parseInt(discountEl?.value || '0', 10);
+        const mode     = modeEl?.value || 'unit';
 
-        const netPrice = Math.max(price - discount, 0);
-        const total    = qty * netPrice;
+        let total = 0;
+        if (mode === 'fixed') {
+            total = Math.max((qty * price) - discount, 0);
+        } else {
+            const netPrice = Math.max(price - discount, 0);
+            total = qty * netPrice;
+        }
 
         priceInput.value = price ? formatIdr(price) : '0';
         totalInput.value = formatIdr(total);
@@ -350,9 +375,14 @@
                 const qty      = parseInt(tr.querySelector('.inp-qty').value || '0', 10);
                 const price    = parseInt(select.selectedOptions[0]?.dataset.price || '0', 10);
                 const discount = parseInt(tr.querySelector('.inp-discount')?.value || '0', 10);
+                const mode     = tr.querySelector('.sel-discount-mode')?.value || 'unit';
 
-                const netPrice = Math.max(price - discount, 0);
-                grand += qty * netPrice;
+                if (mode === 'fixed') {
+                    grand += Math.max((qty * price) - discount, 0);
+                } else {
+                    const netPrice = Math.max(price - discount, 0);
+                    grand += qty * netPrice;
+                }
             });
             grandLabel.textContent = formatIdr(grand);
         }
@@ -360,29 +390,27 @@
 
     tbody.addEventListener('change', (e)=>{
         if (e.target.classList.contains('sel-product') ||
-            e.target.classList.contains('inp-qty')) {
-        const tr = e.target.closest('tr');
-        recomputeRow(tr);
-        recomputeGrand();
+            e.target.classList.contains('inp-qty') ||
+            e.target.classList.contains('sel-discount-mode')) {
+            const tr = e.target.closest('tr');
+            if (e.target.classList.contains('sel-discount-mode')) {
+                reindexRows(); // Update name attribute based on mode
+            }
+            recomputeRow(tr);
+            recomputeGrand();
         }
         if (e.target.classList.contains('inp-discount')) {
-        const tr = e.target.closest('tr');
-        recomputeRow(tr);
-        recomputeGrand();
-}
-
+            const tr = e.target.closest('tr');
+            recomputeRow(tr);
+            recomputeGrand();
+        }
     });
 
     tbody.addEventListener('input', (e)=>{
-        if (e.target.classList.contains('inp-qty')) {
-        const tr = e.target.closest('tr');
-        recomputeRow(tr);
-        recomputeGrand();
-        }
-        if (e.target.classList.contains('inp-discount')) {
-        const tr = e.target.closest('tr');
-        recomputeRow(tr);
-        recomputeGrand();
+        if (e.target.classList.contains('inp-qty') || e.target.classList.contains('inp-discount')) {
+            const tr = e.target.closest('tr');
+            recomputeRow(tr);
+            recomputeGrand();
         }
     });
 
@@ -413,10 +441,16 @@
         </td>
         <td><input type="text" class="form-control inp-price" readonly></td>
         <td>
-            <input type="number"
-                class="form-control inp-discount"
-                name="items[${newIndex}][discount_per_unit]"
-                min="0" value="0">
+            <div class="input-group input-group-sm">
+                <select name="items[${newIndex}][discount_mode]" class="form-select sel-discount-mode" style="max-width: 80px;">
+                    <option value="unit">Unit</option>
+                    <option value="fixed">Fixed</option>
+                </select>
+                <input type="number"
+                    class="form-control inp-discount"
+                    name="items[${newIndex}][discount_per_unit]"
+                    min="0" value="0" placeholder="Value">
+            </div>
         </td>
         <td><input type="text" class="form-control inp-total" readonly></td>
         <td class="text-end">

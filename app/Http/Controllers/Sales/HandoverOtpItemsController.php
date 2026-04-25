@@ -153,6 +153,38 @@ class HandoverOtpItemsController extends Controller
         $request->session()->put('sales_active_handover_id', $matched->id);
         $request->session()->put('sales_handover_otp_verified_' . $matched->id, true);
 
+        // 🔥 CRITICAL FIX: Lock the discount calculations into the database upon verification
+        // This ensures data integrity for bundle/fixed discounts from the start.
+        DB::transaction(function() use ($matched) {
+            $matched->load('items');
+            foreach ($matched->items as $it) {
+                $qtyStart = (int)$it->qty_start;
+                $price    = (int)$it->unit_price;
+                $mode     = $it->discount_mode ?? 'unit';
+                $discUnit = (int)($it->discount_per_unit ?? 0);
+                $discFix  = (int)($it->discount_fixed_amount ?? 0);
+
+                // 1. Line Total Start (Original Price)
+                $it->line_total_start = $qtyStart * $price;
+
+                // 2. Net & Discount Calculation
+                if ($mode === 'fixed') {
+                    $it->line_total_after_discount = max(0, ($qtyStart * $price) - $discFix);
+                    $it->unit_price_after_discount = $qtyStart > 0 ? (int)round($it->line_total_after_discount / $qtyStart) : $price;
+                    // discount_total for morning is 0 until things are sold, 
+                    // BUT for some reports we might want to store the "Potential" discount.
+                    // For now, we keep it consistent with savePayments logic.
+                    $it->discount_total = 0; 
+                } else {
+                    $priceAfter = max(0, $price - $discUnit);
+                    $it->unit_price_after_discount = $priceAfter;
+                    $it->line_total_after_discount = $qtyStart * $priceAfter;
+                    $it->discount_total = 0;
+                }
+                $it->save();
+            }
+        });
+
         // 🔔 Bersihkan notifikasi "OTP Pagi Sent" karena sudah diverifikasi oleh Sales
         \App\Helpers\NotificationHelper::markAsReadByReference('handover_otp_sent', 'sales_handovers', $matched->id);
 
@@ -255,20 +287,34 @@ class HandoverOtpItemsController extends Controller
                         ? ($isRejected ? $totalQty : $baseSoldQty)
                         : $baseSoldQty + $totalQty;
 
-                    $qtyReturned = max(0, $qtyStart - $qtySold);
+                    // 🔥 FIX: Jangan anggap returned dulu kalau masih On Sales / Draft
+                    $qtyReturned = ($isFinal) ? max(0, $qtyStart - $qtySold) : 0;
 
                     $cashAmount = max(0, (int) ($row['payment_cash_amount'] ?? 0));
                     $transferAmount = max(0, (int) ($row['payment_transfer_amount'] ?? 0));
 
-                    // Nominal validation: Must be exactly Qty * NetPrice
+                    // Nominal validation: Must be exactly Qty * NetPrice (Proportional for Fixed Mode)
+                    $discountMode = $item->discount_mode ?? 'unit';
+                    $discountFixed = (int) ($item->discount_fixed_amount ?? 0);
                     $discountPerUnit = (int) ($item->discount_per_unit ?? 0);
-                    $netPrice = max(0, $unitPrice - $discountPerUnit);
 
-                    if ($cashAmount !== ($netPrice * $cashQty)) {
-                        throw new \RuntimeException("Cash amount must be exactly " . ($netPrice * $cashQty) . " for item #{$item->id}");
+                    if ($discountMode === 'fixed' && $qtyStart > 0) {
+                        // Fixed: gunakan nilai NET total pagi sebagai acuan
+                        $lineNetMorning = (int) ($item->line_total_after_discount ?? max(0, ($qtyStart * $unitPrice) - $discountFixed));
+                        // Amount per qty = proportional
+                        $expectedCashAmt = (int) round($cashQty * $lineNetMorning / $qtyStart);
+                        $expectedTransAmt = (int) round($transferQty * $lineNetMorning / $qtyStart);
+                    } else {
+                        $netPrice = max(0, $unitPrice - $discountPerUnit);
+                        $expectedCashAmt = $netPrice * $cashQty;
+                        $expectedTransAmt = $netPrice * $transferQty;
                     }
-                    if ($transferAmount !== ($netPrice * $transferQty)) {
-                        throw new \RuntimeException("Transfer amount must be exactly " . ($netPrice * $transferQty) . " for item #{$item->id}");
+
+                    if ($cashAmount !== $expectedCashAmt) {
+                        throw new \RuntimeException("Cash amount must be exactly {$expectedCashAmt} for item #{$item->id}");
+                    }
+                    if ($transferAmount !== $expectedTransAmt) {
+                        throw new \RuntimeException("Transfer amount must be exactly {$expectedTransAmt} for item #{$item->id}");
                     }
 
                     // Proof required when there is a transfer payment
@@ -312,12 +358,25 @@ class HandoverOtpItemsController extends Controller
                     $item->qty_returned = $qtyReturned;
                     $item->line_total_sold = $qtySold * $unitPrice;
 
-                    // Discount handling
-                    $discountPerUnit = (int) ($item->discount_per_unit ?? 0);
-                    $netPrice = max(0, $unitPrice - $discountPerUnit);
-                    $item->unit_price_after_discount = $netPrice;
-                    $item->line_total_after_discount = $qtySold * $netPrice;
-                    $item->discount_total = $discountPerUnit * $qtySold;
+                    // Discount handling - SUPPORT FIXED MODE
+                    $discountMode = $item->discount_mode ?? 'unit';
+                    if ($discountMode === 'fixed' && $qtyStart > 0) {
+                        // line_total_after_discount = TOTAL VALUE OF QTY_START (Carried Value)
+                        $itMorningNet = (int)($item->getOriginal('line_total_after_discount') ?: ($item->line_total_after_discount ?: max(0, ($qtyStart * $unitPrice) - (int)$item->discount_fixed_amount)));
+                        
+                        $item->line_total_after_discount = $itMorningNet; 
+                        $item->line_total_sold = (int)round($qtySold * $itMorningNet / $qtyStart);
+                        $item->discount_total  = (int)round($qtySold * (int)$item->discount_fixed_amount / $qtyStart);
+                        $item->unit_price_after_discount = (int)round($itMorningNet / $qtyStart);
+                    } else {
+                        $discountPerUnit = (int) ($item->discount_per_unit ?? 0);
+                        $netPrice = max(0, $unitPrice - $discountPerUnit);
+                        
+                        $item->unit_price_after_discount = $netPrice;
+                        $item->line_total_after_discount = $qtyStart * $netPrice; // Tetap Qty Start!
+                        $item->line_total_sold = $qtySold * $netPrice;
+                        $item->discount_total = $discountPerUnit * $qtySold;
+                    }
 
                     if ((int) $item->line_total_start <= 0) {
                         $item->line_total_start = $qtyStart * $unitPrice;

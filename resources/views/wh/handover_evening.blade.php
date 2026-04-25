@@ -41,9 +41,41 @@
             // edit approval hanya kalau belum closed
             $canEdit = $handover->status !== 'closed';
 
-            $summaryIssued = (int) $handover->items->sum('qty_start');
-            $summaryReturned = (int) $handover->items->sum('qty_returned');
-            $summarySold = (int) $handover->items->sum('qty_sold');
+            // === HYBRID: Saldo (price=1) pake NET Value, Fisik pake Unit Qty ===
+            $summaryIssued = (int) $handover->items->sum(function ($it) {
+                $isSaldo = (int)($it->unit_price ?? 0) === 1;
+                if ($isSaldo) {
+                    $val = (int)($it->line_total_after_discount ?? 0);
+                    return ($val > 0) ? $val : max(0, ((int)$it->qty_start * (int)$it->unit_price) - (int)($it->discount_fixed_amount ?? 0));
+                }
+                return (int) $it->qty_start;
+            });
+            $summaryReturned = (int) $handover->items->sum(function ($it) {
+                $isSaldo = (int)($it->unit_price ?? 0) === 1;
+                if ($isSaldo) {
+                    $qtyStart = (int)$it->qty_start;
+                    $qtyRet = (int)$it->qty_returned;
+                    if ($qtyStart <= 0 || $qtyRet <= 0) return 0;
+                    $val = (int)($it->line_total_after_discount ?? 0);
+                    $netMorning = ($val > 0) ? $val : max(0, ($qtyStart * (int)$it->unit_price) - (int)($it->discount_fixed_amount ?? 0));
+                    return (int)round($qtyRet * $netMorning / $qtyStart);
+                }
+                return (int) $it->qty_returned;
+            });
+            $summarySold = (int) $handover->items->sum(function ($it) {
+                $isSaldo = (int)($it->unit_price ?? 0) === 1;
+                if ($isSaldo) {
+                    $valSold = (int)($it->line_total_sold ?? 0);
+                    if ($valSold > 0) return $valSold;
+                    $qtyStart = (int)$it->qty_start;
+                    $qtySold = (int)$it->qty_sold;
+                    if ($qtyStart <= 0 || $qtySold <= 0) return 0;
+                    $val = (int)($it->line_total_after_discount ?? 0);
+                    $netMorning = ($val > 0) ? $val : max(0, ($qtyStart * (int)$it->unit_price) - (int)($it->discount_fixed_amount ?? 0));
+                    return (int)round($qtySold * $netMorning / $qtyStart);
+                }
+                return (int) $it->qty_sold;
+            });
             $summaryCash = (int) $handover->items->sum(function ($it) {
                 return (int) ($it->payment_cash_amount ?? 0);
             });
@@ -233,17 +265,17 @@
                 <div class="approval-summary-grid">
                     <div class="approval-summary-card">
                         <div class="approval-summary-label">Issued Qty</div>
-                        <div class="approval-summary-value">{{ $summaryIssued }}</div>
+                        <div class="approval-summary-value">{{ number_format($summaryIssued, 0, ',', '.') }}</div>
                         <div class="approval-summary-note">Total units carried by sales</div>
                     </div>
                     <div class="approval-summary-card">
                         <div class="approval-summary-label">Returned Qty</div>
-                        <div class="approval-summary-value">{{ $summaryReturned }}</div>
+                        <div class="approval-summary-value">{{ number_format($summaryReturned, 0, ',', '.') }}</div>
                         <div class="approval-summary-note">Units returned</div>
                     </div>
                     <div class="approval-summary-card">
                         <div class="approval-summary-label">Sold Qty</div>
-                        <div class="approval-summary-value">{{ $summarySold }}</div>
+                        <div class="approval-summary-value">{{ number_format($summarySold, 0, ',', '.') }}</div>
                         <div class="approval-summary-note">Units sold entered by sales</div>
                     </div>
                     <div class="approval-summary-card">
@@ -320,7 +352,8 @@
                                 {{ number_format($summaryTotal, 0, ',', '.') }}</span>
                         </div>
 
-                        <form id="approvalForm" method="POST" action="{{ route('warehouse.handovers.payments.approve', $handover) }}">
+                        <form id="approvalForm" method="POST"
+                            action="{{ route('warehouse.handovers.payments.approve', $handover) }}">
                             @csrf
 
                             <style>
@@ -329,22 +362,54 @@
                                     width: 100% !important;
                                 }
 
-                                .table-approval th,
+                                .table-approval th {
+                                    font-size: 0.68rem !important;
+                                    padding: 0.3rem 0.15rem !important;
+                                    white-space: nowrap;
+                                }
+
                                 .table-approval td {
-                                    font-size: 0.78rem !important;
-                                    padding: 0.4rem 0.2rem !important;
-                                    overflow: hidden;
-                                    text-overflow: ellipsis;
+                                    font-size: 0.7rem !important;
+                                    padding: 0.25rem 0.15rem !important;
+                                    vertical-align: middle;
+                                }
+
+                                .table-approval td .cell-main {
+                                    white-space: nowrap;
+                                    font-size: 0.7rem !important;
+                                }
+
+                                .table-approval td .cell-sub {
+                                    font-size: 0.6rem !important;
+                                    line-height: 1.2;
+                                }
+
+                                .table-approval td .fw-semibold {
+                                    font-size: 0.7rem !important;
+                                }
+
+                                .table-approval td .small {
+                                    font-size: 0.6rem !important;
                                 }
 
                                 .table-approval input.form-control-sm {
-                                    font-size: 0.75rem !important;
-                                    padding: 0.2rem 0.4rem !important;
-                                    min-height: 28px !important;
+                                    font-size: 0.65rem !important;
+                                    padding: 0.15rem 0.3rem !important;
+                                    min-height: 24px !important;
                                 }
 
                                 .table-approval .form-check-label {
-                                    font-size: 0.75rem !important;
+                                    font-size: 0.65rem !important;
+                                }
+
+                                .table-approval .badge {
+                                    font-size: 0.6rem !important;
+                                    padding: 0.2em 0.4em !important;
+                                }
+
+                                .table-approval .btn-sm {
+                                    font-size: 0.6rem !important;
+                                    padding: 0.15rem 0.4rem !important;
                                 }
                             </style>
 
@@ -352,19 +417,19 @@
                                 <table class="table table-sm table-hover align-middle table-approval">
                                     <thead>
                                         <tr>
-                                            <th style="width:13%">Product</th>
-                                            <th class="text-end" style="width:4%">Iss.</th>
-                                            <th class="text-end" style="width:4%">Ret.</th>
-                                            <th class="text-end" style="width:4.5%">Sold</th>
-                                            <th class="text-end" style="width:8%">Price</th>
-                                            <th class="text-end" style="width:8.5%">Net Price</th>
-                                            <th class="text-end" style="width:8.5%">Sold Val.</th>
-                                            <th class="text-end" style="width:5.5%">Pay.Qty</th>
-                                            <th class="text-center" style="width:5.5%">Method</th>
-                                            <th class="text-end" style="width:9%">Amount</th>
-                                            <th style="width:5.5%">Proof</th>
-                                            <th style="width:8%">Decision</th>
-                                            <th style="width:16.5%">Rejection Reason</th>
+                                            <th style="width:11%">Product</th>
+                                            <th class="text-end" style="width:7%">ISS.</th>
+                                            <th class="text-end" style="width:5%">RET.</th>
+                                            <th class="text-end" style="width:7.5%">SOLD</th>
+                                            <th class="text-end" style="width:8%">PRICE</th>
+                                            <th class="text-end" style="width:9%">NET PRICE</th>
+                                            <th class="text-end" style="width:9%">SOLD VAL.</th>
+                                            <th class="text-end" style="width:6%">PAY.QTY</th>
+                                            <th class="text-center" style="width:6%">METHOD</th>
+                                            <th class="text-end" style="width:9.5%">AMOUNT</th>
+                                            <th style="width:5.5%">PROOF</th>
+                                            <th style="width:8%">DECISION</th>
+                                            <th style="width:11.5%">REJECTION REASON</th>
                                         </tr>
                                     </thead>
 
@@ -384,7 +449,11 @@
                                                 $transferAmount = (int) ($item->payment_transfer_amount ?? 0);
                                                 $proofPaths = $item->payment_transfer_proof_meta ?? [];
 
-                                                if ($cashQty === 0 && $transferQty === 0 && (int) $item->payment_qty > 0) {
+                                                if (
+                                                    $cashQty === 0 &&
+                                                    $transferQty === 0 &&
+                                                    (int) $item->payment_qty > 0
+                                                ) {
                                                     if ($item->payment_method === 'cash') {
                                                         $cashQty = (int) $item->payment_qty;
                                                         $cashAmount = (int) $item->payment_amount;
@@ -400,6 +469,27 @@
                                                     $cashQty > 0 => 'CASH',
                                                     default => '-',
                                                 };
+
+                                                // === HYBRID DISPLAY: Saldo pake NET, Fisik pake Unit ===
+                                                $evIsSaldo = (int)($item->unit_price ?? 0) === 1;
+                                                $evQtyStart = (int)$item->qty_start;
+                                                $evDiscFixed = (int)($item->discount_fixed_amount ?? 0);
+                                                $evDbNet = (int)($item->line_total_after_discount ?? 0);
+                                                $evNetMorning = ($evDbNet > 0) ? $evDbNet : max(0, ($evQtyStart * (int)$item->unit_price) - $evDiscFixed);
+
+                                                if ($evIsSaldo) {
+                                                    $dispIssued = $evNetMorning;
+                                                    $dispReturned = ($evQtyStart > 0 && (int)$item->qty_returned > 0)
+                                                        ? (int)round((int)$item->qty_returned * $evNetMorning / $evQtyStart) : 0;
+                                                    $dispSold = (int)($item->line_total_sold ?? 0);
+                                                    if ($dispSold <= 0 && (int)$item->qty_sold > 0 && $evQtyStart > 0) {
+                                                        $dispSold = (int)round((int)$item->qty_sold * $evNetMorning / $evQtyStart);
+                                                    }
+                                                } else {
+                                                    $dispIssued = $evQtyStart;
+                                                    $dispReturned = (int) $item->qty_returned;
+                                                    $dispSold = (int) $item->qty_sold;
+                                                }
                                             @endphp
 
                                             <tr>
@@ -413,19 +503,20 @@
                                                 </td>
 
                                                 <td class="text-end">
-                                                    <div class="cell-main">{{ (int) $item->qty_start }}</div>
+                                                    <div class="cell-main">{{ number_format($dispIssued, 0, ',', '.') }}</div>
                                                 </td>
                                                 <td class="text-end">
-                                                    <div class="cell-main">{{ (int) $item->qty_returned }}</div>
+                                                    <div class="cell-main">{{ number_format($dispReturned, 0, ',', '.') }}</div>
                                                 </td>
                                                 <td class="text-end">
-                                                    <div class="cell-main">{{ (int) $item->qty_sold }}</div>
+                                                    <div class="cell-main">{{ number_format($dispSold, 0, ',', '.') }}</div>
                                                 </td>
 
                                                 {{-- Harga Satuan (Orig) --}}
                                                 <td class="text-end">
                                                     <div class="cell-main">
-                                                        {{ 'Rp ' . number_format((int) $item->unit_price, 0, ',', '.') }}</div>
+                                                        {{ 'Rp ' . number_format((int) $item->unit_price, 0, ',', '.') }}
+                                                    </div>
                                                 </td>
 
                                                 {{-- Net Price (After Discount) --}}
@@ -435,7 +526,8 @@
                                                     </div>
                                                     @if ($item->discount_per_unit > 0)
                                                         <div class="cell-sub text-danger">
-                                                            - {{ number_format((int) $item->discount_per_unit, 0, ',', '.') }}
+                                                            -
+                                                            {{ number_format((int) $item->discount_per_unit, 0, ',', '.') }}
                                                         </div>
                                                     @endif
                                                 </td>
@@ -561,10 +653,12 @@
                                                                     <div class="cell-main">Total:
                                                                         {{ (int) $item->payment_qty }}</div>
                                                                     <div class="cell-sub">Cash: {{ $cashQty }}</div>
-                                                                    <div class="cell-sub">Transfer: {{ $transferQty }}</div>
+                                                                    <div class="cell-sub">Transfer: {{ $transferQty }}
+                                                                    </div>
                                                                 </div>
                                                                 <div class="col-md-6">
-                                                                    <div class="small text-muted fw-semibold">Amount Breakdown
+                                                                    <div class="small text-muted fw-semibold">Amount
+                                                                        Breakdown
                                                                     </div>
                                                                     <div class="cell-main">Total: Rp
                                                                         {{ number_format((int) $item->payment_amount, 0, ',', '.') }}
@@ -572,7 +666,8 @@
                                                                     <div class="cell-sub">Cash: Rp
                                                                         {{ number_format($cashAmount, 0, ',', '.') }}</div>
                                                                     <div class="cell-sub">Transfer: Rp
-                                                                        {{ number_format($transferAmount, 0, ',', '.') }}</div>
+                                                                        {{ number_format($transferAmount, 0, ',', '.') }}
+                                                                    </div>
                                                                 </div>
                                                             </div>
 
@@ -591,14 +686,18 @@
                                                                                 ],
                                                                             );
                                                                             $proofExt = strtolower(
-                                                                                pathinfo($proofPath, PATHINFO_EXTENSION),
+                                                                                pathinfo(
+                                                                                    $proofPath,
+                                                                                    PATHINFO_EXTENSION,
+                                                                                ),
                                                                             );
                                                                             $proofType =
                                                                                 $proofExt === 'pdf' ? 'pdf' : 'image';
                                                                             $proofQty = (int) ($proofMeta['qty'] ?? 0);
                                                                             $proofAmount =
                                                                                 (int) ($proofMeta['amount'] ?? 0);
-                                                                            $proofSavedAt = $proofMeta['saved_at'] ?? null;
+                                                                            $proofSavedAt =
+                                                                                $proofMeta['saved_at'] ?? null;
                                                                             $proofLabel =
                                                                                 $proofMeta['label'] ??
                                                                                 'Transfer ' . ($proofIndex + 1);
@@ -631,7 +730,8 @@
                                                                                     <div class="small text-muted mb-2">
                                                                                         {{ strtoupper($proofExt) }}</div>
                                                                                 @endif
-                                                                                <a href="{{ $proofRoute }}" target="_blank"
+                                                                                <a href="{{ $proofRoute }}"
+                                                                                    target="_blank"
                                                                                     class="btn btn-outline-primary btn-sm w-100">
                                                                                     Open
                                                                                 </a>
@@ -640,7 +740,8 @@
                                                                     @endforeach
                                                                 </div>
                                                             @else
-                                                                <div class="text-muted small">No transfer proof uploaded.</div>
+                                                                <div class="text-muted small">No transfer proof uploaded.
+                                                                </div>
                                                             @endif
                                                         </div>
                                                     </div>
@@ -716,7 +817,9 @@
         window.refreshEveningList = async function() {
             try {
                 const res = await fetch(window.location.href, {
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
                 });
                 const html = await res.text();
                 const parser = new DOMParser();
@@ -727,7 +830,9 @@
                 if (newContent) {
                     document.querySelector('#eveningReconciliationContainer').innerHTML = newContent.innerHTML;
                 }
-            } catch (err) { console.error('Failed to refresh evening list:', err); }
+            } catch (err) {
+                console.error('Failed to refresh evening list:', err);
+            }
         };
 
         $(document).ready(function() {
@@ -737,7 +842,7 @@
                 if (form.id !== 'approvalForm') return; // Cuma tangkap form approval
 
                 e.preventDefault(); // Stop reload
-                
+
                 // 🔥 Konfirmasi Sesuai Desain Premium Lo Cok (Fixing Button Style)
                 const resultConfirm = await Swal.fire({
                     title: 'Process payment decisions?',
@@ -756,25 +861,29 @@
                     if (window.resetSubmitButton) window.resetSubmitButton(form);
                     return;
                 }
-                
+
                 // Double click protection
                 if (form.dataset.submittingLocal === 'true') return;
                 form.dataset.submittingLocal = 'true';
-                
+
                 const formData = new FormData(form);
-                
+
                 Swal.fire({
                     title: 'Processing Decision...',
                     text: 'Please wait, updating inventory & payments.',
                     allowOutsideClick: false,
-                    didOpen: () => { Swal.showLoading(); }
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
                 });
 
                 try {
                     const response = await fetch(form.action, {
                         method: 'POST',
                         body: formData,
-                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
                     });
 
                     const result = await response.json();
@@ -790,11 +899,19 @@
                         // SEGERIN TABEL
                         if (window.refreshEveningList) await window.refreshEveningList();
                     } else {
-                        Swal.fire({ icon: 'error', title: 'Oops...', text: result.message || 'Error occurred.' });
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Oops...',
+                            text: result.message || 'Error occurred.'
+                        });
                     }
                 } catch (err) {
                     console.error('AJAX Error:', err);
-                    Swal.fire({ icon: 'error', title: 'Network Error', text: 'Check your connection.' });
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Network Error',
+                        text: 'Check your connection.'
+                    });
                 } finally {
                     form.dataset.submittingLocal = 'false';
                     // 🔥 BALIKIN TOMBOL KE ASAL (MATIIN SPINNER)

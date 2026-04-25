@@ -62,12 +62,13 @@ class SalesReportExport implements FromArray, WithEvents, ShouldAutoSize
             'Qty Terjual',
             'Qty Kembali',
             'Harga Asli',
+            'Harga NET',
+            'Mode Diskon',
             'Diskon',
-            'Harga After Disc',
-            'Nilai Dibawa',
-            'Nilai Terjual'
+            'Nilai Dibawa (NET)',
+            'Nilai Terjual (NET)'
         ], $rows);
-        $this->lastColumnIndex = 15;
+        $this->lastColumnIndex = 16;
 
         $grandTotal = 0;
 
@@ -80,14 +81,27 @@ class SalesReportExport implements FromArray, WithEvents, ShouldAutoSize
 
                 $qtyStart = (int) ($it->qty_start ?? 0);
                 $qtySold  = (int) ($it->qty_sold ?? 0);
-
-                $priceOri = (int) ($it->unit_price ?? 0);
-                $disc     = (int) ($it->discount_per_unit ?? 0);
-                $priceNet = max(0, $priceOri - $disc);
-
-                $nilaiDibawa  = $qtyStart * $priceNet;
-                $nilaiTerjual = $qtySold * $priceNet;
                 $qtyReturn = max(0, $qtyStart - $qtySold);
+
+                $priceOri    = (int) ($it->unit_price ?? 0);
+                $discMode    = $it->discount_mode ?? 'unit';
+                $discUnit    = (int) ($it->discount_per_unit ?? 0);
+                $discFixed   = (int) ($it->discount_fixed_amount ?? 0);
+                $discTotal   = (int) ($it->discount_total ?? 0);
+
+                if ($discMode === 'fixed') {
+                    // Fixed/bundle: nilai dibawa = total NET (setelah diskon bundle)
+                    $nilaiDibawa  = (int) ($it->line_total_after_discount ?? max(0, ($qtyStart * $priceOri) - $discFixed));
+                    $nilaiTerjual = (int) ($it->line_total_sold ?? 0);
+                    $discDisplay  = $discFixed;   // tampilkan nilai bundle
+                    $priceNet     = $qtyStart > 0 ? (int) floor($nilaiDibawa / $qtyStart) : $priceOri;
+                } else {
+                    // Unit: harga net per unit dikurangi diskon
+                    $priceNet     = max(0, $priceOri - $discUnit);
+                    $nilaiDibawa  = (int) ($it->line_total_after_discount ?? ($qtyStart * $priceNet));
+                    $nilaiTerjual = (int) ($it->line_total_sold ?? ($qtySold * $priceNet));
+                    $discDisplay  = $discUnit;
+                }
 
                 $nilaiDibawaTotal += $nilaiDibawa;
                 $handoverTotal    += $nilaiTerjual;
@@ -107,10 +121,11 @@ class SalesReportExport implements FromArray, WithEvents, ShouldAutoSize
                     $qtySold,
                     $qtyReturn,
                     $priceOri,
-                    $disc,
-                    $priceNet,
-                    $nilaiDibawa,
-                    $nilaiTerjual,
+                    $priceNet,               // Harga NET
+                    strtoupper($discMode),   // Mode Diskon
+                    $discDisplay,            // Diskon (per unit atau bundle)
+                    $nilaiDibawa,            // Nilai Dibawa (NET)
+                    $nilaiTerjual,           // Nilai Terjual (NET)
                 ], $rows);
             }
 
@@ -161,9 +176,9 @@ class SalesReportExport implements FromArray, WithEvents, ShouldAutoSize
                 }
 
                 /* ================= NUMBER FORMAT ================= */
-                // K: Qty Kembali, L: Harga Asli, M: Diskon, N: Harga After Disc, O: Nilai Dibawa, P: Nilai Terjual
-                // Karena kita baris 1 header, kolom-kolom numeric kita ada di H-O (Index 8-15)
-                foreach (['H','I','J','K','L','M','N','O'] as $c) {
+                // K: Qty Kembali, L: Harga Asli, M: Harga NET, N: Mode Diskon, O: Diskon, P: Nilai Dibawa, Q: Nilai Terjual
+                // Karena kita baris 1 header, kolom-kolom numeric kita ada di H-Q (Index 8-17)
+                foreach (['H','I','J','K','L','M','O','P','Q'] as $c) {
                     $sheet->getStyle("{$c}1:{$c}{$lastRow}")
                         ->getNumberFormat()
                         ->setFormatCode('#,##0');

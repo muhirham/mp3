@@ -820,7 +820,34 @@
 
                         let htmlItems = '';
                         it.forEach(row => {
-                            const hasDiscount = (row.discount_per_unit || 0) > 0;
+                            const discMode = row.discount_mode || 'unit';
+                            const discUnit = row.discount_per_unit || 0;
+                            const discFixed = row.discount_fixed_amount || 0;
+                            const discTotal = row.discount_total || 0;
+
+                            // Kolom DISCOUNT — tampilkan nilai & jenis
+                            let discLabel = '-';
+                            if (discMode === 'fixed' && discFixed > 0) {
+                                discLabel =
+                                    `${formatRp(discFixed)} <br><small class="text-info fw-semibold"></small>`;
+                            } else if (discUnit > 0) {
+                                discLabel =
+                                    `${formatRp(discUnit)} <br><small class="text-muted"></small>`;
+                            }
+
+                            // Kolom PRICE AFTER DISCOUNT
+                            // - Mode Unit  : tampil harga per-unit setelah diskon (Rp 28.000)
+                            // - Mode Fixed : tampil total NET baris (Rp 19.700.000) — per-unit tidak relevan
+                            let priceAfterHtml = '';
+                            if (discMode === 'fixed') {
+                                const netTotal = row.line_net_dispatched || 0;
+                                priceAfterHtml =
+                                    `${formatRp(netTotal)}<br><small class="text-info">(Net)</small>`;
+                            } else {
+                                priceAfterHtml = formatRp(row.unit_price_after_discount ?? row
+                                    .unit_price ?? 0);
+                            }
+
                             htmlItems += `
                                 <tr>
                                     <td>
@@ -831,14 +858,8 @@
                                     <td class="text-end">${row.qty_returned ?? 0}</td>
                                     <td class="text-end">${row.qty_sold ?? 0}</td>
                                     <td class="text-end">${formatRp(row.unit_price || 0)}</td>
-                                    <td class="text-end">
-                                        ${hasDiscount ? formatRp(row.discount_per_unit) : '-'}
-                                    </td>
-                                    <td class="text-end">
-                                        ${hasDiscount
-                                        ? formatRp(row.unit_price_after_discount || (row.unit_price - row.discount_per_unit))
-                                        : formatRp(row.unit_price || 0)}
-                                    </td>
+                                    <td class="text-end">${discLabel}</td>
+                                    <td class="text-end">${priceAfterHtml}</td>
                                     <td class="text-end fw-semibold">
                                         ${(row.qty_sold ?? 0) > 0 ? formatRp(row.line_total_sold || 0) : formatRp(0)}
                                     </td>
