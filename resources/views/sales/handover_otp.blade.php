@@ -44,7 +44,49 @@
         $badgeClassMap=['closed'=>'bg-label-success','on_sales'=>'bg-label-info','waiting_morning_otp'=>'bg-label-warning','waiting_evening_otp'=>'bg-label-warning','cancelled'=>'bg-label-danger','default'=>'bg-label-secondary'];
         $paymentBadgeMap=['draft'=>'bg-label-secondary','pending'=>'bg-label-warning','approved'=>'bg-label-success','rejected'=>'bg-label-danger'];
         $statusKey=$handover?->status; $statusLabel=$statusLabelMap[$statusKey] ?? ($statusKey ?? '-'); $badgeClass=$badgeClassMap[$statusKey] ?? $badgeClassMap['default'];
-        $itemsCollection=$items ?? collect(); $totalDispatchQty=(int)$itemsCollection->sum('qty_start'); $totalSoldQty=(int)$itemsCollection->sum(function($it){ return ($it->payment_status === 'rejected') ? 0 : (int)$it->qty_sold; }); $totalRemainingQty=max(0,$totalDispatchQty-$totalSoldQty); $totalSalesAmount=(int)$itemsCollection->sum(function($it){ return ($it->payment_status === 'rejected') ? 0 : (int)$it->line_total_sold; });
+        $itemsCollection=$items ?? collect();
+        
+        // === HYBRID QTY (Saldo pake Value, Barang lain pake Qty Unit) ===
+        $totalDispatchQty = (int)$itemsCollection->sum(function($it) {
+            $isSaldo = (int)($it->unit_price ?? 0) === 1;
+            $qtyStart = (int)$it->qty_start;
+            $price = (int)$it->unit_price;
+            $discFix = (int)($it->discount_fixed_amount ?? 0);
+            
+            if ($isSaldo) {
+                $val = (int)($it->line_total_after_discount ?? 0);
+                // Jika DB 0, hitung manual
+                return ($val > 0) ? $val : max(0, ($qtyStart * $price) - $discFix);
+            }
+            return $qtyStart;
+        });
+
+        $totalSoldQty = (int)$itemsCollection->sum(function($it) {
+            if ($it->payment_status === 'rejected') return 0;
+            $isSaldo = (int)($it->unit_price ?? 0) === 1;
+            $qtySold = (int)$it->qty_sold;
+            $qtyStart = (int)$it->qty_start;
+            $price = (int)$it->unit_price;
+            $discFix = (int)($it->discount_fixed_amount ?? 0);
+
+            if ($isSaldo) {
+                $valSold = (int)($it->line_total_sold ?? 0);
+                if ($valSold > 0) return $valSold;
+                // Proportional fallback
+                if ($qtyStart <= 0) return 0;
+                $netMorning = max(0, ($qtyStart * $price) - $discFix);
+                return (int)round($qtySold * $netMorning / $qtyStart);
+            }
+            return $qtySold;
+        });
+
+        $totalRemainingQty = max(0, $totalDispatchQty - $totalSoldQty);
+
+        // === VALUE (NET tetap untuk Draft Sales Value) ===
+        $totalSalesAmount = (int)$itemsCollection->sum(function($it){ 
+            if ($it->payment_status === 'rejected') return 0;
+            return (int)($it->line_total_sold ?? 0); 
+        });
     @endphp
 
     @if (($handovers ?? collect())->count() > 1)
@@ -105,10 +147,26 @@
                 <div class="text-center text-muted">Please enter the morning OTP first to view the items list.</div>
             @else
             <div class="sum-grid">
-                <div class="sum-card"><div class="sum-label">Dispatched Qty</div><div class="sum-value">{{ $totalDispatchQty }}</div><div class="sum-note">Total units carried today</div></div>
-                <div class="sum-card"><div class="sum-label">Sold Progress</div><div class="sum-value">{{ $totalSoldQty }}</div><div class="sum-note">Units already entered by sales</div></div>
-                <div class="sum-card"><div class="sum-label">Remaining Qty</div><div class="sum-value">{{ $totalRemainingQty }}</div><div class="sum-note">Remaining units available for sale</div></div>
-                <div class="sum-card"><div class="sum-label">Draft Sales Value</div><div class="sum-value" style="font-size:20px">Rp {{ number_format($totalSalesAmount,0,',','.') }}</div><div class="sum-note">Accumulated temporary sales value</div></div>
+                <div class="sum-card">
+                    <div class="sum-label">Dispatched Qty</div>
+                    <div class="sum-value">{{ number_format($totalDispatchQty,0,',','.') }}</div>
+                    <div class="sum-note">Total units carried today</div>
+                </div>
+                <div class="sum-card">
+                    <div class="sum-label">Sold Progress</div>
+                    <div class="sum-value">{{ number_format($totalSoldQty,0,',','.') }}</div>
+                    <div class="sum-note">Units already entered by sales</div>
+                </div>
+                <div class="sum-card">
+                    <div class="sum-label">Remaining Qty</div>
+                    <div class="sum-value">{{ number_format($totalRemainingQty,0,',','.') }}</div>
+                    <div class="sum-note">Remaining units available for sale</div>
+                </div>
+                <div class="sum-card">
+                    <div class="sum-label">Draft Sales Value</div>
+                    <div class="sum-value" style="font-size:20px">Rp {{ number_format($totalSalesAmount,0,',','.') }}</div>
+                    <div class="sum-note">Accumulated temporary sales value</div>
+                </div>
             </div>
             <div class="helper">
                 <div><p>Save Draft saves sales progress without closing the handover. Submit to Admin WH is used during final end-of-day closing.</p></div>
@@ -125,38 +183,130 @@
                         <tbody>
                         @foreach ($items as $row)
                             @php
-                                $unitPrice=(int)$row->unit_price; $effectiveUnitPrice=$row->discount_per_unit > 0 ? $unitPrice - (int)$row->discount_per_unit : $unitPrice;
-                                $productName=$row->product?->name ?? 'Product #'.$row->product_id; $productCode=$row->product?->product_code ?? ''; $lineStart=(int)($row->line_total_start ?? $row->qty_start*$unitPrice); $lineSold=(int)($row->line_total_sold ?? $row->qty_sold*$unitPrice);
+                                $unitPrice=(int)$row->unit_price;
+                                $discMode = $row->discount_mode ?? 'unit';
+                                $discFixed = (int)($row->discount_fixed_amount ?? 0);
+                                $discUnit = (int)($row->discount_per_unit ?? 0);
+                                // effectiveUnitPrice: untuk kalkulasi payment amount per qty
+                                if ($discMode === 'fixed') {
+                                    // Fixed bundle: harga efektif = total NET / qty
+                                    $lineNetDispatched = (int)($row->line_total_after_discount ?? max(0, ($row->qty_start * $unitPrice) - $discFixed));
+                                    $effectiveUnitPrice = $row->qty_start > 0 ? (int)floor($lineNetDispatched / $row->qty_start) : $unitPrice;
+                                } else {
+                                    $effectiveUnitPrice = $discUnit > 0 ? $unitPrice - $discUnit : $unitPrice;
+                                    $lineNetDispatched = (int)($row->line_total_after_discount ?? ($row->qty_start * $effectiveUnitPrice));
+                                }
+                                $productName=$row->product?->name ?? 'Product #'.$row->product_id; $productCode=$row->product?->product_code ?? '';
+                                // lineStart = nilai NET (setelah diskon) untuk Dispatched Value
+                                $lineStart = $lineNetDispatched;
+                                $lineSold=(int)($row->line_total_sold ?? 0);
                                 $payStatusKey=$row->payment_status ?: 'draft'; $payBadge=$paymentBadgeMap[$payStatusKey] ?? $paymentBadgeMap['draft']; $isLocked=!$canEditPayment || in_array($payStatusKey,['pending','approved'],true);
-                                $existingPaymentQty=(int)($row->payment_qty ?? 0); $isRejectedReinput=$payStatusKey==='rejected'; $displaySoldQty=$isRejectedReinput ? 0 : (int)$row->qty_sold; $remainingQty=max(0,(int)$row->qty_start-$displaySoldQty); $displayLineSold=$isRejectedReinput ? 0 : $lineSold; $effectivePaymentQtyForReinput=$isRejectedReinput ? 0 : $existingPaymentQty; $isRejectedDraftProgress=!$isRejectedReinput && (int)$row->qty_sold > 0 && $existingPaymentQty > 0 && $existingPaymentQty < (int)$row->qty_sold; $isPaymentReinputMode=$isRejectedReinput || $isRejectedDraftProgress;
+                                $existingPaymentQty=(int)($row->payment_qty ?? 0);
+                                $isRejectedReinput=$payStatusKey==='rejected';
+
+                                // === NILAI DISPLAY (Saldo pake Value, Fisik pake Unit) ===
+                                $isSaldo = (int)($row->unit_price ?? 0) === 1;
+                                if ($isSaldo && $discMode === 'fixed') {
+                                    $dispCarried   = $lineNetDispatched;
+                                    $dispSold      = $isRejectedReinput ? 0 : $lineSold;
+                                    $dispRemaining = max(0, $dispCarried - $dispSold);
+                                } else {
+                                    $dispCarried   = (int)$row->qty_start;
+                                    $dispSold      = $isRejectedReinput ? 0 : (int)$row->qty_sold;
+                                    $dispRemaining = max(0, $dispCarried - $dispSold);
+                                }
+
+                                $displaySoldQty = $isRejectedReinput ? 0 : (int)$row->qty_sold;
+                                $remainingQty   = max(0, (int)$row->qty_start - $displaySoldQty);
+                                $displayLineSold = $isRejectedReinput ? 0 : $lineSold;
+                                $effectivePaymentQtyForReinput=$isRejectedReinput ? 0 : $existingPaymentQty; $isRejectedDraftProgress=!$isRejectedReinput && (int)$row->qty_sold > 0 && $existingPaymentQty > 0 && $existingPaymentQty < (int)$row->qty_sold; $isPaymentReinputMode=$isRejectedReinput || $isRejectedDraftProgress;
                                 // 🔥 FIX: If REJECTED, the base is the FULL qty_start (10), not the previously reported wrong quantity (5).
                                 $reinputBaseQty=($isRejectedReinput) ? (int)$row->qty_start : ((int)$row->qty_sold > 0 ? (int)$row->qty_sold : (int)$row->qty_start);
-                                $maxQty=$isPaymentReinputMode ? max(0, $reinputBaseQty - $effectivePaymentQtyForReinput) : $remainingQty; $maxNominal=$effectiveUnitPrice*$maxQty;
+                                $maxQty=$isPaymentReinputMode ? max(0, $reinputBaseQty - $effectivePaymentQtyForReinput) : $remainingQty;
+                                // Fixed mode: maxNominal = total NET proporsional (bukan effectiveUnitPrice*maxQty yg = 0)
+                                if ($discMode === 'fixed' && (int)$row->qty_start > 0) {
+                                    $maxNominal = (int)round($maxQty * $lineNetDispatched / (int)$row->qty_start);
+                                } else {
+                                    $maxNominal = $effectiveUnitPrice * $maxQty;
+                                }
                                 $cashQtyValue=old("items.$row->id.payment_cash_qty", 0);
                                 $transferQtyValue=old("items.$row->id.payment_transfer_qty", 0);
                                 $cashAmountValue=old("items.$row->id.payment_cash_amount", 0);
                                 $transferAmountValue=old("items.$row->id.payment_transfer_amount", 0);
+                                // Untuk Fixed mode: hitung nilai Rupiah sisa (proporsional dari NET)
+                                $qtyStartInt = (int)$row->qty_start;
+                                if ($discMode === 'fixed' && $qtyStartInt > 0) {
+                                    $dispatchedValue  = $lineNetDispatched;  // nilai NET total dibawa
+                                    $soldValue        = $lineSold;           // nilai terjual
+                                    $remainingValue   = (int)round($remainingQty * $lineNetDispatched / $qtyStartInt);
+                                } else {
+                                    $dispatchedValue = $lineStart;
+                                    $soldValue       = $displayLineSold;
+                                    $remainingValue  = 0;
+                                }
                             @endphp
-                            <tr class="js-payment-row" data-unit-price="{{ $effectiveUnitPrice }}" data-max-qty="{{ $maxQty }}" data-max-amount="{{ $effectiveUnitPrice * $maxQty }}">
+                            <tr class="js-payment-row"
+                                data-unit-price="{{ $effectiveUnitPrice }}"
+                                data-max-qty="{{ $maxQty }}"
+                                data-max-amount="{{ $maxNominal }}"
+                                data-is-fixed="{{ $discMode === 'fixed' ? 1 : 0 }}"
+                                data-fixed-net="{{ $discMode === 'fixed' ? $lineNetDispatched : 0 }}"
+                                data-total-qty="{{ (int)$row->qty_start }}">
                                 <td data-label="Product">
                                     <div class="pname">{{ $productName }}</div>
                                     @if ($productCode)<div class="pcode">{{ $productCode }}</div>@endif
-                                    <div class="chips"><span class="chip">Carried: {{ (int)$row->qty_start }}</span><span class="chip">Sold: {{ $displaySoldQty }}</span><span class="chip">Remaining: {{ $remainingQty }}</span></div>
+                                    <div class="chips">
+                                        @if ($discMode === 'fixed')
+                                            {{-- Fixed/Bundle: tampil VALUE (setelah diskon) --}}
+                                            <span class="chip">Carried: {{ number_format($dispCarried,0,',','.') }}</span>
+                                            <span class="chip">Sold: {{ number_format($dispSold,0,',','.') }}</span>
+                                            <span class="chip" style="background:#e8f5e9;color:#2e7d32">Remaining: {{ number_format($dispRemaining,0,',','.') }}</span>
+                                        @else
+                                            <span class="chip">Carried: {{ (int)$row->qty_start }}</span>
+                                            <span class="chip">Sold: {{ $displaySoldQty }}</span>
+                                            <span class="chip">Remaining: {{ $remainingQty }}</span>
+                                        @endif
+                                    </div>
                                 </td>
                                 <td data-label="Progress">
-                                    <div class="num">Dispatched: {{ (int)$row->qty_start }}</div>
-                                    <div class="num">Sold: {{ $displaySoldQty }}</div>
-                                    <div class="num">Remaining: {{ $remainingQty }}</div>
+                                    <div class="num">Dispatched: <span class="text-primary">{{ number_format($dispCarried,0,',','.') }}</span></div>
+                                    <div class="num">Sold: {{ number_format($dispSold,0,',','.') }}</div>
+                                    <div class="num">Remaining: <span class="text-success fw-bold">{{ number_format($dispRemaining,0,',','.') }}</span></div>
+                                    @if ($discMode === 'fixed')
+                                        <div class="note text-muted">(Total: {{ number_format((int)$row->qty_start,0,',','.') }} units)</div>
+                                    @endif
                                     @if ($isRejectedReinput)<div class="note text-danger fw-bold">Rejected by WH. Please re-input (Max: {{ $maxQty }})</div>@elseif ($isRejectedDraftProgress)<div class="note text-warning">Pending payment for partial sold items (Max: {{ $maxQty }})</div>@endif
                                     @if ((int)$row->qty_returned > 0)<div class="note">Final returned: {{ (int)$row->qty_returned }}</div>@endif
                                 </td>
                                 <td data-label="Price">
-                                    <div class="num">Rp {{ number_format($unitPrice,0,',','.') }}</div>
-                                    <div class="note">Dispatched: Rp {{ number_format($lineStart,0,',','.') }}</div>
-                                      <div class="note">Sales: Rp {{ number_format($displayLineSold,0,',','.') }}</div>
-                                    @if ($row->discount_per_unit > 0)
-                                        <div class="note">Discount: Rp {{ number_format($row->discount_per_unit,0,',','.') }}</div>
-                                        <div class="ok">Net: Rp {{ number_format($row->unit_price_after_discount,0,',','.') }}</div>
+                                    @php
+                                        $hasDiscount = ($discMode === 'fixed' && $discFixed > 0) || ($discMode === 'unit' && $discUnit > 0);
+                                        if ($discMode === 'fixed') {
+                                            $priceLabel = "Net Total";
+                                            $netDisplay = $lineNetDispatched;
+                                        } else {
+                                            $priceLabel = "Net/Unit";
+                                            $netDisplay = $effectiveUnitPrice;
+                                        }
+                                    @endphp
+
+                                    @if ($hasDiscount)
+                                        <div class="fw-bold text-success" style="font-size:1.1rem">
+                                            Rp {{ number_format($netDisplay,0,',','.') }}
+                                            <span class="badge bg-label-success" style="font-size:0.7rem;vertical-align:middle">{{ $priceLabel }}</span>
+                                        </div>
+                                        <div class="text-muted small">
+                                            <del>Rp {{ number_format($unitPrice, 0, ',', '.') }}</del> (Ori Price)
+                                        </div>
+                                    @else
+                                        <div class="fw-bold" style="font-size:1.1rem">Rp {{ number_format($unitPrice,0,',','.') }}</div>
+                                        <div class="text-muted small">No Discount</div>
+                                    @endif
+
+                                    @if ($discMode === 'fixed' && $discFixed > 0)
+                                        <div class="note text-info">Disc Bundle: Rp {{ number_format($discFixed,0,',','.') }}</div>
+                                    @elseif($discMode === 'unit' && $discUnit > 0)
+                                        <div class="note text-info">Disc/Unit: Rp {{ number_format($discUnit,0,',','.') }}</div>
                                     @endif
                                 </td>
                                 <td data-label="Payment Qty">
@@ -247,7 +397,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function refreshHandoverTable() {
         try {
-            const res = await fetch(window.location.href, {
+            // 🔥 Tambahkan cache-buster (?_=[timestamp]) biar browser gak ngasih data lama
+            const url = new URL(window.location.href);
+            url.searchParams.set('_', new Date().getTime());
+
+            const res = await fetch(url.toString(), {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             });
             const html = await res.text();
@@ -409,22 +563,33 @@ document.addEventListener('DOMContentLoaded', function() {
 
     rows.forEach(row => {
         const unitPrice = parseInt(row.dataset.unitPrice || '0', 10);
-        const maxQty = parseInt(row.dataset.maxQty || '0', 10);
+        const maxQty    = parseInt(row.dataset.maxQty    || '0', 10);
         const maxAmount = parseInt(row.dataset.maxAmount || '0', 10);
-        const cashQtyInput = row.querySelector('input[name*="[payment_cash_qty]"]');
-        const transferQtyInput = row.querySelector('input[name*="[payment_transfer_qty]"]');
-        const cashAmountInput = row.querySelector('input[name*="[payment_cash_amount]"]');
+        const isFixed   = parseInt(row.dataset.isFixed   || '0', 10) === 1;
+        const fixedNet  = parseInt(row.dataset.fixedNet  || '0', 10);
+        const totalQty  = parseInt(row.dataset.totalQty  || '0', 10);
+        const cashQtyInput       = row.querySelector('input[name*="[payment_cash_qty]"]');
+        const transferQtyInput   = row.querySelector('input[name*="[payment_transfer_qty]"]');
+        const cashAmountInput    = row.querySelector('input[name*="[payment_cash_amount]"]');
         const transferAmountInput = row.querySelector('input[name*="[payment_transfer_amount]"]');
         if (!cashQtyInput || !transferQtyInput || !cashAmountInput || !transferAmountInput) return;
 
+        function calcAmount(qty) {
+            if (isFixed && totalQty > 0) {
+                // Fixed/Bundle: proporsional — (qty / totalQty) × netTotal
+                return Math.round(qty * fixedNet / totalQty);
+            }
+            return qty * unitPrice;
+        }
+
         function syncSplitQty() {
-            let cashQty = clampNumber(cashQtyInput.value, 0, maxQty);
+            let cashQty     = clampNumber(cashQtyInput.value, 0, maxQty);
             let transferQty = clampNumber(transferQtyInput.value, 0, maxQty);
             if (cashQty + transferQty > maxQty) transferQty = Math.max(0, maxQty - cashQty);
-            cashQtyInput.value = cashQty;
+            cashQtyInput.value     = cashQty;
             transferQtyInput.value = transferQty;
-            cashAmountInput.value = Math.max(0, Math.min(cashQty * unitPrice, maxAmount));
-            transferAmountInput.value = Math.max(0, Math.min(transferQty * unitPrice, maxAmount));
+            cashAmountInput.value     = Math.max(0, Math.min(calcAmount(cashQty), maxAmount));
+            transferAmountInput.value = Math.max(0, Math.min(calcAmount(transferQty), maxAmount));
         }
 
         cashQtyInput.addEventListener('input', syncSplitQty);

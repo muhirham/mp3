@@ -792,35 +792,59 @@
                         const stLabel = statusLabelMap[h.status] || h.status;
                         const badgeClass = badgeClassMap[h.status] || badgeClassMap.default;
 
+                        // 🔥 Info Buyer untuk Penjualan Langsung (POS)
+                        let buyerInfoHtml = '';
+                        if (h.is_direct_sale) {
+                            let bType = h.buyer_type ? h.buyer_type.charAt(0).toUpperCase() + h.buyer_type.slice(1) : 'Sales';
+                            buyerInfoHtml = `<div class="mb-1"><span class="fw-semibold text-muted small">Buyer Type:</span> <span class="badge bg-label-info ms-1">${bType}</span></div>`;
+                            if (h.customer_name) {
+                                buyerInfoHtml += `<div class="mb-1"><span class="fw-semibold text-muted small">Customer Name:</span> <span class="text-primary fw-bold">${h.customer_name}</span></div>`;
+                            }
+                        }
+
                         detailHeader.innerHTML = `
-                            <div class="d-flex flex-column flex-md-row justify-content-between">
-                                <div class="mb-2 mb-md-0">
-                                    <div><span class="fw-semibold">Code:</span> ${h.code}</div>
-                                    <div><span class="fw-semibold">Date:</span> ${h.handover_date || '-'}</div>
-                                    <div><span class="fw-semibold">Warehouse:</span> ${h.warehouse_name || '-'}</div>
-                                    <div><span class="fw-semibold">Sales:</span> ${h.sales_name || '-'}</div>
-                                    <div>
-                                        <span class="fw-semibold">Status:</span>
-                                        <span class="badge ${badgeClass}">${stLabel}</span>
-                                    </div>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="mb-1"><span class="fw-semibold text-muted small">Transaction Code:</span> <span class="fw-bold">${h.code}</span></div>
+                                    <div class="mb-1"><span class="fw-semibold text-muted small">Transaction Date:</span> ${h.date || '-'}</div>
+                                    <div class="mb-1"><span class="fw-semibold text-muted small">Warehouse:</span> ${h.warehouse || '-'}</div>
+                                    <div class="mb-1"><span class="fw-semibold text-muted small">Sales Owner:</span> ${h.sales || '-'}</div>
                                 </div>
-                                <div class="text-md-end small">
-                                    <div><span class="fw-semibold">Morning OTP sent:</span> ${h.morning_otp_sent_at || '-'}</div>
-                                    <div><span class="fw-semibold">Morning OTP verified:</span> ${h.morning_otp_verified_at || '-'}</div>
-                                    <div><span class="fw-semibold">Evening OTP sent:</span> ${h.evening_otp_sent_at || '-'}</div>
-                                    <div><span class="fw-semibold">Evening OTP verified:</span> ${h.evening_otp_verified_at || '-'}</div>
+                                <div class="col-md-6 text-md-end">
+                                    ${buyerInfoHtml}
+                                    <div class="mt-2">
+                                        <span class="fw-semibold text-muted small">Status:</span>
+                                        <span class="badge ${badgeClass} ms-1">${stLabel}</span>
+                                    </div>
                                 </div>
                             </div>
                         `;
 
-                        if (canOpenApproval && approvalButton && approvalUrlTemplate && h
-                            .can_open_approval) {
+                        if (canOpenApproval && approvalButton && approvalUrlTemplate && h.can_open_approval) {
                             approvalButton.classList.remove('d-none');
                         }
 
                         let htmlItems = '';
                         it.forEach(row => {
-                            const hasDiscount = (row.discount_per_unit || 0) > 0;
+                            const discMode = row.discount_mode || 'unit';
+                            const discUnit = row.discount_per_unit || 0;
+                            const discFixed = row.discount_fixed_amount || 0;
+
+                            let discLabel = '-';
+                            if (discMode === 'fixed' && discFixed > 0) {
+                                discLabel = `${formatRp(discFixed)} <br><small class="text-info fw-semibold">(Fixed)</small>`;
+                            } else if (discUnit > 0) {
+                                discLabel = `${formatRp(discUnit)} <br><small class="text-muted">(Unit)</small>`;
+                            }
+
+                            let priceAfterHtml = '';
+                            if (discMode === 'fixed') {
+                                const netTotal = row.line_net_dispatched || 0;
+                                priceAfterHtml = `${formatRp(netTotal)}<br><small class="text-info">(Net)</small>`;
+                            } else {
+                                priceAfterHtml = formatRp(row.unit_price_after_discount ?? row.unit_price ?? 0);
+                            }
+
                             htmlItems += `
                                 <tr>
                                     <td>
@@ -831,28 +855,22 @@
                                     <td class="text-end">${row.qty_returned ?? 0}</td>
                                     <td class="text-end">${row.qty_sold ?? 0}</td>
                                     <td class="text-end">${formatRp(row.unit_price || 0)}</td>
-                                    <td class="text-end">
-                                        ${hasDiscount ? formatRp(row.discount_per_unit) : '-'}
-                                    </td>
-                                    <td class="text-end">
-                                        ${hasDiscount
-                                        ? formatRp(row.unit_price_after_discount || (row.unit_price - row.discount_per_unit))
-                                        : formatRp(row.unit_price || 0)}
-                                    </td>
+                                    <td class="text-end">${discLabel}</td>
+                                    <td class="text-end">${priceAfterHtml}</td>
                                     <td class="text-end fw-semibold">
                                         ${(row.qty_sold ?? 0) > 0 ? formatRp(row.line_total_sold || 0) : formatRp(0)}
                                     </td>
                                 </tr>`;
                         });
-                        if (!htmlItems) htmlItems =
-                            '<tr><td colspan="8" class="text-center text-muted">No items available.</td></tr>';
+                        if (!htmlItems) htmlItems = '<tr><td colspan="8" class="text-center text-muted">No items available.</td></tr>';
                         detailTbody.innerHTML = htmlItems;
 
+                        const s = json.summary || {};
                         let proofHtml = '-';
-                        if (h.transfer_proof_url) {
+                        if (s.proof_url) {
                             proofHtml = `
                                 <div class="mt-1">
-                                    <img src="${h.transfer_proof_url}" class="img-thumbnail proof-thumb" style="max-width:140px;cursor:pointer;">
+                                    <img src="${s.proof_url}" class="img-thumbnail proof-thumb" style="max-width:140px;cursor:pointer;" onclick="window.open('${s.proof_url}')">
                                     <div class="small text-muted mt-1">Click image to enlarge.</div>
                                 </div>`;
                         }
@@ -861,36 +879,35 @@
                             <div class="row g-2">
                                 <div class="col-md-4">
                                     <div class="fw-semibold text-muted small">Carried Value</div>
-                                    <div>${formatRp(h.total_dispatched || 0)}</div>
+                                    <div>${formatRp(s.total_dispatched || 0)}</div>
                                 </div>
                                 <div class="col-md-4">
                                     <div class="fw-semibold text-muted small">Sold Value</div>
-                                    <div>${h.status === 'closed' ? formatRp(h.total_sold) : '<span class="text-muted small">— not closed yet —</span>'}</div>
+                                    <div>${h.status === 'closed' ? formatRp(s.total_sold) : '<span class="text-muted small">— not closed yet —</span>'}</div>
                                 </div>
                                 <div class="col-md-4">
-                                    <div class="fw-semibold text-muted small">Estimated Remaining Stock Value</div>
-                                    <div>${h.status === 'closed' ? formatRp(h.selisih_stock_value || 0) : '<span class="text-muted small">— not closed yet —</span>'}</div>
+                                    <div class="fw-semibold text-muted small">Remaining Stock Value</div>
+                                    <div>${h.status === 'closed' ? formatRp(s.total_remaining || 0) : '<span class="text-muted small">— not closed yet —</span>'}</div>
                                 </div>
                             </div>
                             <hr>
                             <div class="row g-2">
                                 <div class="col-md-4">
                                     <div class="fw-semibold text-muted small">Cash Deposit</div>
-                                    <div>${formatRp(h.cash_amount || 0)}</div>
+                                    <div>${formatRp(s.cash_amount || 0)}</div>
                                 </div>
                                 <div class="col-md-4">
                                     <div class="fw-semibold text-muted small">Transfer Deposit</div>
-                                    <div>${formatRp(h.transfer_amount || 0)}</div>
+                                    <div>${formatRp(s.transfer_amount || 0)}</div>
                                     ${proofHtml}
                                 </div>
                                 <div class="col-md-4">
                                     <div class="fw-semibold text-muted small">Total Deposit</div>
-                                    <div>${formatRp(h.setor_total || 0)}</div>
-                                    <div class="small text-muted">Diff Sold vs Deposit: ${formatRp(h.selisih_jual_vs_setor || 0)}</div>
+                                    <div class="fw-bold">${formatRp(s.total_deposit || 0)}</div>
+                                    <div class="small text-muted">Diff Sold vs Deposit: ${formatRp(s.diff_sold_vs_deposit || 0)}</div>
                                 </div>
-                            </div>`;
-
-                        bsModal.show();
+                            </div>
+                        `;              bsModal.show();
                     } catch (err) {
                         console.error(err);
                         Swal.fire({

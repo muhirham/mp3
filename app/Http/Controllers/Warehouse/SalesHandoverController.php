@@ -266,6 +266,8 @@ class SalesHandoverController extends Controller
                 'items.*.product_id' => ['required', 'exists:products,id'],
                 'items.*.qty'        => ['required', 'integer', 'min:1'],
                 'items.*.discount_per_unit' => ['nullable', 'integer', 'min:0'],
+                'items.*.discount_mode'     => ['nullable', 'string', 'in:unit,fixed'],
+                'items.*.discount_fixed_amount' => ['nullable', 'integer', 'min:0'],
             ]);
 
             $date      = Carbon::parse($data['handover_date'])->toDateString();
@@ -359,35 +361,51 @@ class SalesHandoverController extends Controller
                         'unit_price' => $unitPrice,
                     ];
 
-                    $discount = (int) ($row['discount_per_unit'] ?? 0);
-                    
+                    // LOGIKA DISKON FLEKSIBEL
+                    $discountMode = $row['discount_mode'] ?? 'unit';
+                    $discountPerUnit = (int) ($row['discount_per_unit'] ?? 0);
+                    $discountFixed = (int) ($row['discount_fixed_amount'] ?? 0);
 
-                    if ($discount > $unitPrice) {
-                        throw new \RuntimeException("Discount exceeds selling price for {$product->name}");
+                    if ($discountMode === 'fixed') {
+                        $totalDiscountRow = $discountFixed;
+                        $priceAfterDiscountTotal = ($unitPrice * $qty) - $totalDiscountRow;
+                        if ($priceAfterDiscountTotal < 0) $priceAfterDiscountTotal = 0;
+                        
+                        // Efektif diskon per unit (buat legacy support)
+                        $effectiveDiscountPerUnit = $qty > 0 ? (int) floor($totalDiscountRow / $qty) : 0;
+                    } else {
+                        $totalDiscountRow = $discountPerUnit * $qty;
+                        $priceAfterDiscountTotal = ($unitPrice - $discountPerUnit) * $qty;
+                        if ($priceAfterDiscountTotal < 0) $priceAfterDiscountTotal = 0;
+                        $effectiveDiscountPerUnit = $discountPerUnit;
                     }
 
-                    $priceAfterDiscount = $unitPrice - $discount;
+                    if ($totalDiscountRow > ($unitPrice * $qty)) {
+                        throw new \RuntimeException("Discount exceeds total price for {$product->name}");
+                    }
 
                     SalesHandoverItem::create([
-                    'handover_id'  => $handover->id,
-                    'product_id'   => $product->id,
+                        'handover_id'  => $handover->id,
+                        'product_id'   => $product->id,
 
-                    'qty_start'    => $qty,
-                    'qty_returned' => 0,
-                    'qty_sold'     => 0,
+                        'qty_start'    => $qty,
+                        'qty_returned' => 0,
+                        'qty_sold'     => 0,
 
-                    // harga
-                    'unit_price'   => $unitPrice,
-                    'discount_per_unit' => $discount,
-                    'unit_price_after_discount' => $priceAfterDiscount,
+                        // harga
+                        'unit_price'   => $unitPrice,
+                        'discount_mode' => $discountMode,
+                        'discount_per_unit' => $effectiveDiscountPerUnit,
+                        'discount_fixed_amount' => $discountFixed,
+                        'unit_price_after_discount' => $qty > 0 ? (int) floor($priceAfterDiscountTotal / $qty) : 0,
 
-                    // total
-                    'line_total_start' => $unitPrice * $qty,
-                    'discount_total'   => $discount * $qty,
-                    'line_total_after_discount' => $priceAfterDiscount * $qty,
+                        // total
+                        'line_total_start' => $unitPrice * $qty,
+                        'discount_total'   => $totalDiscountRow,
+                        'line_total_after_discount' => $priceAfterDiscountTotal,
 
-                    'line_total_sold' => 0,
-                ]);
+                        'line_total_sold' => 0,
+                    ]);
                 }
 
                 if (empty($itemsData)) {
@@ -533,12 +551,34 @@ EOT;
                     continue;
                 }
 
-                // Harga satuan, fallback ke selling_price
-                $lineTotal = (int) $item->line_total_after_discount;
-                $totalDispatched += $lineTotal;
-                // Update item nilai awal
-                $item->line_total_start = $lineTotal;
+                $unitPrice     = (int) $item->unit_price;
+                $discountMode  = $item->discount_mode ?? 'unit';
+                $discUnit      = (int) ($item->discount_per_unit ?? 0);
+                $discFixed     = (int) ($item->discount_fixed_amount ?? 0);
+
+                // Hitung nilai asli (SELALU qty * harga asli, tidak terpengaruh diskon)
+                $lineOriginal = $qty * $unitPrice;
+
+                // Hitung nilai NET berdasarkan mode diskon
+                if ($discountMode === 'fixed') {
+                    $totalDiscountRow   = min($discFixed, $lineOriginal);
+                    $lineAfterDiscount  = max(0, $lineOriginal - $totalDiscountRow);
+                    $priceAfter         = $qty > 0 ? (int) floor($lineAfterDiscount / $qty) : $unitPrice;
+                } else {
+                    $totalDiscountRow   = $discUnit * $qty;
+                    $priceAfter         = max(0, $unitPrice - $discUnit);
+                    $lineAfterDiscount  = $qty * $priceAfter;
+                }
+
+                // Update item: pastikan semua kolom tersimpan dengan benar
+                $item->line_total_start         = $lineOriginal;        // nilai ASLI (harga x qty)
+                $item->discount_total           = $totalDiscountRow;    // total diskon baris
+                $item->unit_price_after_discount = $priceAfter;         // harga per unit setelah diskon
+                $item->line_total_after_discount = $lineAfterDiscount;  // nilai NET (setelah diskon)
                 $item->save();
+
+                // total_dispatched_amount di header = sum nilai NET (setelah diskon)
+                $totalDispatched += $lineAfterDiscount;
                 // --- Update stok: warehouse -> sales ---
                 // stok warehouse
                 $whStock = DB::table('stock_levels')
@@ -603,15 +643,10 @@ EOT;
                 DB::table('stock_movements')->insert($movement);
             }
 
-            $handover->total_dispatched_amount = $handover->items->sum(
-            fn($i) => (int) $i->line_total_after_discount
-            );
-
-            $handover->discount_total = $handover->items->sum(
-                fn($i) => (int) $i->discount_total
-            );
-
-            $handover->grand_total = $handover->total_dispatched_amount;
+            // Gunakan $totalDispatched yang sudah dihitung di loop (nilai NET setelah diskon)
+            $handover->total_dispatched_amount = $totalDispatched;
+            $handover->discount_total          = $handover->items->sum(fn($i) => (int) $i->discount_total);
+            $handover->grand_total             = $totalDispatched;
 
             $handover->status = 'on_sales';
             $handover->morning_otp_verified_at = now();
@@ -640,6 +675,50 @@ EOT;
             return response()->json(['success' => true, 'message' => $msg]);
         }
         return back()->with('success', $msg);
+    }
+
+    /**
+     * CANCEL HANDOVER (PAGI):
+     * Cuma bisa kalo status masih waiting_morning_otp
+     * Belum ada stok kepotong, jadi cuma ubah status aja.
+     */
+    public function cancelMorningHandover(Request $request)
+    {
+        $handoverId = $request->input('handover_id');
+        if (!$handoverId) {
+            return response()->json(['success' => false, 'message' => 'Handover ID is required.'], 400);
+        }
+
+        $handover = SalesHandover::find($handoverId);
+        if (!$handover) {
+            return response()->json(['success' => false, 'message' => 'Handover not found.'], 404);
+        }
+
+        if ($handover->status !== 'waiting_morning_otp') {
+            return response()->json(['success' => false, 'message' => 'Only handovers waiting for morning OTP can be cancelled.'], 400);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $handoverCode = $handover->code;
+            // Kita hapus permanen biar nomor urut bisa dipake lagi
+            $handover->delete();
+
+            // 🔔 Bersihkan notifikasi terkait
+            \App\Helpers\NotificationHelper::markAsReadByReference('handover_otp_sent', 'sales_handovers', $handoverId);
+
+            // 🔥 Tembak sinyal real-time: Handover di-cancel/hapus
+            broadcast(new \App\Events\HandoverUpdated($handover->sales_id, $handover->warehouse_id, $handoverId, 'cancelled'));
+
+            DB::commit();
+
+            return response()->json(['success' => true, 'message' => "Handover {$handoverCode} has been deleted/cancelled. You can create a new one with the same sequence if this was the last record today."]);
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => 'Failed to cancel handover: ' . $e->getMessage()], 500);
+        }
     }
     /**
      * HALAMAN SORE:
@@ -816,18 +895,37 @@ EOT;
                 $qtySold = max(0, $qtyStart - $qtyRet);
 
                 $priceOriginal = (int) $item->unit_price;
-                $priceAfter    = (int) ($item->unit_price_after_discount ?? $priceOriginal);
+                $discountMode  = $item->discount_mode ?? 'unit';
+                $discUnit      = (int) ($item->discount_per_unit ?? 0);
+                $discFixed     = (int) ($item->discount_fixed_amount ?? 0);
 
-                $lineOriginal = $qtySold * $priceOriginal;
-                $lineSold     = $qtySold * $priceAfter;
+                // Hitung total baris berdasarkan mode
+                if ($discountMode === 'fixed') {
+                    // Diskon bundle (Fixed): proporsional dari total NET
+                    // NET total saat pagi sudah tersimpan di line_total_after_discount
+                    $lineNetDispatched = (int) ($item->line_total_after_discount ?? max(0, ($qtyStart * $priceOriginal) - $discFixed));
+                    $lineOriginal      = $qtySold * $priceOriginal;
+                    // Proporsional: (qtySold / qtyStart) × netTotal
+                    $lineSold          = $qtyStart > 0 ? (int) round($qtySold * $lineNetDispatched / $qtyStart) : 0;
+                    $totalDiscountItem = ($qtySold > 0) ? (int) round($qtySold * $discFixed / $qtyStart) : 0;
+                    $priceAfter        = $qtySold > 0 ? (int) round($lineSold / $qtySold) : $priceOriginal;
+                } else {
+                    // Diskon per unit (Unit): Jual * (Harga - Diskon)
+                    $priceAfter   = max(0, $priceOriginal - $discUnit);
+                    $lineOriginal = $qtySold * $priceOriginal;
+                    $lineSold     = $qtySold * $priceAfter;
+                    $totalDiscountItem = $qtySold * $discUnit;
+                }
 
-                $item->qty_returned        = $qtyRet;
-                $item->qty_sold            = $qtySold;
-                $item->line_total_original = $lineOriginal;
-                $item->line_total_sold     = $lineSold;
+                $item->qty_returned              = $qtyRet;
+                $item->qty_sold                  = $qtySold;
+                $item->line_total_original       = $lineOriginal;
+                $item->discount_total            = $totalDiscountItem;
+                $item->unit_price_after_discount = $priceAfter;
+                $item->line_total_sold           = $lineSold;
                 $item->save();
 
-                // ✅ ini yang bikin cash & transfer normal
+                // ✅ totalSold untuk header recap
                 $totalSold += $lineSold;
             }
 
@@ -882,23 +980,9 @@ EOT;
             $h->load('items');
         }
 
-        return $h->items->sum(function ($it) {
-            $discount = (int) ($it->discount_per_unit ?? 0);
-
-            if ($discount > 0) {
-                // Prioritaskan kolom yang sudah tersimpan di DB
-                $afterDisc = (int) ($it->line_total_after_discount ?? 0);
-                if ($afterDisc > 0) {
-                    return $afterDisc;
-                }
-                // Fallback: hitung manual dari qty_sold × (unit_price - discount)
-                // Untuk data lama sebelum fix ini diterapkan
-                $netPrice = max(0, (int) ($it->unit_price ?? 0) - $discount);
-                return (int) ($it->qty_sold ?? 0) * $netPrice;
-            }
-
-            return (int) ($it->line_total_sold ?? 0);
-        });
+        // line_total_sold sudah dihitung dengan benar di salesStoreEvening
+        // (sudah memperhitungkan discount_mode: unit maupun fixed/bundle)
+        return (int) $h->items->sum(fn($it) => (int) ($it->line_total_sold ?? 0));
     }
 
     private function calcOriginalSold(SalesHandover $h): int
@@ -907,9 +991,13 @@ EOT;
             $h->load('items');
         }
 
-        return $h->items->sum(function ($it) {
-            return (int) ($it->line_total_sold ?? 0);
-        });
+        // Jika sudah laku/closed, hitung dari yang laku
+        if (in_array($h->status, ['closed', 'cancelled'])) {
+            return $h->items->sum(fn($it) => (int) ($it->line_total_sold ?? 0));
+        }
+
+        // Jika masih on_sales, tampilkan total nilai ASLI (Ori Price) yang dibawa
+        return $h->items->sum(fn($it) => (int) ($it->line_total_start ?? ((int)$it->qty_start * (int)$it->unit_price)));
     }
 
     private function calcDiscountLoss(SalesHandover $h): int
@@ -918,20 +1006,23 @@ EOT;
             $h->load('items');
         }
 
-        return $h->items->sum(function ($it) {
-            $qtySold = (int) ($it->qty_sold ?? 0);
-            $discPerUnit = (int) ($it->discount_per_unit ?? 0);
-            
-            if ($qtySold > 0 && $discPerUnit > 0) {
-                return $qtySold * $discPerUnit;
+        // Jika sudah closed, ambil total diskon dari barang yang terjual
+        if (in_array($h->status, ['closed', 'cancelled'])) {
+            return (int) $h->items->sum(fn($it) => (int) ($it->discount_total ?? 0));
+        }
+
+        // Jika masih jalan (On Sales), tampilkan POTENSI DISKON dari total barang yang dibawa
+        return (int) $h->items->sum(function($it) {
+            $qtyStart = (int) $it->qty_start;
+            $price    = (int) $it->unit_price;
+            $mode     = $it->discount_mode ?? 'unit';
+            $discUnit = (int) ($it->discount_per_unit ?? 0);
+            $discFix  = (int) ($it->discount_fixed_amount ?? 0);
+
+            if ($mode === 'fixed') {
+                return $discFix;
             }
-            
-            // Fallback manual selisih jika field discount_per_unit kosong tapi ada selisih nilai
-            $oriPrice = (int) ($it->unit_price ?? 0);
-            $realVal  = (int) ($it->line_total_after_discount ?? $it->line_total_sold ?? 0);
-            $expected = $qtySold * $oriPrice;
-            
-            return max(0, $expected - $realVal);
+            return $discUnit * $qtyStart;
         });
     }
 
@@ -1006,7 +1097,9 @@ EOT;
                     })
                     ->orWhereHas('sales', function ($s) use ($q) {
                         $s->where('name', 'like', $q);
-                    });
+                    })
+                    ->orWhere('customer_name', 'like', $q)
+                    ->orWhere('buyer_type', 'like', $q);
             });
         }
 
@@ -1145,13 +1238,13 @@ EOT;
         ->where('status', 'closed')
         ->sum(fn($h) => $this->calcRealSold($h));
 
-        $totalDiscount = (int) $handovers
-        ->where('status', 'closed')
-        ->sum(fn($h) => $this->calcDiscountLoss($h));
+        $totalDiscount = (int) $handovers->sum(fn($h) => $this->calcDiscountLoss($h));
         
         $totalDiff = (int) $handovers->sum(function ($h) {
-            $dispatched = (int) ($h->total_dispatched_amount ?? 0);
-            $sold = $this->calcRealSold($h);
+            $originalStart = $this->calcOriginalSold($h);
+            $discountLoss  = $this->calcDiscountLoss($h);
+            $dispatched    = (int) ($h->total_dispatched_amount ?? ($originalStart - $discountLoss));
+            $sold          = $this->calcRealSold($h);
             return max(0, $dispatched - $sold);
         });
 
@@ -1173,27 +1266,15 @@ EOT;
                 $warehouseLabel = $wh->warehouse_name ?? $wh->name ?? $wh->warehouse_code ?? ('Warehouse #'.$h->warehouse_id);
 
                 $salesLabel = optional($h->sales)->name ?? ('Sales #'.$h->sales_id);
+                
+                // 🔥 Jika Penjualan Langsung ke Pareto/Umum, tampilkan nama pembelinya di kolom Sales
+                if ($h->is_direct_sale && in_array($h->buyer_type, ['pareto', 'umum']) && $h->customer_name) {
+                    $salesLabel = $h->customer_name . ' (' . ucfirst($h->buyer_type) . ')';
+                }
 
-                $dispatched = (int) ($h->total_dispatched_amount ?? 0);
-                
-                // Kalkulasi barang dibawa: (Harga Asli & Diskon) langsung tampil full potensi
-                $originalStart = 0;
-                $discountStart = 0;
-                
-                if (! $h->relationLoaded('items')) {
-                    $h->load('items');
-                }
-                
-                foreach ($h->items as $it) {
-                    $originalStart += (int)($it->qty_start * $it->unit_price);
-                    
-                    // Diskon: Prioritaskan diskon barang TERJUAL untuk report yang akurat
-                    if ($h->status === 'closed') {
-                       $discountStart += (int) (($it->qty_sold ?? 0) * ($it->discount_per_unit ?? 0));
-                    } else {
-                       $discountStart += (int) ($it->discount_total ?? ((int) $it->qty_start * (int) $it->discount_per_unit));
-                    }
-                }
+                $originalStart = $this->calcOriginalSold($h);
+                $discountStart = $this->calcDiscountLoss($h);
+                $dispatched    = (int) ($h->total_dispatched_amount ?? ($originalStart - $discountStart));
 
                 $real = $this->calcRealSold($h);
                 // Selisih Stok Aktual: Total Nilai Dibawa (After Disc) - Terjual
@@ -1364,23 +1445,34 @@ EOT;
             $qtySold     = (int) ($it->qty_sold ?? 0);
 
             $unitPrice = (int) ($it->unit_price ?? 0);
-            $discount  = (int) ($it->discount_per_unit ?? 0);
+            $discountMode = $it->discount_mode ?? 'unit';
+            $discountPerUnit = (int) ($it->discount_per_unit ?? 0);
+            $discountFixed = (int) ($it->discount_fixed_amount ?? 0);
 
-            // Harga setelah diskon
-            $unitAfter = (int) ($it->unit_price_after_discount ?? ($unitPrice - $discount));
-            if ($unitAfter < 0) $unitAfter = 0;
+            $discountMode   = $it->discount_mode ?? 'unit';
+            $discountPerUnit = (int) ($it->discount_per_unit ?? 0);
+            $discountFixed  = (int) ($it->discount_fixed_amount ?? 0);
 
-            // Total awal kirim
-            $lineStart = (int) ($it->line_total_start ?? ($qtyStart * $unitPrice));
+            // Total diskon & nilai NET (dari DB - sudah dihitung saat verifyMorningOtp)
+            $totalDiscountRow   = (int) ($it->discount_total ?? 0);
+            // Fallback: kalau DB kosong, hitung manual NET = (qty * price) - disc_fixed
+            $dbNet = (int) ($it->line_total_after_discount ?? 0);
+            $lineNetDispatched  = ($dbNet > 0) ? $dbNet : max(0, ($qtyStart * $unitPrice) - $discountFixed);
 
-            // 🔥 Tentukan total jual per item
-            if ($discount > 0) {
-                // item diskon
-                $lineSold = (int) ($it->line_total_after_discount ?? ($qtySold * $unitAfter));
+            // Untuk display "Price After Discount" kolom
+            if ($discountMode === 'fixed') {
+                // Fixed/bundle: tidak relevan per-unit, tampilkan total NET
+                $unitAfter = null; // signal ke JS buat tampilkan total net
             } else {
-                // item normal
-                $lineSold = (int) ($it->line_total_sold ?? ($qtySold * $unitPrice));
+                $unitAfter = (int) ($it->unit_price_after_discount ?? ($unitPrice - $discountPerUnit));
+                if ($unitAfter < 0) $unitAfter = 0;
             }
+
+            // Sold value: dari line_total_sold (sudah benar di salesStoreEvening)
+            $lineSold = (int) ($it->line_total_sold ?? 0);
+
+            // Total awal kirim (harga ASLI, tidak berubah)
+            $lineStart = (int) ($it->line_total_start ?? ($qtyStart * $unitPrice));
 
             // 🔥 Akumulasi total jual
             $totalSold += $lineSold;
@@ -1393,17 +1485,22 @@ EOT;
                 'qty_returned' => $qtyReturned,
                 'qty_sold'     => $qtySold,
 
-                'unit_price'   => $unitPrice,
-                'discount_per_unit' => $discount,
-                'unit_price_after_discount' => $unitAfter,
+                'unit_price'              => $unitPrice,
+                'discount_mode'           => $discountMode,
+                'discount_per_unit'       => $discountPerUnit,
+                'discount_fixed_amount'   => $discountFixed,
+                'discount_total'          => $totalDiscountRow,
+                'unit_price_after_discount' => $unitAfter,     // null = fixed mode, tampilkan total NET
+                'line_net_dispatched'     => $lineNetDispatched, // nilai NET saat pagi (after disc)
 
-                'line_total_start' => $lineStart,
-                'line_total_sold'  => $lineSold, // sudah mix diskon / non-diskon
+                'line_total_start' => $lineStart,   // harga ASLI (ori price, tidak berubah)
+                'line_total_sold'  => $lineSold,
             ];
         }
 
-        // ==== TOTALS
-        $totalDispatched = (int) ($handover->total_dispatched_amount ?? 0);
+        // ==== TOTALS — gunakan SUM dari items (sumber kebenaran) bukan header DB
+        $totalNetFromItems = (int) collect($items)->sum('line_net_dispatched');
+        $totalDispatched = $totalNetFromItems > 0 ? $totalNetFromItems : (int) ($handover->total_dispatched_amount ?? 0);
 
         // 🔥 PAKAI HASIL HITUNG DARI ITEMS
         $selisihStock = max(0, $totalDispatched - $totalSold);
@@ -1411,38 +1508,35 @@ EOT;
         $cashAmount     = (int) ($handover->cash_amount ?? 0);
         $transferAmount = (int) ($handover->transfer_amount ?? 0);
         $setorTotal     = $cashAmount + $transferAmount;
-
         $selisihJualSetor = max(0, $totalSold - $setorTotal);
 
         return response()->json([
             'success' => true,
             'handover' => [
-                'id' => $handover->id,
-                'code' => $handover->code,
-                'status' => $handover->status,
-                'can_open_approval' => $this->canWarehouseApprovePayment($handover),
-                'handover_date' => $handover->handover_date instanceof \Carbon\CarbonInterface
-                    ? $handover->handover_date->toDateString()
-                    : (string) $handover->handover_date,
-
-                'warehouse_name' => $wh?->warehouse_name ?? $wh?->name ?? '-',
-                'sales_name'     => $sales?->name ?? '-',
-
-                'total_dispatched' => $totalDispatched,
-
-                // 🔥 NILAI JUAL YANG SUDAH BENAR
-                'total_sold' => $totalSold,
-
-                'selisih_stock_value' => $selisihStock,
-
-                'cash_amount'     => $cashAmount,
-                'transfer_amount' => $transferAmount,
-                'transfer_proof_url' => $proofUrl,
-
-                'setor_total' => $setorTotal,
-                'selisih_jual_vs_setor' => $selisihJualSetor,
+                'id'            => $handover->id,
+                'code'          => $handover->code,
+                'date'          => optional($handover->handover_date)->format('Y-m-d'),
+                'warehouse'     => $wh?->warehouse_name ?? $wh?->name ?? '-',
+                'sales'         => $sales?->name ?? '-',
+                'status'        => $handover->status,
+                'status_label'  => strtoupper($handover->status),
+                
+                // 🔥 Tambahan Info Buyer untuk POS
+                'is_direct_sale' => (bool)$handover->is_direct_sale,
+                'buyer_type'     => $handover->buyer_type ?? 'sales',
+                'customer_name'  => $handover->customer_name,
             ],
-            'items' => $items,
+            'items'     => $items,
+            'summary'   => [
+                'total_dispatched'      => $totalDispatched,
+                'total_sold'            => $totalSold,
+                'total_remaining'       => $selisihStock,
+                'cash_amount'           => $cashAmount,
+                'transfer_amount'       => $transferAmount,
+                'total_deposit'         => $setorTotal,
+                'diff_sold_vs_deposit'  => $selisihJualSetor,
+                'proof_url'             => $proofUrl,
+            ]
         ]);
     }
 // =========================
@@ -1859,7 +1953,11 @@ EOT;
                 
                 $handover->cash_amount     = (int) $allApprovedItems->sum('payment_cash_amount');
                 $handover->transfer_amount = (int) $allApprovedItems->sum('payment_transfer_amount');
+                
+                // Hitung ulang total jual, diskon, dan grand total di header
                 $handover->total_sold_amount = (int) $allApprovedItems->sum('line_total_sold');
+                $handover->discount_total    = (int) $allApprovedItems->sum('discount_total');
+                $handover->grand_total       = $handover->total_sold_amount;
 
                 // Jika ada rejection, paksa status balik ke on_sales
                 if ($rejectedCount > 0) {

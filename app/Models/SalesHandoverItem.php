@@ -22,7 +22,9 @@ class SalesHandoverItem extends Model
         'line_total_sold',
 
         // ===== DISKON =====
+        'discount_mode',              // 'unit' | 'fixed'
         'discount_per_unit',
+        'discount_fixed_amount',      // nominal diskon bundle (fixed)
         'discount_total',
         'unit_price_after_discount',
         'line_total_after_discount',
@@ -42,24 +44,24 @@ class SalesHandoverItem extends Model
     ];
 
     protected $casts = [
-        'qty_start'          => 'integer',
-        'qty_returned'       => 'integer',
-        'qty_sold'           => 'integer',
-        'unit_price'         => 'integer',
-        'line_total_start'   => 'integer',
-        'line_total_sold'    => 'integer',
+        'qty_start'                  => 'integer',
+        'qty_returned'               => 'integer',
+        'qty_sold'                   => 'integer',
+        'unit_price'                 => 'integer',
+        'line_total_start'           => 'integer',
+        'line_total_sold'            => 'integer',
         'discount_per_unit'          => 'integer',
+        'discount_fixed_amount'      => 'integer',
         'discount_total'             => 'integer',
         'unit_price_after_discount'  => 'integer',
         'line_total_after_discount'  => 'integer',
-        'payment_qty'        => 'integer',
-        'payment_cash_qty'   => 'integer',
-        'payment_cash_amount' => 'integer',
-        'payment_transfer_qty' => 'integer',
-        'payment_transfer_amount' => 'integer',
-        'payment_amount'     => 'integer',
+        'payment_qty'                => 'integer',
+        'payment_cash_qty'           => 'integer',
+        'payment_cash_amount'        => 'integer',
+        'payment_transfer_qty'       => 'integer',
+        'payment_transfer_amount'    => 'integer',
+        'payment_amount'             => 'integer',
         'payment_transfer_proof_paths' => 'array',
-        
     ];
 
     public function handover()

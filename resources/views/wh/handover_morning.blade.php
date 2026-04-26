@@ -89,11 +89,11 @@
                 <table class="table table-sm align-middle" id="tblItems">
                     <thead>
                     <tr>
-                    <th style="width:45%">Product</th>
+                    <th style="width:35%">Product</th>
                     <th style="width:10%">Qty</th>
                     <th style="width:15%">Price</th>
-                    <th style="width:15%">Discount</th>
-                    <th style="width:20%">Total</th>
+                    <th style="width:25%">Discount</th>
+                    <th style="width:15%">Total</th>
 
                     <th style="width:5%"></th>
                     </tr>
@@ -129,11 +129,18 @@
                         <input type="text" class="form-control inp-price" readonly>
                     </td>
                     <td>
-                        <input type="number"
-                            class="form-control inp-discount"
-                            name="items[{{ $i }}][discount_per_unit]"
-                            min="0"
-                            value="{{ $draft?->discount_per_unit ?? 0 }}">
+                        <div class="input-group input-group-sm">
+                            <select name="items[{{ $i }}][discount_mode]" class="form-select sel-discount-mode" style="max-width: 80px;">
+                                <option value="unit" @selected(($draft?->discount_mode ?? 'unit') == 'unit')>Unit</option>
+                                <option value="fixed" @selected(($draft?->discount_mode ?? '') == 'fixed')>Fixed</option>
+                            </select>
+                            <input type="number"
+                                class="form-control inp-discount"
+                                name="{{ ($draft?->discount_mode ?? 'unit') == 'fixed' ? 'items['.$i.'][discount_fixed_amount]' : 'items['.$i.'][discount_per_unit]' }}"
+                                min="0"
+                                value="{{ ($draft?->discount_mode ?? 'unit') == 'unit' ? ($draft?->discount_per_unit ?? 0) : ($draft?->discount_fixed_amount ?? 0) }}"
+                                placeholder="Value">
+                        </div>
                     </td>
                     <td>
                         <input type="text" class="form-control inp-total" readonly>
@@ -190,10 +197,13 @@
                     <input type="text" name="otp_code" class="form-control"
                             inputmode="numeric" pattern="[0-9]*" placeholder="6 digits" required>
                     </div>
-                    <div class="col-md-4">
-                    <button type="submit" class="btn btn-success w-100 mt-3 mt-md-0">
-                        Verify OTP &amp; Lock Stock
-                    </button>
+                    <div class="col-md-4 d-flex gap-2">
+                        <button type="submit" class="btn btn-success flex-grow-1 mt-3 mt-md-0">
+                            Verify OTP &amp; Lock Stock
+                        </button>
+                        <button type="button" class="btn btn-outline-danger mt-3 mt-md-0" id="btnCancelMorning">
+                            <i class="bx bx-x-circle"></i> Cancel
+                        </button>
                     </div>
                 </form>
                 <div class="form-text mt-2">
@@ -315,12 +325,23 @@
     // reindex semua row supaya name items[0]..items[n] selalu rapi
     function reindexRows(){
         [...tbody.querySelectorAll('tr')].forEach((tr, idx) => {
-        const sel = tr.querySelector('.sel-product');
-        const qty = tr.querySelector('.inp-qty');
-        if (sel) sel.name = `items[${idx}][product_id]`;
-        if (qty) qty.name = `items[${idx}][qty]`;
-        const disc = tr.querySelector('.inp-discount');
-        if (disc) disc.name = `items[${idx}][discount_per_unit]`;
+            const sel = tr.querySelector('.sel-product');
+            const qty = tr.querySelector('.inp-qty');
+            const mode = tr.querySelector('.sel-discount-mode');
+            const disc = tr.querySelector('.inp-discount');
+
+            if (sel) sel.name = `items[${idx}][product_id]`;
+            if (qty) qty.name = `items[${idx}][qty]`;
+            if (mode) mode.name = `items[${idx}][discount_mode]`;
+            if (disc) {
+                // Mapping name berdasarkan mode biar controller nggak bingung
+                const currentMode = mode?.value || 'unit';
+                if (currentMode === 'fixed') {
+                    disc.name = `items[${idx}][discount_fixed_amount]`;
+                } else {
+                    disc.name = `items[${idx}][discount_per_unit]`;
+                }
+            }
         });
     }
 
@@ -329,14 +350,21 @@
         const priceInput = tr.querySelector('.inp-price');
         const totalInput = tr.querySelector('.inp-total');
         const discountEl = tr.querySelector('.inp-discount');
+        const modeEl     = tr.querySelector('.sel-discount-mode');
         const select     = tr.querySelector('.sel-product');
 
         const qty      = parseInt(qtyInput.value || '0', 10);
         const price    = parseInt(select.selectedOptions[0]?.dataset.price || '0', 10);
         const discount = parseInt(discountEl?.value || '0', 10);
+        const mode     = modeEl?.value || 'unit';
 
-        const netPrice = Math.max(price - discount, 0);
-        const total    = qty * netPrice;
+        let total = 0;
+        if (mode === 'fixed') {
+            total = Math.max((qty * price) - discount, 0);
+        } else {
+            const netPrice = Math.max(price - discount, 0);
+            total = qty * netPrice;
+        }
 
         priceInput.value = price ? formatIdr(price) : '0';
         totalInput.value = formatIdr(total);
@@ -350,9 +378,14 @@
                 const qty      = parseInt(tr.querySelector('.inp-qty').value || '0', 10);
                 const price    = parseInt(select.selectedOptions[0]?.dataset.price || '0', 10);
                 const discount = parseInt(tr.querySelector('.inp-discount')?.value || '0', 10);
+                const mode     = tr.querySelector('.sel-discount-mode')?.value || 'unit';
 
-                const netPrice = Math.max(price - discount, 0);
-                grand += qty * netPrice;
+                if (mode === 'fixed') {
+                    grand += Math.max((qty * price) - discount, 0);
+                } else {
+                    const netPrice = Math.max(price - discount, 0);
+                    grand += qty * netPrice;
+                }
             });
             grandLabel.textContent = formatIdr(grand);
         }
@@ -360,29 +393,27 @@
 
     tbody.addEventListener('change', (e)=>{
         if (e.target.classList.contains('sel-product') ||
-            e.target.classList.contains('inp-qty')) {
-        const tr = e.target.closest('tr');
-        recomputeRow(tr);
-        recomputeGrand();
+            e.target.classList.contains('inp-qty') ||
+            e.target.classList.contains('sel-discount-mode')) {
+            const tr = e.target.closest('tr');
+            if (e.target.classList.contains('sel-discount-mode')) {
+                reindexRows(); // Update name attribute based on mode
+            }
+            recomputeRow(tr);
+            recomputeGrand();
         }
         if (e.target.classList.contains('inp-discount')) {
-        const tr = e.target.closest('tr');
-        recomputeRow(tr);
-        recomputeGrand();
-}
-
+            const tr = e.target.closest('tr');
+            recomputeRow(tr);
+            recomputeGrand();
+        }
     });
 
     tbody.addEventListener('input', (e)=>{
-        if (e.target.classList.contains('inp-qty')) {
-        const tr = e.target.closest('tr');
-        recomputeRow(tr);
-        recomputeGrand();
-        }
-        if (e.target.classList.contains('inp-discount')) {
-        const tr = e.target.closest('tr');
-        recomputeRow(tr);
-        recomputeGrand();
+        if (e.target.classList.contains('inp-qty') || e.target.classList.contains('inp-discount')) {
+            const tr = e.target.closest('tr');
+            recomputeRow(tr);
+            recomputeGrand();
         }
     });
 
@@ -413,10 +444,16 @@
         </td>
         <td><input type="text" class="form-control inp-price" readonly></td>
         <td>
-            <input type="number"
-                class="form-control inp-discount"
-                name="items[${newIndex}][discount_per_unit]"
-                min="0" value="0">
+            <div class="input-group input-group-sm">
+                <select name="items[${newIndex}][discount_mode]" class="form-select sel-discount-mode" style="max-width: 80px;">
+                    <option value="unit">Unit</option>
+                    <option value="fixed">Fixed</option>
+                </select>
+                <input type="number"
+                    class="form-control inp-discount"
+                    name="items[${newIndex}][discount_per_unit]"
+                    min="0" value="0" placeholder="Value">
+            </div>
         </td>
         <td><input type="text" class="form-control inp-total" readonly></td>
         <td class="text-end">
@@ -537,6 +574,60 @@
                 Swal.fire({ icon: 'error', title: 'Connection Error', text: 'Failed to reach server.' });
             } finally {
                 if (window.resetSubmitButton) window.resetSubmitButton(form);
+            }
+        });
+
+        // 🔥 AJAX Cancel Handover Pagi (Warehouse Side) - Pake Event Delegation biar gak ilang pas refresh
+        document.addEventListener('click', async function(e) {
+            const btn = e.target.closest('#btnCancelMorning');
+            if (!btn) return;
+
+            const handoverId = document.querySelector('select[name="handover_id"]').value;
+            if (!handoverId) {
+                Swal.fire({ icon: 'warning', title: 'Oops', text: 'Please select a handover to cancel.' });
+                return;
+            }
+
+            const confirm = await Swal.fire({
+                title: 'Are you sure?',
+                text: "This will DELETE the handover permanently so you can reuse the sequence number. Stock will NOT be affected.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Yes, delete it!'
+            });
+
+            if (!confirm.isConfirmed) return;
+
+            Swal.fire({
+                title: 'Deleting...',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            try {
+                const response = await fetch("{{ route('sales.handover.morning.cancel') }}", {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ handover_id: handoverId })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    Swal.fire({ icon: 'success', title: 'Deleted', text: result.message });
+                    if (window.refreshMorningStatus) await window.refreshMorningStatus();
+                } else {
+                    Swal.fire({ icon: 'error', title: 'Failed', text: result.message || 'Error occurred.' });
+                }
+            } catch (err) {
+                console.error('AJAX Error:', err);
+                Swal.fire({ icon: 'error', title: 'Connection Error', text: 'Failed to reach server.' });
             }
         });
 

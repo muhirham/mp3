@@ -146,7 +146,7 @@
     <script>
         $(function() {
             // Restore filters from localStorage if exist
-            const table = $('#tblTransfers').DataTable({
+            window.transferTable = $('#tblTransfers').DataTable({
                 processing: true,
                 serverSide: true,
                 searching: true,
@@ -217,7 +217,7 @@
 
             // Auto-reload on filter change
             $('#f_status, #f_from_wh, #f_to_wh').on('change', function() {
-                table.ajax.reload();
+                if (window.transferTable) window.transferTable.ajax.reload();
             });
 
             // Connect global navbar search
@@ -228,11 +228,11 @@
                 const q = urlParams.get('q') || $globalSearch.val();
                 if (q) {
                     $globalSearch.val(q);
-                    table.search(q).draw();
+                    window.transferTable.search(q).draw();
                 }
 
                 $globalSearch.on('keyup', function() {
-                    table.search(this.value).draw();
+                    window.transferTable.search(this.value).draw();
                 });
             }
 
@@ -244,6 +244,15 @@
                     to_warehouse_id: $('#f_to_wh').val(),
                 });
                 window.location.href = "{{ route('warehouse-transfer.export') }}?" + params.toString();
+            });
+
+            // ✅ LISTEN REVERB: Auto reload table when transfer updated
+            window.addEventListener('reverb:warehouse-transfer-updated', function(e) {
+                console.log('📡 [Signal] Index Table detected update:', e.detail);
+                if (window.transferTable) {
+                    console.log('🔄 Reloading Transfer Table...');
+                    window.transferTable.ajax.reload(null, false);
+                }
             });
         });
     </script>

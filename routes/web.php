@@ -390,6 +390,10 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->name('sales.handover.morning.verify')
         ->middleware('menu:wh_issue');
 
+    Route::post('/sales/handover/morning/cancel', [SalesHandoverController::class, 'cancelMorningHandover'])
+        ->name('sales.handover.morning.cancel')
+        ->middleware('menu:wh_issue');
+
     // SORE
     Route::get('/sales/handover/evening', [SalesHandoverController::class, 'eveningForm'])
         ->name('sales.handover.evening')
@@ -413,6 +417,15 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->name('warehouse.handovers.evening.generate-otp')
         ->middleware('menu:wh_sales_reports');
 
+
+    // === NEW: DIRECT SALES (POS GUDANG) - key: wh_direct_sales ===
+    Route::get('/warehouse/direct-sales', [\App\Http\Controllers\Warehouse\DirectSalesController::class, 'index'])
+        ->name('warehouse.direct_sales.index')
+        ->middleware('menu:wh_direct_sales');
+
+    Route::post('/warehouse/direct-sales', [\App\Http\Controllers\Warehouse\DirectSalesController::class, 'store'])
+        ->name('warehouse.direct_sales.store')
+        ->middleware('menu:wh_direct_sales');
 
     /* === Damaged & Expired Stocks === */
     // Admin WH View

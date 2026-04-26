@@ -15,6 +15,7 @@ use App\Models\WarehouseTransferLog;
 use App\Models\Product;
 use App\Models\Warehouse;
 use App\Models\Company;
+use App\Events\WarehouseTransferUpdated;
 
 class WarehouseTransferController extends Controller
 {
@@ -147,7 +148,7 @@ class WarehouseTransferController extends Controller
             'items.*.qty'       => 'required|integer|min:1',
         ]);
 
-        return DB::transaction(function () use ($r) {
+        $result = DB::transaction(function () use ($r) {
 
             $sourceWarehouseId = auth()->user()->hasRole('warehouse')
                 ? auth()->user()->warehouse_id
@@ -188,11 +189,41 @@ class WarehouseTransferController extends Controller
                 'action' => 'SUBMITTED',
                 'note' => 'Transfer submitted to destination warehouse',
             ]);
-            return response()->json([
+
+            return [
                 'success' => true,
-                'id' => $transfer->id
-            ]);
+                'id' => $transfer->id,
+                'transfer' => $transfer
+            ];
         });
+
+        // Broadcast di luar transaksi biar datanya udah committed
+        event(new WarehouseTransferUpdated(
+            $result['transfer']->id,
+            $result['transfer']->source_warehouse_id,
+            $result['transfer']->destination_warehouse_id,
+            $result['transfer']->status,
+            'submitted'
+        ));
+
+        // 🔔 Tambahkan Notifikasi Navbar untuk Admin Gudang Tujuan
+        $destUsers = \App\Models\User::where('warehouse_id', $result['transfer']->destination_warehouse_id)->get();
+        foreach ($destUsers as $u) {
+            \App\Models\Notification::create([
+                'user_id' => $u->id,
+                'type' => 'warehouse_transfer',
+                'title' => 'New Stock Transfer Request',
+                'body' => "Transfer {$result['transfer']->transfer_code} from " . ($result['transfer']->sourceWarehouse->name ?? 'Another WH') . " requires your approval.",
+                'url' => route('warehouse-transfer-forms.show', $result['transfer']->id),
+                'reference_type' => 'warehouse_transfer',
+                'reference_id' => $result['transfer']->id,
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'id' => $result['id']
+        ]);
     }
 
 
@@ -253,6 +284,32 @@ class WarehouseTransferController extends Controller
             'note' => 'Destination warehouse approved',
         ]);
 
+        event(new WarehouseTransferUpdated(
+            $transfer->id,
+            $transfer->source_warehouse_id,
+            $transfer->destination_warehouse_id,
+            $transfer->status,
+            'approved'
+        ));
+
+        // 🔔 Notif ke Admin Gudang Asal (Suruh GR)
+        $sourceUsers = \App\Models\User::where('warehouse_id', $transfer->source_warehouse_id)->get();
+        foreach ($sourceUsers as $u) {
+            \App\Models\Notification::create([
+                'user_id' => $u->id,
+                'type' => 'warehouse_transfer',
+                'title' => 'Transfer Approved!',
+                'body' => "Your transfer request {$transfer->transfer_code} has been approved. Please perform Goods Receipt.",
+                'url' => route('warehouse-transfer-forms.show', $transfer->id),
+                'reference_type' => 'warehouse_transfer',
+                'reference_id' => $transfer->id,
+            ]);
+        }
+
+        if (request()->ajax()) {
+            return response()->json(['success' => true, 'message' => 'Transfer approved successfully']);
+        }
+
         return back()->with('success', 'Transfer approved by destination warehouse successfully');
     }
 
@@ -272,6 +329,32 @@ class WarehouseTransferController extends Controller
             'action' => 'DEST_REJECTED',
             'note' => $r->reason,
         ]);
+
+        event(new WarehouseTransferUpdated(
+            $transfer->id,
+            $transfer->source_warehouse_id,
+            $transfer->destination_warehouse_id,
+            $transfer->status,
+            'rejected'
+        ));
+
+        // 🔔 Notif ke Admin Gudang Asal (Kasih tau kalau ditolak)
+        $sourceUsers = \App\Models\User::where('warehouse_id', $transfer->source_warehouse_id)->get();
+        foreach ($sourceUsers as $u) {
+            \App\Models\Notification::create([
+                'user_id' => $u->id,
+                'type' => 'warehouse_transfer',
+                'title' => 'Transfer Rejected',
+                'body' => "Transfer {$transfer->transfer_code} was rejected. Reason: " . ($r->reason ?? '-'),
+                'url' => route('warehouse-transfer-forms.show', $transfer->id),
+                'reference_type' => 'warehouse_transfer',
+                'reference_id' => $transfer->id,
+            ]);
+        }
+
+        if (request()->ajax()) {
+            return response()->json(['success' => true, 'message' => 'Transfer rejected successfully']);
+        }
 
         return back()->with('success', 'Transfer rejected successfully');
     }
@@ -460,12 +543,16 @@ class WarehouseTransferController extends Controller
             // ===============================
             // LOG
             // ===============================
-            $transfer->logs()->create([
-                'action'       => 'RECEIVED',
-                'performed_by' => auth()->id(),
-                'note'         => $request->note,
-            ]);
         });
+
+        // Broadcast di luar transaksi biar datanya udah committed
+        event(new WarehouseTransferUpdated(
+            $transfer->id,
+            $transfer->source_warehouse_id,
+            $transfer->destination_warehouse_id,
+            $transfer->status,
+            'completed'
+        ));
 
         return back()->with('success', 'Source warehouse Goods Received saved successfully');
     }
@@ -676,6 +763,18 @@ class WarehouseTransferController extends Controller
             ->sortByDesc('created_at')
             ->first();
 
+
+        if (request()->has('partial') && request()->partial === 'actions') {
+            return view('wh.partials.transfer_actions', [
+                'me' => $me,
+                'transfer' => $transfer,
+                'canApproveSource' => $canApproveSource,
+                'canApproveDestination' => $canApproveDestination,
+                'canGrSource' => $canGrSource,
+                'canCancel' => $canCancel,
+                'canPrintSJ' => $canPrintSJ,
+            ]);
+        }
 
         return view('wh.transfer_form', [
             'me' => $me,

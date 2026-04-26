@@ -1,71 +1,80 @@
-id,name,username,email,phone,position,signature_path,password,warehouse_id,status,role_slugs
-1,"Admin Pusat",admin,admin@local,081200000001,,ImageAsset/1.jpg,$2y$12$ppKlEsp.8yckS0J4kB88cuTkfCoNj6QU88bWw1MgXcyXkIqCX6FGW,,active,superadmin
-2,"Admin DEPO Bukittinggi",wh_bukittinggi,wh_bukittinggi@local,081200000010,"Warehouse Admin",ImageAsset/3.jpg,$2y$12$y09Pr8hF/q2DkaMesQ104OmMstkLDdW4zjjwnSO464PpUpz7RcX9m,1,active,warehouse
-3,"Admin DEPO Padang",wh_padang,wh_padang@local,081200000011,"Warehouse Admin",ImageAsset/3.jpg,$2y$12$JXubvgsfsUtDM.pVScfmoucGCDWxmaDxD2ILBzOpVDwZsR1j/Y.3W,2,active,warehouse
-5,"Sales DEPO Padang",sales_padang,sales_padang@local,081200000013,Sales,ImageAsset/5.jpg,$2y$12$tm1GKKsjQqsfVvLEFH/HHeIBCyuUCCsqrw/M109IJCEvfb7lps5.O,2,active,sales
-6,"Sales Padang Rudi",Rudi,sales_padang@loscal,081200000014,Sales,ImageAsset/5.jpg,$2y$12$RNP5v/qAY25Beyfy5ugfUOWZX3YtrWL5Yv7SgP29ypJIzwHHj3J0S,2,active,sales
-7,"User Procurement",procurement,procurement@local,081200000015,Procurement,ImageAsset/4.jpg,$2y$12$MG.QktEfVG6uPW09iqKEc.d0G0UkqRlt4ciuqWckJh6zG.KbkbkaK,,active,procurement
-8,"Chief Executive Officer",ceo,ceo@local,081200000016,CEO,ImageAsset/1.jpg,$2y$12$lpEEmc1kQ59plJUkZWraJ.yxtDqeM.pVSx2NIjX3LYAoEIO9FsFz6,,active,ceo
-9,"Siti Chotijah",Dharmasraya,sitichotijah.mp3@gmail.com,0895401157050,"Admin WH",signatures/DLbdeOeggE7SkaD4WLzu7XT1YWSeVgGSiSXFEUjf.jpg,$2y$12$dkFL14aBNKEJws3bgLbkcOb3AnwJUF2LxkaQFyRAaxSeTOQ3W4qum,3,active,warehouse
-10,"Ika Reskian Tomi",Solok,admnsolok@gmail.com,0895405405293,"admin wh",,$2y$12$LH0G7Qy3UnJzL2BX4flO0eUPr8Qm7WLsGHvzwnsjiKXoE216n21Jm,8,active,warehouse
-11,"Negal Neglas Sari",Tanah_Datar,negalneglasari@gmail.com,085278057526,"Admin Wh",,$2y$12$mVrYCXESO9//AaKblFQXv.Oz51CZTYmlASOE1rnVqfj5Hk9PgILDC,9,active,warehouse
-12,"Selvi Tryen Ningsih",Pasaman_Barat,selvitryenningsih.mp3@gmail.com,089505569181,"Admin Wh",,$2y$12$1l/XACDmlYNSD1n55dFHW.PvjZ/y/ahjipboRYp3JQvYkE14d8TWu,5,active,warehouse
-13,"Indah Agustin",Payakumbuh,indahagstn.28@gmail.com,089530847959,"Admin Wh",,$2y$12$R3CwF4aGcTctxCmLXIjSU.CDh/Rrt2XumYZpilNH7Xg409yFGeeJG,6,active,warehouse
-14,"Friska Diani Sakinah",Bukittinggi,friskadiani.mp3@gmail.com,085265635659,"Admin Wh",,$2y$12$prARBdDgJmMySRk7/Xod9OMrp8PQ04MFWjmLVWicgPNWvf5fYkF.a,1,active,warehouse
-15,"YORRI HASMI PERTIWI",Padang_A,yorrihasmi22@gmail.com,089672310041,"Admin Wh",signatures/S3a6sMg8Z0AQnoojOLvxa0Dr9oiAxtaTHFHj9sRg.jpg,$2y$12$JuI6g9hV0JfxYxC/OW3r4eCbRQOjkNU.MlFtI8M/nBl8i86bDpc9e,2,active,warehouse
-16,Rahmawati,Padang_B,rahmawati1005@gmail.com,0895320808288,"Admin Wh",,$2y$12$kWzPew5frPveA1LD1brD7uekyOtwiYDyYTzuttVIeR0nzsRzuYge.,10,active,warehouse
-17,Sarmila,Pariaman,sarmila1.mp3@gmail.com,089529943710,"Admin Wh",,$2y$12$HQuG9O0wgum/RJzzn3Njh.OqTLt/pC4n.qWVdf3L9RMgBjr0CsPoa,4,active,warehouse
-18,Painan,Painan,Painan@mandau.id,098765437,"Admin Wh",,$2y$12$fcZdASVm.pE1a1ovBr.Vn.qPS8Asbv5nAYhNpb67UBV25SkVJbCPO,11,active,warehouse
-19,"NIKO IRAWAN",Niko_Irawan,nikoirawan00@gmail.com,089521202061,"Sales Area Sijunjung",signatures/SNzebi6a4UDuSe6h9I39OphZsL0gX6oe6EdvdCe2.jpg,$2y$12$9EhiA1mCftWKWLS78O0VQ.KPGGY6QQQSMLI5zP9WkR6ydfxKUPwFy,3,active,sales
-20,"DICKI FEBERIADI",Dicki_Feberiadi,dickifeberiadi@gmail.com,0895352993977,"Sales Area Koto Baru",signatures/eAHxEPjVmxyobStjZ8tl1im7wlHegfQNyV0JpqDV.jpg,$2y$12$wrvqieotjLYl4BpjSNnzDeovGXgoMg1dYqe6C3wYbbR./MoVAgCWq,3,active,sales
-21,"Chenthia Budiharto",Chenthia_Budiharto,chenthia.budiharto@mandau.id,,,,$2y$12$Wb9vimgsb.rjN7E.bu.rKehgvECJW.6wL86gfIgtXALx1Qgng9gHO,,active,superadmin
-22,Andi,Andi_sales,Andi_sales@gmail.com,085765328975,Sales,signatures/SNzebi6a4UDuSe6h9I39OphZsL0gX6oe6EdvdCe2.jpg,$2y$12$svYzH6G3mzow/WwIJxvGTeWTykd7jeT6FzZBWpPYQR9d1.EgsDKK2,1,active,sales
-24,"Ajif Agustian",Sales_Mandiangin,ajifagustian3@gmail.com,089521202052,Sales,,$2y$12$qJMMgHZn2BxsTAMboLkBUupwK1qMm1dBaCYaiUjAWjKvcASCnB26K,1,active,sales
-25,"Hendra Marpaung",Sales_AmpekAngkek,fahimna11889@gmail.com,08974551415,Sales,,$2y$12$W1jD5zlEVq/kJsB03VvjduYRCu1rD/1jJSULOTIOSipxC92SkwJW6,1,active,sales
-26,"Arif Febri Hendi",Sales_Tigobaleh,ariffebrihendi@gmail.com,089517965930,Sales,,$2y$12$Jr2wfWax6dm60BrSH4RyPOAPtAp51mp50aOjQ9lVvX.GG61ESl.Qm,1,active,sales
-27,"Randi Gunawan",Sales_GuguakPanjang,randigun280294@gmail.com,089521202048,Sales,,$2y$12$dNEAy3xcmlkTrByiUXcze.gxyfFItxiWaQDd23fseFoKo60JziRD2,1,active,sales
-28,"Ilham Pasundan",Sales_Banuhampu,Ilhampas07@gmail.com,089523006007,Sales,,$2y$12$k3yc23NsCBYcKKpChSgnYea88ip9aLsZbq/wQ/JNdFkSAXwlbqP9m,1,active,sales
-29,"Rio Marlatif",Sales_SungaiPua,riomarlatif7@gmail.com,08974551416,Sales,,$2y$12$f1hF9Ye7ElCLGjplHwk1BeFRZzblyfJkwI7SNXZd50suvQZZTyluS,1,active,sales
-30,"Rizky Prima Saputra",Sales_Bonjol,rizkyprima32@gmail.com,08982607512,Sales,,$2y$12$qhb.WYAhIbasFUQPFrciqegix/xdPEMqklKbf/dzXWk5maQfN9muq,1,active,sales
-31,"Yoga Athalauza",Sales_TilatangKamang,yogaathalauza56@gmail.com,0895329873050,Sales,,$2y$12$l9ctPIlXeC8RTh1ev0fETud2MRMR6uKbaFSGkgcCLOWKkqmUL.BwW,1,active,sales
-32,"Andri Refriandi",Sales_Baso,andrirefriandi219@gmail.com,089639058585,Sales,,$2y$12$/c9JG2UWWrr0dEBuxYPnHePR5pC2Cz35oiELedLUxUCjYh/WASZF6,1,active,sales
-33,"Budi Setiawan",Sales_KamangMagek,bs136515@gmail.com,089639060001,Sales,,$2y$12$QCyGLfvdZGA69alb1bHCdep.J9Q3WE0yS20X/KZuToNlzIoSCrc3G,1,active,sales
-34,zidan,zidan_sales,zidan_sales@gmail.com,,Sales,,$2y$12$pZX6fq4fbz3O0ZcMguyGs.a3q3rn0puCXnSd5lY2QvR11FyZ.IyfC,1,active,sales
-35,"DARMAN ATIFAH",SE_ANDALAS,darmanatifah@gmail.com,08982607516,SALES,,$2y$12$3vb6odGcoF6kLE4B9EcoB.bOkM2ga8eINk/eSzjW7QjYzv95Xy.Xy,2,active,sales
-36,"ARLAN NUARI",SE_BATASKOTA,arlan.nuari1101@gmail.com,089517965939,Sales,,$2y$12$f24tpzsA36lbwI5qkZ6yleT21GfvD7DP5VFmaZQns7URglQeR5/iK,10,active,sales
-37,"BULFI KAHFI",SE_BUNGUS,bulfikahfi166@gmail.com,089517965943,SALES,,$2y$12$VdFqHWKVIWkNAjwZv3JFMuActSBAs2bENufuxCsyBXz3BwQJMSxq6,2,active,sales
-38,"TEDDY ERLANGGA",SE_MATAAIR,teddyerlangga87@gmail.com,08982607519,SALES,,$2y$12$HKywGqatwJFQXdXXTHUWbetb2obdJDEGSPEzWBS.tTPtyOW.gWZO2,2,active,sales
-39,"RONAL AGUSTO",SE_PENGAMBIRAN,ronalagusto29@gmail.com,089521202068,SALES,,$2y$12$B7y9GU1uE8t6m6Y4WYzBbO27YrQtTrwHVbhq0t5FznWmYWuj1wp.y,2,active,sales
-40,"YOGIE DWI SYAHPUTRA",SE_PONDOK,yogiedwisyahputra0060@gmail.com,089521202069,SALES,,$2y$12$HxdkwyPR.K0nHsjXdSCHh.LNw4i.lvZsx1qYE4i29/HexwS4xd5Ui,2,active,sales
-41,"Agestya Heryan Pramana",Sales_PayakumbuhTimur,agestyaherian91@gmail.com,089521202054,Sales,,$2y$12$AicV0tKmHfuqlmtwkN7PXOhypDqnkX0adzF7kNyiJlIkrC.w3z7k.,6,active,sales
-42,"Diko Aditya Jufri",Sales_PayakumbuhUtara,dikoaditya410@gmail.com,08974551412,Sales,,$2y$12$aAX0ApTxuRN3rCQ39NesXe9BV6SlYvMokRGRsSC7Aj8TRTI0u2riq,6,active,sales
-43,"Muhammad Arsil",Sales_Lampasi,acilcilsilia@gmail.com,089521202049,Sales,,$2y$12$N1vdLXnn1qD5hwbvsKHkr.LAuihwGV5oyB3DjNWqG9vPkc1I997dy,6,active,sales
-44,"Edoni Eka Putra",Sales_BukitBarisan,dhonivivo1992@gmail.com,089679397939,Sales,,$2y$12$leCJVamS21dc9zJBmMCqUOh0WowK.XMiO0jlYRdWYt0dYTj81Qotu,6,active,sales
-45,Fitra,Sales_Situjuah,fitrambs7588@gmail.com,089512126969,Sales,,$2y$12$BrQG5U6lxpeNt2sJgXqQOuBBArnKtOGFId/pIosEiTY39p3a8RF3a,6,active,sales
-46,Wesqarni,Sales_BatangTabik,wwesqarni@gmail.com,089521202046,Sales,,$2y$12$sB/0T5WEc2cAU/bDJy8HP.g23sXJDr2sOSOTu76GoobwtzJV6ypI2,6,active,sales
-47,"Rayes Syah Eko Putra",Sales_GuguakMungka,rayes9687@gmail.com,089617965929,Sales,,$2y$12$q5jqk5nSAw75lwpx9nyNAu/VHmzKMg7RFea4OLtvGW/DuyJi570UG,6,active,sales
-48,"Agus Purnomo",Sales_PayakumbuhBarat,agustpurnomo99@gmail.com,08974551413,Sales,,$2y$12$CAfvqdNEbc4lP7EV98at/u4mRs/tDZ8TSfAllyu1yiefTnWWCbBUm,6,active,sales
-49,"Ardian Taurus Tio",Sales_Akabiluru,ardiantaurustio@gmail.com,08997481577,Sales,,$2y$12$JmJLv7Y1MpPW06yxBXiQ..qz4uIQQI3CsmVi0AbpoipLdg0T9sG9S,6,active,sales
-50,"Ramadhatul Fauzi",Sales_Pangkalan,ezi.changcut@gmail.com,089521202058,Sales,,$2y$12$z5jGwUj2m7/2Gaz8uQCHnOvGvAtP88nyOVZ5dHBra/JBRwvHSd97O,6,active,sales
-51,"DEVID AGUSTIN",SE_PASARBARU,devid.agustin22@gmail.com,089521202067,SALES,,$2y$12$BXtNhkNuHQoyQk9uan.Qs.Hx4rTzVctape5DGzrUrRK6AnVmg9nHm,2,active,sales
-52,"RANDY DWITA PUTRA",SE_BANDARBUAT,randydp8@gmail.com,08982607518,SALES,,$2y$12$5sCbkITyJlb3nRNIYiLVE.C6/x6ZtzjD/zOMhV4EVlLCfpekrAm9q,2,active,sales
-53,"RANDIKA CHANDRA PUTRA",SE_LUBUKLINTAH,randikachandra1996@gmail.com,089521202064,SALES,,$2y$12$z95ay9A3oJeBeuHt2JRgLOJ9oeBDue.TU8gdWt95KVZjNDDSxLPcO,2,active,sales
-54,"Agung Adytia Pratama",Dse_Pasaman,agungadytiapratama08@gmail.com,08991280904,Sales,,$2y$12$OA84Dgc9geF84SNv8aHOgOFTg72VZ.jbC5iYaYwwAm3NKBvqlDnle,5,active,sales
-55,"Pratama Yoga Ardi",Dse_Kinali,yogadesi62@gmail.com,089673497759,Sales,,$2y$12$s4Vd1wO05nkEn.QhwPkYf.bw5F6ct0KAzI.dQGpysAiDS.kIyV1EO,5,active,sales
-56,"Bastian Ramadhan",Dse_LuhakNanDuo,Bstianrmdhn@gmail.com,0895324918883,Sales,,$2y$12$GMO8by76Plq6KV6a5LISxeQ2.dXZr3miv9WEP/1GHh4ORVYl0gDrq,5,active,sales
-57,"Lukman Hakim",Dse_GunungTuleh,lh607434@gmail.com,085274782873,Sales,,$2y$12$mEopZFK48UeORQpgBrbL0e4DBIWfZyz6EaeQ/YnrVqHHTV23Xxlqa,5,active,sales
-58,"GUNTUR CANTA",SE_LAPAI,caniagoguntur@gmail.com,08982607514,SALES,,$2y$12$TK41yMzriSSWs5llzUC4wOvG6ng0P2vVmtiWUH.3TknoPBuqZJ5ra,10,active,sales
-59,"RIDWAN EFENDI",SE_DADOK,eridwan40@gmail.com,0895405394425,SALES,,$2y$12$8FPlTqZAJzapfrlfMlRcNuyf2.EaKDtAQaDF/jlTGGiIXOOOahsfK,10,active,sales
-60,"EKO SAPUTRA",SE_KALAWI,saputraeko69019@gmail.com,089521202066,SALES,,$2y$12$DOnMvc3XEyAbecR4bsEf3.RExUZj5srKgbbQXcHs16TdYYZSg51py,10,active,sales
-61,"KHEVIN PRANIZAL ILLAHI",SE_KALUMPANG,alexsaander229@gmail.com,089517965940,SALES,,$2y$12$r.QurjNPOual39exBAYp..XzHpHCe4EHqnFWPBDsj.AnQMcsQzxnu,10,active,sales
-62,"BAYU SAPUTRA",SE_TARUKO,aziusaputra4@gmail.com,089521202071,SALES,,$2y$12$LYNgWyk21GVB7oKvI5Ke.uUQFtMWf19NmPv06xgzHaTfELkcPRV82,10,active,sales
-63,"REVI RESTIADI",SE_LUMIN,seivercogah@gmail.com,089517965941,SALES,,$2y$12$Y6OtwHFq5XCUhYls4ffzCuzVVLSpoOT3JRlb40F9emGn2LtxF38WK,10,active,sales
-64,"M. QHODRI",SE_AIRTAWAR,qhodri234@gmail.com,0895386884522,SALES,,$2y$12$t4vTeBxSpa4f2YUmJ6D31eoDdGdPZoddme67/yKUqjSuDTipQgaQG,10,active,sales
-65,"KOKOH MUHARDI",SE_BELIMBING,kokohmuhardi@gmail.com,08982607513,SALES,,$2y$12$5iQuzLO62yLlYp9KA.kbgu9fBHLmGjQ2T.4ytqHPU7WMOMjTRUcmi,10,active,sales
-66,"Difo Gunawan",Difo_Gunawan,difodege@gmail.com,08974551418,"Sales Lima Kaum",,$2y$12$TydmW/90R/BFwj9u9U00ROxA2dXHlp0DBEtRZBHYfjNv5Xvjj8XWO,9,active,sales
-67,"Ilham Wahyudi",Ilham_Wahyudi,ilhamwahyudi0474@gmail.com,08982370600,"Sales Salimpaung",,$2y$12$CrbHO8NfmH0RVgRpVdHQj.oXgRTDxGM/cIP6Nho2ZK4nYmjWKPZHO,9,active,sales
-68,"Arif Rahman",Arif_Rahman,rahmanarif0429@gmail.com,08982455554,"Sales Sungai Tarab",,$2y$12$Evjdkb.vcpZsPoQ8pDdIteQdWwm5IropWtHOqJ3quezHckp1CC8Vm,9,active,sales
-69,"Rindi Oktavianus",Rindi_Oktavianus,rindioktavianus7@gmail.com,089521202083,"Sales Batipuh",,$2y$12$62Df35a84sO5hv7anJwIYOpsvRz/DI3QG6SSkIjbAWX6.PHjacT/2,9,active,sales
-70,"Adri Nofrizal",Adri_Nofrizal,anofrizal99@gmail.com,08974551417,"Sales Padang Panjang Barat",,$2y$12$aQzMbJaw5nzWpzZj.d71GuVRJyBm3zd1QUNDyNEuGNy4jJSt/UGlC,9,active,sales
-71,Jefri,Jefri_,jefri8142@gmail.com,0889521202085,"Sales Padang Panjang Timur",,$2y$12$mBSfw/PD7/H73dgJPQeAout5mPOK6xeptWSrvGK47wx5rrmTxhVNW,9,active,sales
-72,"RISKI GISFA RIANTO",Riski_Gisfa,riskigisfarianto@gmail.com,089519294518,"Sales Area Pulau Punjung",signatures/TAph6SZyS1D0xPANk0fdXuP5lNH8CqV5r7njYiCB.jpg,$2y$12$4fJAOSlP5aZrBNdv9grDI.IiXXES9vycHw0XhxROOv3AskNPkrQqq,3,active,sales
+id,name,username,email,phone,position,signature_path,password,warehouse_id,warehouse_code,status,role_slugs
+1,"Admin Pusat",admin,admin@local,081200000001,,ImageAsset/1.jpg,$2y$12$ppKlEsp.8yckS0J4kB88cuTkfCoNj6QU88bWw1MgXcyXkIqCX6FGW,,,active,superadmin
+2,"Admin DEPO Bukittinggi",wh_bukittinggi,wh_bukittinggi@local,081200000010,"Warehouse Admin",ImageAsset/3.jpg,$2y$12$y09Pr8hF/q2DkaMesQ104OmMstkLDdW4zjjwnSO464PpUpz7RcX9m,1,DEPO-BUKITTINGGI,active,warehouse
+3,"Admin DEPO Padang",wh_padang,wh_padang@local,081200000011,"Warehouse Admin",ImageAsset/3.jpg,$2y$12$JXubvgsfsUtDM.pVScfmoucGCDWxmaDxD2ILBzOpVDwZsR1j/Y.3W,2,DEPO-PADANG-A,active,warehouse
+4,"Sales padang Sinta",Spadang,sales_padang@local,081200000013,Sales,ImageAsset/5.jpg,$2y$12$tm1GKKsjQqsfVvLEFH/HHeIBCyuUCCsqrw/M109IJCEvfb7lps5.O,2,DEPO-PADANG-A,active,sales
+5,"Sales Padang Rudi",Rudi,sales_padang@loscal,081200000014,Sales,ImageAsset/5.jpg,$2y$12$RNP5v/qAY25Beyfy5ugfUOWZX3YtrWL5Yv7SgP29ypJIzwHHj3J0S,2,DEPO-PADANG-A,active,sales
+6,"User Procurement",procurement,procurement@local,081200000015,Procurement,ImageAsset/4.jpg,$2y$12$MG.QktEfVG6uPW09iqKEc.d0G0UkqRlt4ciuqWckJh6zG.KbkbkaK,,,active,procurement
+7,"Chief Executive Officer",ceo,ceo@local,081200000016,CEO,ImageAsset/1.jpg,$2y$12$lpEEmc1kQ59plJUkZWraJ.yxtDqeM.pVSx2NIjX3LYAoEIO9FsFz6,,,active,ceo
+8,"Siti Chotijah",Dharmasraya,sitichotijah.mp3@gmail.com,0895401157050,"Admin WH",signatures/DLbdeOeggE7SkaD4WLzu7XT1YWSeVgGSiSXFEUjf.jpg,$2y$12$dkFL14aBNKEJws3bgLbkcOb3AnwJUF2LxkaQFyRAaxSeTOQ3W4qum,3,DEPO-DHARMASRAYA,active,warehouse
+9,"Ika Reskian Tomi",Solok,admnsolok@gmail.com,0895405405293,"admin wh",,$2y$12$LH0G7Qy3UnJzL2BX4flO0eUPr8Qm7WLsGHvzwnsjiKXoE216n21Jm,8,DEPO-SOLOK,active,warehouse
+10,"Negal Neglas Sari",Tanah_Datar,negalneglasari@gmail.com,085278057526,"Admin Wh",,$2y$12$mVrYCXESO9//AaKblFQXv.Oz51CZTYmlASOE1rnVqfj5Hk9PgILDC,9,DEPO-TANAH-DATAR,active,warehouse
+11,"Selvi Tryen Ningsih",Pasaman_Barat,selvitryenningsih.mp3@gmail.com,089505569181,"Admin Wh",,$2y$12$1l/XACDmlYNSD1n55dFHW.PvjZ/y/ahjipboRYp3JQvYkE14d8TWu,5,DEPO-PASAMAN-BARAT,active,warehouse
+12,"Indah Agustin",Payakumbuh,indahagstn.28@gmail.com,089530847959,"Admin Wh",,$2y$12$R3CwF4aGcTctxCmLXIjSU.CDh/Rrt2XumYZpilNH7Xg409yFGeeJG,6,DEPO-PAYAKUMBUH,active,warehouse
+13,"Friska Diani Sakinah",Bukittinggi,friskadiani.mp3@gmail.com,085265635659,"Admin Wh",,$2y$12$prARBdDgJmMySRk7/Xod9OMrp8PQ04MFWjmLVWicgPNWvf5fYkF.a,1,DEPO-BUKITTINGGI,active,warehouse
+14,"YORRI HASMI PERTIWI",Padang_A,yorrihasmi22@gmail.com,089672310041,"Admin Wh",signatures/S3a6sMg8Z0AQnoojOLvxa0Dr9oiAxtaTHFHj9sRg.jpg,$2y$12$JuI6g9hV0JfxYxC/OW3r4eCbRQOjkNU.MlFtI8M/nBl8i86bDpc9e,2,DEPO-PADANG-A,active,warehouse
+15,Rahmawati,Padang_B,rahmawati1005@gmail.com,0895320808288,"Admin Wh",,$2y$12$kWzPew5frPveA1LD1brD7uekyOtwiYDyYTzuttVIeR0nzsRzuYge.,10,DEPO-PADANG-B,active,warehouse
+16,Sarmila,Pariaman,sarmila1.mp3@gmail.com,089529943710,"Admin Wh",,$2y$12$HQuG9O0wgum/RJzzn3Njh.OqTLt/pC4n.qWVdf3L9RMgBjr0CsPoa,4,DEPO-PARIAMAN,active,warehouse
+17,Painan,Painan,Painan@mandau.id,098765437,"Admin Wh",,$2y$12$fcZdASVm.pE1a1ovBr.Vn.qPS8Asbv5nAYhNpb67UBV25SkVJbCPO,11,DEPO-PAINAN,active,warehouse
+18,"NIKO IRAWAN",Niko_Irawan,nikoirawan00@gmail.com,089521202061,"Sales Area Sijunjung",signatures/SNzebi6a4UDuSe6h9I39OphZsL0gX6oe6EdvdCe2.jpg,$2y$12$9EhiA1mCftWKWLS78O0VQ.KPGGY6QQQSMLI5zP9WkR6ydfxKUPwFy,3,DEPO-DHARMASRAYA,active,sales
+19,"DICKI FEBERIADI",Dicki_Feberiadi,dickifeberiadi@gmail.com,0895352993977,"Sales Area Koto Baru",signatures/eAHxEPjVmxyobStjZ8tl1im7wlHegfQNyV0JpqDV.jpg,$2y$12$wrvqieotjLYl4BpjSNnzDeovGXgoMg1dYqe6C3wYbbR./MoVAgCWq,3,DEPO-DHARMASRAYA,active,sales
+20,"Chenthia Budiharto",Chenthia_Budiharto,chenthia.budiharto@mandau.id,,,,$2y$12$Wb9vimgsb.rjN7E.bu.rKehgvECJW.6wL86gfIgtXALx1Qgng9gHO,,,active,superadmin
+21,Andi,Andi_sales,Andi_sales@gmail.com,085765328975,Sales,signatures/SNzebi6a4UDuSe6h9I39OphZsL0gX6oe6EdvdCe2.jpg,$2y$12$svYzH6G3mzow/WwIJxvGTeWTykd7jeT6FzZBWpPYQR9d1.EgsDKK2,1,DEPO-BUKITTINGGI,active,sales
+22,"Ajif Agustian",Sales_Mandiangin,ajifagustian3@gmail.com,089521202052,Sales,,$2y$12$qJMMgHZn2BxsTAMboLkBUupwK1qMm1dBaCYaiUjAWjKvcASCnB26K,1,DEPO-BUKITTINGGI,active,sales
+23,"Hendra Marpaung",Sales_AmpekAngkek,fahimna11889@gmail.com,08974551415,Sales,,$2y$12$W1jD5zlEVq/kJsB03VvjduYRCu1rD/1jJSULOTIOSipxC92SkwJW6,1,DEPO-BUKITTINGGI,active,sales
+24,"Arif Febri Hendi",Sales_Tigobaleh,ariffebrihendi@gmail.com,089517965930,Sales,,$2y$12$Jr2wfWax6dm60BrSH4RyPOAPtAp51mp50aOjQ9lVvX.GG61ESl.Qm,1,DEPO-BUKITTINGGI,active,sales
+25,"Randi Gunawan",Sales_GuguakPanjang,randigun280294@gmail.com,089521202048,Sales,,$2y$12$dNEAy3xcmlkTrByiUXcze.gxyfFItxiWaQDd23fseFoKo60JziRD2,1,DEPO-BUKITTINGGI,active,sales
+26,"Ilham Pasundan",Sales_Banuhampu,Ilhampas07@gmail.com,089523006007,Sales,,$2y$12$k3yc23NsCBYcKKpChSgnYea88ip9aLsZbq/wQ/JNdFkSAXwlbqP9m,1,DEPO-BUKITTINGGI,active,sales
+27,"Rio Marlatif",Sales_SungaiPua,riomarlatif7@gmail.com,08974551416,Sales,,$2y$12$f1hF9Ye7ElCLGjplHwk1BeFRZzblyfJkwI7SNXZd50suvQZZTyluS,1,DEPO-BUKITTINGGI,active,sales
+28,"Rizky Prima Saputra",Sales_Bonjol,rizkyprima32@gmail.com,08982607512,Sales,,$2y$12$qhb.WYAhIbasFUQPFrciqegix/xdPEMqklKbf/dzXWk5maQfN9muq,1,DEPO-BUKITTINGGI,active,sales
+29,"Yoga Athalauza",Sales_TilatangKamang,yogaathalauza56@gmail.com,0895329873050,Sales,,$2y$12$l9ctPIlXeC8RTh1ev0fETud2MRMR6uKbaFSGkgcCLOWKkqmUL.BwW,1,DEPO-BUKITTINGGI,active,sales
+30,"Andri Refriandi",Sales_Baso,andrirefriandi219@gmail.com,089639058585,Sales,,$2y$12$/c9JG2UWWrr0dEBuxYPnHePR5pC2Cz35oiELedLUxUCjYh/WASZF6,1,DEPO-BUKITTINGGI,active,sales
+31,"Budi Setiawan",Sales_KamangMagek,bs136515@gmail.com,089639060001,Sales,,$2y$12$QCyGLfvdZGA69alb1bHCdep.J9Q3WE0yS20X/KZuToNlzIoSCrc3G,1,DEPO-BUKITTINGGI,active,sales
+32,zidan,zidan_sales,zidan_sales@gmail.com,,Sales,,$2y$12$pZX6fq4fbz3O0ZcMguyGs.a3q3rn0puCXnSd5lY2QvR11FyZ.IyfC,1,DEPO-BUKITTINGGI,active,sales
+33,"DARMAN ATIFAH",SE_ANDALAS,darmanatifah@gmail.com,08982607516,SALES,,$2y$12$3vb6odGcoF6kLE4B9EcoB.bOkM2ga8eINk/eSzjW7QjYzv95Xy.Xy,2,DEPO-PADANG-A,active,sales
+34,"ARLAN NUARI",SE_BATASKOTA,arlan.nuari1101@gmail.com,089517965939,Sales,,$2y$12$f24tpzsA36lbwI5qkZ6yleT21GfvD7DP5VFmaZQns7URglQeR5/iK,10,DEPO-PADANG-B,active,sales
+35,"BULFI KAHFI",SE_BUNGUS,bulfikahfi166@gmail.com,089517965943,SALES,,$2y$12$VdFqHWKVIWkNAjwZv3JFMuActSBAs2bENufuxCsyBXz3BwQJMSxq6,2,DEPO-PADANG-A,active,sales
+36,"TEDDY ERLANGGA",SE_MATAAIR,teddyerlangga87@gmail.com,08982607519,SALES,,$2y$12$HKywGqatwJFQXdXXTHUWbetb2obdJDEGSPEzWBS.tTPtyOW.gWZO2,2,DEPO-PADANG-A,active,sales
+37,"RONAL AGUSTO",SE_PENGAMBIRAN,ronalagusto29@gmail.com,089521202068,SALES,,$2y$12$B7y9GU1uE8t6m6Y4WYzBbO27YrQtTrwHVbhq0t5FznWmYWuj1wp.y,2,DEPO-PADANG-A,active,sales
+38,"YOGIE DWI SYAHPUTRA",SE_PONDOK,yogiedwisyahputra0060@gmail.com,089521202069,SALES,,$2y$12$HxdkwyPR.K0nHsjXdSCHh.LNw4i.lvZsx1qYE4i29/HexwS4xd5Ui,2,DEPO-PADANG-A,active,sales
+39,"Agestya Heryan Pramana",Sales_PayakumbuhTimur,agestyaherian91@gmail.com,089521202054,Sales,,$2y$12$AicV0tKmHfuqlmtwkN7PXOhypDqnkX0adzF7kNyiJlIkrC.w3z7k.,6,DEPO-PAYAKUMBUH,active,sales
+40,"Diko Aditya Jufri",Sales_PayakumbuhUtara,dikoaditya410@gmail.com,08974551412,Sales,,$2y$12$aAX0ApTxuRN3rCQ39NesXe9BV6SlYvMokRGRsSC7Aj8TRTI0u2riq,6,DEPO-PAYAKUMBUH,active,sales
+41,"Muhammad Arsil",Sales_Lampasi,acilcilsilia@gmail.com,089521202049,Sales,,$2y$12$N1vdLXnn1qD5hwbvsKHkr.LAuihwGV5oyB3DjNWqG9vPkc1I997dy,6,DEPO-PAYAKUMBUH,active,sales
+42,"Edoni Eka Putra",Sales_BukitBarisan,dhonivivo1992@gmail.com,089679397939,Sales,,$2y$12$leCJVamS21dc9zJBmMCqUOh0WowK.XMiO0jlYRdWYt0dYTj81Qotu,6,DEPO-PAYAKUMBUH,active,sales
+43,Fitra,Sales_Situjuah,fitrambs7588@gmail.com,089512126969,Sales,,$2y$12$BrQG5U6lxpeNt2sJgXqQOuBBArnKtOGFId/pIosEiTY39p3a8RF3a,6,DEPO-PAYAKUMBUH,active,sales
+44,Wesqarni,Sales_BatangTabik,wwesqarni@gmail.com,089521202046,Sales,,$2y$12$sB/0T5WEc2cAU/bDJy8HP.g23sXJDr2sOSOTu76GoobwtzJV6ypI2,6,DEPO-PAYAKUMBUH,active,sales
+45,"Rayes Syah Eko Putra",Sales_GuguakMungka,rayes9687@gmail.com,089617965929,Sales,,$2y$12$q5jqk5nSAw75lwpx9nyNAu/VHmzKMg7RFea4OLtvGW/DuyJi570UG,6,DEPO-PAYAKUMBUH,active,sales
+46,"Agus Purnomo",Sales_PayakumbuhBarat,agustpurnomo99@gmail.com,08974551413,Sales,,$2y$12$CAfvqdNEbc4lP7EV98at/u4mRs/tDZ8TSfAllyu1yiefTnWWCbBUm,6,DEPO-PAYAKUMBUH,active,sales
+47,"Ardian Taurus Tio",Sales_Akabiluru,ardiantaurustio@gmail.com,08997481577,Sales,,$2y$12$JmJLv7Y1MpPW06yxBXiQ..qz4uIQQI3CsmVi0AbpoipLdg0T9sG9S,6,DEPO-PAYAKUMBUH,active,sales
+48,"Ramadhatul Fauzi",Sales_Pangkalan,ezi.changcut@gmail.com,089521202058,Sales,,$2y$12$z5jGwUj2m7/2Gaz8uQCHnOvGvAtP88nyOVZ5dHBra/JBRwvHSd97O,6,DEPO-PAYAKUMBUH,active,sales
+49,"DEVID AGUSTIN",SE_PASARBARU,devid.agustin22@gmail.com,089521202067,SALES,,$2y$12$BXtNhkNuHQoyQk9uan.Qs.Hx4rTzVctape5DGzrUrRK6AnVmg9nHm,2,DEPO-PADANG-A,active,sales
+50,"RANDY DWITA PUTRA",SE_BANDARBUAT,randydp8@gmail.com,08982607518,SALES,,$2y$12$5sCbkITyJlb3nRNIYiLVE.C6/x6ZtzjD/zOMhV4EVlLCfpekrAm9q,2,DEPO-PADANG-A,active,sales
+51,"RANDIKA CHANDRA PUTRA",SE_LUBUKLINTAH,randikachandra1996@gmail.com,089521202064,SALES,,$2y$12$z95ay9A3oJeBeuHt2JRgLOJ9oeBDue.TU8gdWt95KVZjNDDSxLPcO,2,DEPO-PADANG-A,active,sales
+52,"Agung Adytia Pratama",Dse_Pasaman,agungadytiapratama08@gmail.com,08991280904,Sales,,$2y$12$OA84Dgc9geF84SNv8aHOgOFTg72VZ.jbC5iYaYwwAm3NKBvqlDnle,5,DEPO-PASAMAN-BARAT,active,sales
+53,"Pratama Yoga Ardi",Dse_Kinali,yogadesi62@gmail.com,089673497759,Sales,,$2y$12$s4Vd1wO05nkEn.QhwPkYf.bw5F6ct0KAzI.dQGpysAiDS.kIyV1EO,5,DEPO-PASAMAN-BARAT,active,sales
+54,"Bastian Ramadhan",Dse_LuhakNanDuo,Bstianrmdhn@gmail.com,0895324918883,Sales,,$2y$12$GMO8by76Plq6KV6a5LISxeQ2.dXZr3miv9WEP/1GHh4ORVYl0gDrq,5,DEPO-PASAMAN-BARAT,active,sales
+55,"Lukman Hakim",Dse_GunungTuleh,lh607434@gmail.com,085274782873,Sales,,$2y$12$mEopZFK48UeORQpgBrbL0e4DBIWfZyz6EaeQ/YnrVqHHTV23Xxlqa,5,DEPO-PASAMAN-BARAT,active,sales
+56,"GUNTUR CANTA",SE_LAPAI,caniagoguntur@gmail.com,08982607514,SALES,,$2y$12$TK41yMzriSSWs5llzUC4wOvG6ng0P2vVmtiWUH.3TknoPBuqZJ5ra,10,DEPO-PADANG-B,active,sales
+57,"RIDWAN EFENDI",SE_DADOK,eridwan40@gmail.com,0895405394425,SALES,,$2y$12$8FPlTqZAJzapfrlfMlRcNuyf2.EaKDtAQaDF/jlTGGiIXOOOahsfK,10,DEPO-PADANG-B,active,sales
+58,"EKO SAPUTRA",SE_KALAWI,saputraeko69019@gmail.com,089521202066,SALES,,$2y$12$DOnMvc3XEyAbecR4bsEf3.RExUZj5srKgbbQXcHs16TdYYZSg51py,10,DEPO-PADANG-B,active,sales
+59,"KHEVIN PRANIZAL ILLAHI",SE_KALUMPANG,alexsaander229@gmail.com,089517965940,SALES,,$2y$12$r.QurjNPOual39exBAYp..XzHpHCe4EHqnFWPBDsj.AnQMcsQzxnu,10,DEPO-PADANG-B,active,sales
+60,"BAYU SAPUTRA",SE_TARUKO,aziusaputra4@gmail.com,089521202071,SALES,,$2y$12$LYNgWyk21GVB7oKvI5Ke.uUQFtMWf19NmPv06xgzHaTfELkcPRV82,10,DEPO-PADANG-B,active,sales
+61,"REVI RESTIADI",SE_LUMIN,seivercogah@gmail.com,089517965941,SALES,,$2y$12$Y6OtwHFq5XCUhYls4ffzCuzVVLSpoOT3JRlb40F9emGn2LtxF38WK,10,DEPO-PADANG-B,active,sales
+62,"M. QHODRI",SE_AIRTAWAR,qhodri234@gmail.com,0895386884522,SALES,,$2y$12$t4vTeBxSpa4f2YUmJ6D31eoDdGdPZoddme67/yKUqjSuDTipQgaQG,10,DEPO-PADANG-B,active,sales
+63,"KOKOH MUHARDI",SE_BELIMBING,kokohmuhardi@gmail.com,08982607513,SALES,,$2y$12$5iQuzLO62yLlYp9KA.kbgu9fBHLmGjQ2T.4ytqHPU7WMOMjTRUcmi,10,DEPO-PADANG-B,active,sales
+64,"Difo Gunawan",Difo_Gunawan,difodege@gmail.com,08974551418,"Sales Lima Kaum",,$2y$12$TydmW/90R/BFwj9u9U00ROxA2dXHlp0DBEtRZBHYfjNv5Xvjj8XWO,9,DEPO-TANAH-DATAR,active,sales
+65,"Ilham Wahyudi",Ilham_Wahyudi,ilhamwahyudi0474@gmail.com,08982370600,"Sales Salimpaung",,$2y$12$CrbHO8NfmH0RVgRpVdHQj.oXgRTDxGM/cIP6Nho2ZK4nYmjWKPZHO,9,DEPO-TANAH-DATAR,active,sales
+66,"Arif Rahman",Arif_Rahman,rahmanarif0429@gmail.com,08982455554,"Sales Sungai Tarab",,$2y$12$Evjdkb.vcpZsPoQ8pDdIteQdWwm5IropWtHOqJ3quezHckp1CC8Vm,9,DEPO-TANAH-DATAR,active,sales
+67,"Rindi Oktavianus",Rindi_Oktavianus,rindioktavianus7@gmail.com,089521202083,"Sales Batipuh",,$2y$12$62Df35a84sO5hv7anJwIYOpsvRz/DI3QG6SSkIjbAWX6.PHjacT/2,9,DEPO-TANAH-DATAR,active,sales
+68,"Adri Nofrizal",Adri_Nofrizal,anofrizal99@gmail.com,08974551417,"Sales Padang Panjang Barat",,$2y$12$aQzMbJaw5nzWpzZj.d71GuVRJyBm3zd1QUNDyNEuGNy4jJSt/UGlC,9,DEPO-TANAH-DATAR,active,sales
+69,Jefri,Jefri_,jefri8142@gmail.com,0889521202085,"Sales Padang Panjang Timur",,$2y$12$mBSfw/PD7/H73dgJPQeAout5mPOK6xeptWSrvGK47wx5rrmTxhVNW,9,DEPO-TANAH-DATAR,active,sales
+70,"RISKI GISFA RIANTO",Riski_Gisfa,riskigisfarianto@gmail.com,089519294518,"Sales Area Pulau Punjung",signatures/TAph6SZyS1D0xPANk0fdXuP5lNH8CqV5r7njYiCB.jpg,$2y$12$4fJAOSlP5aZrBNdv9grDI.IiXXES9vycHw0XhxROOv3AskNPkrQqq,3,DEPO-DHARMASRAYA,active,sales
+71,"Sales internal Dharmasraya",sales_dhamasraya,SalesinternalDharmasraya@gmail.com,081200000099,Sales,,$2y$12$67JEJJpggQqLk9baeZx6QenkG6MvS7.JUCRTToa.AVgIEudMEGVMO,3,DEPO-DHARMASRAYA,active,sales
+72,"Sales internal Solok",sales_solok,SalesinternalSolok@gmail.com,081200000098,Sales,,$2y$12$BtJsX5iBJX5817JswHQTjeGQELCsemE57VSxPGde2JlU2x1qP8Gbe,8,DEPO-SOLOK,active,sales
+73,"Sales internal Tanah Datar",sales_tanahdatar,SalesinternalTanahDatar@gmail.com,081200000097,Sales,,$2y$12$pRF4fOkFNpZNmu0x8tLRQuZhBPzty66OHoUC/mIW5gywf7D3/C1S2,9,DEPO-TANAH-DATAR,active,sales
+74,"Sales internal Pasaman Barat",sales_pasamanbarat,SalesinternalPasamanBarat@gmail.com,081200000096,Sales,,$2y$12$d28YJu.ZObNHzwZGlcO/mOFId4m3qgQVMt7wmNhlCOqK7pnpo1wdO,5,DEPO-PASAMAN-BARAT,active,sales
+75,"Sales internal Payakumbuh",sales_payakumbuh,SalesinternalPayakumbuh@gmail.com,081200000095,Sales,,$2y$12$y74ts/NRL9l6DqtfoBAVOuGJqnI/.woK0A1O3QN7pxHWjchB9I6jm,6,DEPO-PAYAKUMBUH,active,sales
+76,"Sales internal Bukittinggi",sales_bukittinggi,SalesinternalBukittinggi@gmail.com,081200000094,Sales,,$2y$12$2sl3sEPoo84lFAjQ2C5qCO.IsD7.8KM1cDqphEQrrwoO2EneWXu5.,1,DEPO-BUKITTINGGI,active,sales
+77,"Sales internal Padang",sales_padang12,SalesinternalPadang@gmail.com,081200000093,Sales,,$2y$12$.FVOWssLtKSWxjvqjxiMseKe3dGeYwgV5HWxyVWEOwoVTuuZHjDki,2,DEPO-PADANG-A,active,sales
+78,"Sales internal Pariaman",sales_pariaman,SalesinternalParlaman@gmail.com,081200000092,Sales,,$2y$12$JmoAXjHdOj5NXPb1dFEOBuqcqBDHauSQ6aT4xznr7YkzbSdJZ5aGy,4,DEPO-PARIAMAN,active,sales
+79,"Sales internal Painan",sales_painan,SalesinternalPainan@gmail.com,081200000091,Sales,,$2y$12$YpJJOY4Bf3FoatDrdDrWy.z3987nwT78OVgS5N4Zc0GiByLp0aGCG,11,DEPO-PAINAN,active,sales

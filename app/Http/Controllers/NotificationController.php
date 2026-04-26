@@ -123,6 +123,19 @@ class NotificationController extends Controller
                 $totalCount += SalesHandover::where('sales_id', $userId)
                     ->where('status', 'on_sales')
                     ->count();
+            } elseif ($type === 'TASK_pending_transfer') {
+                $whId = auth()->user()->warehouse_id;
+                $isManagement = auth()->user()->hasRole(['admin', 'superadmin']);
+
+                // 1. Pending Destination (Admin Tujuan harus approve)
+                $countPending = \App\Models\WarehouseTransfer::where('status', 'pending_destination');
+                if (!$isManagement) $countPending->where('destination_warehouse_id', $whId);
+                
+                // 2. Approved (Admin Asal harus Goods Receipt)
+                $countApproved = \App\Models\WarehouseTransfer::where('status', 'approved');
+                if (!$isManagement) $countApproved->where('source_warehouse_id', $whId);
+
+                $totalCount += $countPending->count() + $countApproved->count();
             } else {
                 // Notifikasi unread biasa
                 $totalCount += Notification::where('user_id', $userId)
