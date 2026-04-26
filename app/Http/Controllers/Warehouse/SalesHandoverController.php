@@ -1097,7 +1097,9 @@ EOT;
                     })
                     ->orWhereHas('sales', function ($s) use ($q) {
                         $s->where('name', 'like', $q);
-                    });
+                    })
+                    ->orWhere('customer_name', 'like', $q)
+                    ->orWhere('buyer_type', 'like', $q);
             });
         }
 
@@ -1264,6 +1266,11 @@ EOT;
                 $warehouseLabel = $wh->warehouse_name ?? $wh->name ?? $wh->warehouse_code ?? ('Warehouse #'.$h->warehouse_id);
 
                 $salesLabel = optional($h->sales)->name ?? ('Sales #'.$h->sales_id);
+                
+                // 🔥 Jika Penjualan Langsung ke Pareto/Umum, tampilkan nama pembelinya di kolom Sales
+                if ($h->is_direct_sale && in_array($h->buyer_type, ['pareto', 'umum']) && $h->customer_name) {
+                    $salesLabel = $h->customer_name . ' (' . ucfirst($h->buyer_type) . ')';
+                }
 
                 $originalStart = $this->calcOriginalSold($h);
                 $discountStart = $this->calcDiscountLoss($h);
@@ -1501,38 +1508,35 @@ EOT;
         $cashAmount     = (int) ($handover->cash_amount ?? 0);
         $transferAmount = (int) ($handover->transfer_amount ?? 0);
         $setorTotal     = $cashAmount + $transferAmount;
-
         $selisihJualSetor = max(0, $totalSold - $setorTotal);
 
         return response()->json([
             'success' => true,
             'handover' => [
-                'id' => $handover->id,
-                'code' => $handover->code,
-                'status' => $handover->status,
-                'can_open_approval' => $this->canWarehouseApprovePayment($handover),
-                'handover_date' => $handover->handover_date instanceof \Carbon\CarbonInterface
-                    ? $handover->handover_date->toDateString()
-                    : (string) $handover->handover_date,
-
-                'warehouse_name' => $wh?->warehouse_name ?? $wh?->name ?? '-',
-                'sales_name'     => $sales?->name ?? '-',
-
-                'total_dispatched' => $totalDispatched,
-
-                // 🔥 NILAI JUAL YANG SUDAH BENAR
-                'total_sold' => $totalSold,
-
-                'selisih_stock_value' => $selisihStock,
-
-                'cash_amount'     => $cashAmount,
-                'transfer_amount' => $transferAmount,
-                'transfer_proof_url' => $proofUrl,
-
-                'setor_total' => $setorTotal,
-                'selisih_jual_vs_setor' => $selisihJualSetor,
+                'id'            => $handover->id,
+                'code'          => $handover->code,
+                'date'          => optional($handover->handover_date)->format('Y-m-d'),
+                'warehouse'     => $wh?->warehouse_name ?? $wh?->name ?? '-',
+                'sales'         => $sales?->name ?? '-',
+                'status'        => $handover->status,
+                'status_label'  => strtoupper($handover->status),
+                
+                // 🔥 Tambahan Info Buyer untuk POS
+                'is_direct_sale' => (bool)$handover->is_direct_sale,
+                'buyer_type'     => $handover->buyer_type ?? 'sales',
+                'customer_name'  => $handover->customer_name,
             ],
-            'items' => $items,
+            'items'     => $items,
+            'summary'   => [
+                'total_dispatched'      => $totalDispatched,
+                'total_sold'            => $totalSold,
+                'total_remaining'       => $selisihStock,
+                'cash_amount'           => $cashAmount,
+                'transfer_amount'       => $transferAmount,
+                'total_deposit'         => $setorTotal,
+                'diff_sold_vs_deposit'  => $selisihJualSetor,
+                'proof_url'             => $proofUrl,
+            ]
         ]);
     }
 // =========================

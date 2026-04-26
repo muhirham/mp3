@@ -55,6 +55,8 @@ class SalesReportExport implements FromArray, WithEvents, ShouldAutoSize
             'Tanggal',
             'Warehouse',
             'Sales',
+            'Buyer Type',
+            'Buyer Name',
             'Status',
             'Product Code',
             'Product',
@@ -68,7 +70,7 @@ class SalesReportExport implements FromArray, WithEvents, ShouldAutoSize
             'Nilai Dibawa (NET)',
             'Nilai Terjual (NET)'
         ], $rows);
-        $this->lastColumnIndex = 16;
+        $this->lastColumnIndex = 18;
 
         $grandTotal = 0;
 
@@ -112,6 +114,8 @@ class SalesReportExport implements FromArray, WithEvents, ShouldAutoSize
                     optional($h->handover_date)->format('d/m/Y'),
                     optional($h->warehouse)->warehouse_name ?? '-',
                     optional($h->sales)->name ?? '-',
+                    strtoupper($h->buyer_type ?? 'sales'),
+                    $h->customer_name ?? '-',
                     strtoupper($h->status),
 
                     $it->product->product_code ?? '-',
@@ -176,16 +180,15 @@ class SalesReportExport implements FromArray, WithEvents, ShouldAutoSize
                 }
 
                 /* ================= NUMBER FORMAT ================= */
-                // K: Qty Kembali, L: Harga Asli, M: Harga NET, N: Mode Diskon, O: Diskon, P: Nilai Dibawa, Q: Nilai Terjual
-                // Karena kita baris 1 header, kolom-kolom numeric kita ada di H-Q (Index 8-17)
-                foreach (['H','I','J','K','L','M','O','P','Q'] as $c) {
+                // J: Qty Dibawa, K: Qty Terjual, L: Qty Kembali, M: Harga Asli, N: Harga NET, P: Diskon, Q: Nilai Dibawa, R: Nilai Terjual
+                foreach (['J','K','L','M','N','P','Q','R'] as $c) {
                     $sheet->getStyle("{$c}1:{$c}{$lastRow}")
                         ->getNumberFormat()
                         ->setFormatCode('#,##0');
                 }
 
                 // Center Align for Qty columns
-                foreach (['H','I','J'] as $c) {
+                foreach (['J','K','L'] as $c) {
                     $sheet->getStyle("{$c}2:{$c}{$lastRow}")
                         ->getAlignment()
                         ->setHorizontal(Alignment::HORIZONTAL_CENTER);

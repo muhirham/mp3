@@ -40,6 +40,14 @@ class SalesHandover extends Model
     'evening_otp_hash',
     'evening_otp_sent_at',
     'evening_otp_verified_at',
+    
+    // ===== DIRECT SALES FIELDS =====
+    'is_direct_sale',
+    'buyer_type',
+    'customer_name',
+    'pareto_id',
+    'discount_total',
+    'grand_total',
 ];
 
 

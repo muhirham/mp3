@@ -397,7 +397,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function refreshHandoverTable() {
         try {
-            const res = await fetch(window.location.href, {
+            // 🔥 Tambahkan cache-buster (?_=[timestamp]) biar browser gak ngasih data lama
+            const url = new URL(window.location.href);
+            url.searchParams.set('_', new Date().getTime());
+
+            const res = await fetch(url.toString(), {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             });
             const html = await res.text();

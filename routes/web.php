@@ -418,6 +418,15 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->middleware('menu:wh_sales_reports');
 
 
+    // === NEW: DIRECT SALES (POS GUDANG) - key: wh_direct_sales ===
+    Route::get('/warehouse/direct-sales', [\App\Http\Controllers\Warehouse\DirectSalesController::class, 'index'])
+        ->name('warehouse.direct_sales.index')
+        ->middleware('menu:wh_direct_sales');
+
+    Route::post('/warehouse/direct-sales', [\App\Http\Controllers\Warehouse\DirectSalesController::class, 'store'])
+        ->name('warehouse.direct_sales.store')
+        ->middleware('menu:wh_direct_sales');
+
     /* === Damaged & Expired Stocks === */
     // Admin WH View
     Route::get('/admin/warehouse/damaged-stocks', [\App\Http\Controllers\Admin\DamagedStockController::class, 'index'])

@@ -320,13 +320,13 @@
                                         if (e.updateType === 'otp_sent' && window.triggerOtpModal) window
                                             .triggerOtpModal();
                                         
-                                        if (e.updateType === 'cancelled') {
+                                        if (e.updateType === 'cancelled' || e.updateType === 'payment_decided' || e.updateType === 'verified') {
                                             // 🕵️ Ambil handover_id dari URL (kalau ada)
                                             const urlParams = new URLSearchParams(window.location.search);
                                             const currentHandoverId = urlParams.get('handover_id');
 
-                                            // Cuma redirect kalau HDO yang diapus adalah yang LAGI DIBUKA
-                                            if (currentHandoverId == e.handoverId) {
+                                            // Jika di-cancel oleh admin, redirect ke list utama
+                                            if (e.updateType === 'cancelled' && currentHandoverId == e.handoverId) {
                                                 Swal.fire({
                                                     icon: 'info',
                                                     title: 'Handover Cancelled',
@@ -334,12 +334,18 @@
                                                     timer: 3000,
                                                     showConfirmButton: false
                                                 }).then(() => {
-                                                    // LANGSUNG PINDAH HALAMAN, JANGAN REFRESH TABEL LAGI
                                                     window.location.href = "{{ route('sales.otp.items') }}";
                                                 });
                                             } else {
-                                                // Kalau HDO lain yang diapus, baru aman segerin list/dropdown
-                                                if (window.refreshHandoverTable) window.refreshHandoverTable();
+                                                // 🔥 ULTRA REAL-TIME: Gak perlu reload satu halaman
+                                                // Jika ada fungsi refresh tabel (di Sales OTP Items), panggil itu aja
+                                                if (window.refreshHandoverTable) {
+                                                    console.log('🔄 [Reverb] Updating table dynamically...');
+                                                    window.refreshHandoverTable();
+                                                } else {
+                                                    // Fallback jika di halaman lain yang gak punya fungsi refresh parsial
+                                                    location.reload();
+                                                }
                                             }
                                         }
                                     }
