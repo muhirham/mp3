@@ -19,29 +19,44 @@ class DirectSalesController extends Controller
     /**
      * Tampilan Halaman POS Gudang
      */
-    public function index()
+    public function index(Request $request)
     {
         $me = auth()->user();
-        
-        // Hanya depo tempat dia bertugas
-        $warehouse = Warehouse::find($me->warehouse_id);
-        if (!$warehouse) {
-            return redirect()->route('dashboard')->with('error', 'You are not assigned to any warehouse.');
+        $isAdminLike = $me->hasRole(['superadmin', 'admin']);
+
+        // 1. Ambil List Gudang yang diperbolehkan
+        if ($isAdminLike) {
+            $warehouses = Warehouse::orderBy('warehouse_name')->get();
+        } else {
+            $warehouses = Warehouse::where('id', $me->warehouse_id)->get();
         }
 
-        // List Produk yang HANYA ADA STOKNYA di gudang ini (Quantity > 0)
-        $products = Product::whereHas('stockLevels', function($q) use ($warehouse) {
-            $q->where('owner_id', $warehouse->id)
+        // 2. Tentukan Gudang Aktif (Prioritas: Query Param > User Profile > First Warehouse)
+        $activeWarehouseId = $request->query('warehouse_id');
+        if (!$activeWarehouseId) {
+            $activeWarehouseId = $me->warehouse_id ?: ($warehouses->first()?->id);
+        }
+
+        $warehouse = $warehouses->firstWhere('id', $activeWarehouseId);
+        
+        if (!$warehouse) {
+            return redirect()->route('dashboard')->with('error', 'Warehouse context not found.');
+        }
+
+        // 3. Tanggal (Biar pas ganti gudang gak reset cok!)
+        $selectedDate = $request->query('handover_date', date('Y-m-d'));
+
+        // List Produk yang HANYA ADA STOKNYA di gudang terpilih
+        $products = Product::whereHas('stockLevels', function($q) use ($activeWarehouseId) {
+            $q->where('owner_id', $activeWarehouseId)
               ->where('owner_type', 'warehouse')
               ->where('quantity', '>', 0);
-        })->with(['stockLevels' => function($q) use ($warehouse) {
-            $q->where('owner_id', $warehouse->id)
+        })->with(['stockLevels' => function($q) use ($activeWarehouseId) {
+            $q->where('owner_id', $activeWarehouseId)
               ->where('owner_type', 'warehouse');
         }])->orderBy('name')->get();
 
-        // Cari Akun Sales Internal untuk depo ini
-        // Kita cari yang usernamenya ada kata "sales_" dan sesuai gudang, 
-        // atau yang di namanya ada kata "internal"
+        // Cari Akun Sales Internal untuk gudang terpilih
         $internalSales = User::where('warehouse_id', $warehouse->id)
             ->where(function($q) {
                 $q->where('username', 'like', '%sales_%')
@@ -58,7 +73,15 @@ class DirectSalesController extends Controller
                 $q->where('name', 'sales');
             })->orderBy('name')->get();
 
-        return view('wh.direct_sales_index', compact('warehouse', 'products', 'internalSales', 'allSales'));
+        return view('wh.direct_sales_index', [
+            'me'               => $me,
+            'warehouses'       => $warehouses,
+            'warehouse'        => $warehouse,
+            'selectedDate'     => $selectedDate,
+            'products'         => $products,
+            'internalSales'    => $internalSales,
+            'allSales'         => $allSales,
+        ]);
     }
 
     /**
@@ -81,13 +104,25 @@ class DirectSalesController extends Controller
             'cash_amount'     => 'nullable|integer|min:0',
             'transfer_amount' => 'nullable|integer|min:0',
             'transfer_proof'  => 'nullable|image|max:5120', // 5MB
+            'handover_date'   => 'required|date',
+            'warehouse_id'    => 'required|exists:warehouses,id',
         ]);
 
         try {
             DB::beginTransaction();
 
-            $warehouseId = $me->warehouse_id;
-            $date = Carbon::now()->toDateString();
+            $me = auth()->user();
+            // Jika Admin/Superadmin, gunakan warehouse_id dari request. Jika tidak, paksa pake profil sendiri.
+            $warehouseId = $request->warehouse_id;
+            if (!$me->hasRole(['superadmin', 'admin'])) {
+                $warehouseId = $me->warehouse_id;
+            }
+
+            if (!$warehouseId) {
+                throw new \Exception("Warehouse context not found.");
+            }
+            
+            $date = Carbon::parse($request->handover_date)->toDateString();
 
             // 1. Tentukan Sales ID (Owner Transaksi)
             $salesId = null;
@@ -109,7 +144,7 @@ class DirectSalesController extends Controller
             }
 
             // 2. Generate Code SI (Sales Internal)
-            $dayPrefix = Carbon::now()->format('ymd');
+            $dayPrefix = Carbon::parse($date)->format('ymd');
             $codePrefix = 'SI-' . $dayPrefix . '-'; // Prefix SI sesuai request lo cok
             $lastToday = SalesHandover::where('code', 'like', $codePrefix . '%')->orderByDesc('id')->first();
             $nextNumber = $lastToday ? ((int) substr($lastToday->code, -4)) + 1 : 1;

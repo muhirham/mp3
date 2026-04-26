@@ -87,7 +87,7 @@ return [
         ],
         [
             'key'   => 'wh_direct_sales',
-            'label' => 'Direct Sales (POS)',
+            'label' => 'Direct Sales',
             'route' => 'warehouse.direct_sales.index',
             'group' => 'warehouse',
             'icon'  => 'bx bx-cart-alt',
