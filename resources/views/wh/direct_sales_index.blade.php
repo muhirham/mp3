@@ -1,6 +1,6 @@
 @extends('layouts.home')
 
-@section('title', 'Direct Warehouse Sales (POS)')
+@section('title', 'Direct Warehouse Sales ')
 
 @push('styles')
     <style>
@@ -58,6 +58,30 @@
             transform: scale(1.2);
         }
 
+        .pos-page .js-qty-input {
+            min-width: 80px;
+        }
+
+        .pos-page .discount-group {
+            min-width: 170px;
+        }
+
+        .fs-tiny {
+            font-size: 0.65rem !important;
+        }
+
+        .fw-extrabold {
+            font-weight: 800 !important;
+        }
+
+        .pos-page .icon-box {
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
         .select2-container--bootstrap-5 .select2-selection {
             border-radius: 10px;
             height: 40px;
@@ -68,17 +92,53 @@
 
 @section('content')
     <div class="container-xxl flex-grow-1 container-p-y pos-page">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h4 class="title mb-0">Direct Warehouse Sales (POS)</h4>
-            <div class="text-end">
-                <small class="text-muted d-block">Warehouse</small>
-                <span class="fw-bold text-primary">{{ $warehouse->warehouse_name }}</span>
+        <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
+            <div class="d-flex align-items-center gap-3">
+                <div class="icon-box bg-primary-subtle p-2 rounded-3 text-primary" style="width: 40px; height: 40px;">
+                    <i class="bx bx-cart-alt fs-4"></i>
+                </div>
+                <div>
+                    <h5 class="fw-bold mb-0 text-dark">Direct Sales</h5>
+                    <p class="text-muted small mb-0" style="font-size: 0.75rem;">Manual warehouse stock transaction</p>
+                </div>
+            </div>
+            
+            <div class="d-flex gap-4 align-items-center bg-white px-3 py-1 rounded-3 shadow-sm border">
+                <div class="header-item text-end">
+                    <label class="text-muted d-block fs-tiny text-uppercase fw-bold mb-0">Transaction Date</label>
+                    <input type="date" name="handover_date" form="directSalesForm" 
+                        class="form-control form-control-sm fw-bold text-primary border-0 bg-transparent p-0" 
+                        value="{{ $selectedDate }}" style="text-align: right; width: 120px; cursor: pointer; font-size: 0.9rem;">
+                </div>
+                
+                <div class="vr" style="height: 30px; opacity: 0.1;"></div>
+                
+                <div class="header-item text-end">
+                    <label class="text-muted d-block fs-tiny text-uppercase fw-bold mb-0">Warehouse Source</label>
+                    @if(auth()->user()->hasRole(['superadmin', 'admin']))
+                        <div class="dropdown-wrapper position-relative">
+                            <select id="whSwitcher" class="form-select form-select-sm border-0 bg-transparent fw-bold text-primary p-0" 
+                                style="text-align: right; cursor: pointer; width: auto; min-width: 150px; appearance: none; -webkit-appearance: none; font-size: 0.9rem;">
+                                @foreach($warehouses as $wh)
+                                    <option value="{{ $wh->id }}" {{ $warehouse->id == $wh->id ? 'selected' : '' }}>
+                                        {{ $wh->warehouse_name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <i class="bx bx-chevron-down position-absolute text-muted" style="right: -12px; top: 50%; transform: translateY(-50%); pointer-events: none; font-size: 0.8rem;"></i>
+                        </div>
+                    @else
+                        <span class="fw-bold text-primary" style="font-size: 0.9rem;">{{ $warehouse->warehouse_name }}</span>
+                    @endif
+                </div>
             </div>
         </div>
 
         <form id="directSalesForm" action="{{ route('warehouse.direct_sales.store') }}" method="POST"
             enctype="multipart/form-data">
             @csrf
+            <!-- Hidden warehouse context -->
+            <input type="hidden" name="warehouse_id" value="{{ $warehouse->id }}">
             <div class="row g-4">
                 <!-- LEFT: Identitas & Items -->
                 <div class="col-lg-8">
@@ -141,10 +201,10 @@
                                 <table class="table" id="itemsTable">
                                     <thead>
                                         <tr>
-                                            <th style="width: 40%;">Product</th>
-                                            <th style="width: 15%;">Qty</th>
-                                            <th style="width: 20%;">Price (Net)</th>
-                                            <th style="width: 20%;">Subtotal</th>
+                                            <th style="width: 30%;">Product</th>
+                                            <th style="width: 20%;">Qty</th>
+                                            <th style="width: 30%;">Price (Net) / Discount</th>
+                                            <th style="width: 15%;">Subtotal</th>
                                             <th style="width: 5%;"></th>
                                         </tr>
                                     </thead>
@@ -214,17 +274,17 @@
                 <select name="items[INDEX][product_id]" class="form-select js-product-select" required>
                     <option value="">Select Product...</option>
                     @foreach ($products as $p)
-                    @php
-                        $stock = $p->stockLevels->first()?->quantity ?? 0;
-                        // Ambil data diskon dari kategori (Flexible Discount)
-                        $discounts = $p->category?->priceCategory?->discounts ?? [];
-                    @endphp
-                    <option value="{{ $p->id }}" data-price="{{ $p->selling_price }}"
-                        data-name="{{ $p->name }}" data-stock="{{ $stock }}"
-                        data-discounts='@json($discounts)'>
-                        {{ $p->name }} (Stock: {{ number_format($stock, 0, ',', '.') }})
-                    </option>
-                @endforeach
+                        @php
+                            $stock = $p->stockLevels->first()?->quantity ?? 0;
+                            // Ambil data diskon dari kategori (Flexible Discount)
+                            $discounts = $p->category?->priceCategory?->discounts ?? [];
+                        @endphp
+                        <option value="{{ $p->id }}" data-price="{{ $p->selling_price }}"
+                            data-name="{{ $p->name }}" data-stock="{{ $stock }}"
+                            data-discounts='@json($discounts)'>
+                            {{ $p->name }} (Stock: {{ number_format($stock, 0, ',', '.') }})
+                        </option>
+                    @endforeach
                 </select>
             </td>
             <td>
@@ -233,7 +293,7 @@
             </td>
             <td>
                 <div class="small fw-bold js-price-display mb-1">Rp 0</div>
-                <div class="input-group input-group-sm">
+                <div class="input-group input-group-sm discount-group">
                     <select name="items[INDEX][discount_mode]" class="form-select js-disc-mode" style="max-width: 80px;">
                         <option value="unit">Unit</option>
                         <option value="fixed">Bundle</option>
@@ -364,7 +424,7 @@
                     $('#inputGroupSales').addClass('d-none');
                     $('#inputGroupCustomer').removeClass('d-none');
                     const placeholder = val === 'pareto' ? 'Enter Pareto name...' :
-                    'Enter customer name...';
+                        'Enter customer name...';
                     $('input[name="customer_name"]').attr('placeholder', placeholder);
                 }
             });
@@ -439,6 +499,13 @@
                         text: 'Failed to process sale.'
                     });
                 }
+            });
+
+            // 🔥 WAREHOUSE SWITCHER (Khusus Admin/Superadmin)
+            $('#whSwitcher').change(function() {
+                const whId = $(this).val();
+                const date = $('input[name="handover_date"]').val();
+                window.location.href = `{{ route('warehouse.direct_sales.index') }}?warehouse_id=${whId}&handover_date=${date}`;
             });
 
             // Initial Row
