@@ -136,6 +136,19 @@ class NotificationController extends Controller
                 if (!$isManagement) $countApproved->where('source_warehouse_id', $whId);
 
                 $totalCount += $countPending->count() + $countApproved->count();
+            } elseif ($type === 'TASK_pending_settlement') {
+                $whId = auth()->user()->warehouse_id;
+                $isManagement = auth()->user()->hasRole(['admin', 'superadmin']);
+
+                $query = SalesHandover::where('status', 'closed')
+                    ->whereNull('settlement_id');
+
+                // Jika bukan admin pusat, filter per gudang
+                if (!$isManagement && $whId) {
+                    $query->where('warehouse_id', $whId);
+                }
+
+                $totalCount += $query->count();
             } else {
                 // Notifikasi unread biasa
                 $totalCount += Notification::where('user_id', $userId)

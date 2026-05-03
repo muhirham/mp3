@@ -108,6 +108,8 @@
                 'sales_request_approval': 'TASK_pending_stock_request', // WH Admin (Approval)
                 'sales_request': 'stock_request_approved,stock_request_rejected', // Sales (Request)
                 'wh_transfers': 'TASK_pending_transfer', // WH Transfer (Pending/Approved)
+                'wh_settlements': 'TASK_pending_settlement', // WH Pending Settlement
+                'finance_settlements': 'new_settlement_submitted', // Finance New Submission
             };
 
             const NOTIF_SOUND_URL = "{{ asset('assets/sounds/notif.mp3') }}";
@@ -228,6 +230,11 @@
                         color: 'bg-label-warning',
                         text: 'text-warning'
                     },
+                    'new_settlement_submitted': {
+                        icon: 'bx-wallet',
+                        color: 'bg-label-success',
+                        text: 'text-success'
+                    },
                     'return_rejected': {
                         icon: 'bx-undo',
                         color: 'bg-label-danger',
@@ -295,7 +302,7 @@
                 // Initialize Echo Listeners
                 if (typeof Echo !== 'undefined') {
                     const me = @json(auth()->user());
-                    const isManagement = @json(auth()->user()->hasRole(['admin', 'superadmin', 'warehouse']));
+                    const isManagement = {{ auth()->user()->hasRole(['admin', 'superadmin', 'warehouse']) ? 'true' : 'false' }};
                     const myWhId = Number(@json(auth()->user()->warehouse_id));
 
                     if (me) {
@@ -306,7 +313,7 @@
 
                                 const isRelevant = (e.salesId == me.id) ||
                                     (isManagement && e.warehouseId == myWhId) ||
-                                    (@json(auth()->user()->hasRole(['admin', 'superadmin'])));
+                                    ({{ auth()->user()->hasRole(['admin', 'superadmin']) ? 'true' : 'false' }});
 
                                 if (isRelevant) {
                                     // 🔊 Play sound IMMEDIATELY for responsiveness
@@ -367,7 +374,7 @@
 
                                 const isRelevant = (e.salesId == me.id) ||
                                     (isManagement && e.warehouseId == myWhId) ||
-                                    (@json(auth()->user()->hasRole(['admin', 'superadmin'])));
+                                    ({{ auth()->user()->hasRole(['admin', 'superadmin']) ? 'true' : 'false' }});
 
                                 if (isRelevant) {
                                     playNotificationSound();
@@ -433,6 +440,32 @@
                                     } catch (err) {
                                         console.warn('🔇 Gagal putar suara notif:', err.message);
                                     }
+                                }
+                            });
+
+                        // 3. Settlement Channel
+                        Echo.channel('settlement-channel')
+                            .listen('.settlement-updated', (e) => {
+                                console.log('📡 [Signal] Settlement Updated:', e);
+                                // 🔥 Relevan buat Finance (Pusat) dan Warehouse (Gudang Asal)
+                                const me = @json(auth()->user());
+                                const isRelevant = {{ auth()->user()->hasRole(['admin', 'superadmin', 'finance', 'warehouse']) ? 'true' : 'false' }};
+                                
+                                if (isRelevant) {
+                                    playNotificationSound();
+                                    fetchNavbarNotifications();
+                                    refreshSidebarBadges();
+
+                                    // Refresh Tabel secara dinamis kalau fungsinya ada (Gak perlu reload halaman!)
+                                    if (window.applyFilters) {
+                                        console.log('🔄 [Reverb] Updating settlement table dynamically...');
+                                        window.applyFilters(1);
+                                    }
+
+                                    // Global Event Bus
+                                    window.dispatchEvent(new CustomEvent('reverb:settlement-updated', {
+                                        detail: e
+                                    }));
                                 }
                             });
                     }

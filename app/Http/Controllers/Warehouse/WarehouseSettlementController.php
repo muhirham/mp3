@@ -88,18 +88,8 @@ class WarehouseSettlementController extends Controller
         // Dropdowns untuk Filter (Superadmin)
         $warehouses = Warehouse::orderBy('warehouse_name')->get();
 
-        // Ambil Transaksi yang Belum Disetor, Group berdasarkan Tanggal, Warehouse, dan Sales
+        // Ambil Transaksi yang Belum Disetor secara INDIVIDUAL (Gak di-group lagi cok)
         $query = SalesHandover::with(['warehouse', 'sales'])
-            ->select(
-                'handover_date',
-                'warehouse_id',
-                'sales_id',
-                DB::raw('SUM(cash_amount) as total_cash'),
-                DB::raw('SUM(transfer_amount) as total_transfer'),
-                DB::raw('COUNT(*) as total_handovers'),
-                DB::raw('GROUP_CONCAT(code SEPARATOR ", ") as hdo_codes'),
-                DB::raw('MAX(updated_at) as last_updated')
-            )
             ->whereNull('settlement_id')
             ->whereIn('status', ['closed']);
 
@@ -129,14 +119,14 @@ class WarehouseSettlementController extends Controller
             $query->whereDate('handover_date', '<=', $request->date_end);
         }
 
-        $baseQuery = $query->groupBy('handover_date', 'warehouse_id', 'sales_id')
-            ->orderBy('handover_date', 'asc');
+        // Sorting
+        $baseQuery = $query->orderBy('handover_date', 'asc');
 
         // Total untuk Header (Seluruh hasil filter, sebelum paginasi)
-        $allUnsettled = $baseQuery->get();
-        $grandCash = $allUnsettled->sum('total_cash');
-        $grandTf = $allUnsettled->sum('total_transfer');
-        $grandCount = $allUnsettled->sum('total_handovers');
+        $allUnsettled = (clone $baseQuery)->get();
+        $grandCash = $allUnsettled->sum('cash_amount');
+        $grandTf = $allUnsettled->sum('transfer_amount');
+        $grandCount = $allUnsettled->count();
 
         $perPage = $request->get('per_page', 20);
         $unsettled = $baseQuery->paginate($perPage);
@@ -171,34 +161,41 @@ class WarehouseSettlementController extends Controller
             'handover_date' => 'nullable|date',
             'warehouse_id' => 'nullable|exists:warehouses,id',
             'sales_id' => 'nullable|exists:users,id',
+            'ids' => 'nullable|array',
+            'ids.*' => 'exists:sales_handovers,id',
             'proof_path' => 'required|image|mimes:jpeg,png,jpg|max:10240',
         ]);
 
         $handoversQuery = SalesHandover::whereNull('settlement_id')
             ->whereIn('status', ['closed']);
             
-        if ($whId) {
-            $handoversQuery->where('warehouse_id', $whId);
-        } elseif ($request->filled('warehouse_id')) {
-            $handoversQuery->where('warehouse_id', $request->warehouse_id);
-        }
-
-        if ($request->filled('handover_date')) {
-            $handoversQuery->whereDate('handover_date', $request->handover_date);
-            $opDate = $request->handover_date;
+        // 🔥 Jika user kirim ID spesifik (dari checkbox), pakai itu aja cok!
+        if ($request->filled('ids')) {
+            $handoversQuery->whereIn('id', $request->ids);
         } else {
-            $opDate = date('Y-m-d');
-        }
+            // Logic borongan lama (berdasarkan filter)
+            if ($whId) {
+                $handoversQuery->where('warehouse_id', $whId);
+            } elseif ($request->filled('warehouse_id')) {
+                $handoversQuery->where('warehouse_id', $request->warehouse_id);
+            }
 
-        if ($request->filled('sales_id')) {
-            $handoversQuery->where('sales_id', $request->sales_id);
+            if ($request->filled('handover_date')) {
+                $handoversQuery->whereDate('handover_date', $request->handover_date);
+            }
+
+            if ($request->filled('sales_id')) {
+                $handoversQuery->where('sales_id', $request->sales_id);
+            }
         }
 
         $handovers = $handoversQuery->get();
 
         if ($handovers->isEmpty()) {
-            return back()->with('error', 'No unsettled transactions found for this date.');
+            return back()->with('error', 'No unsettled transactions found for this selection.');
         }
+
+        $opDate = now()->toDateString();
 
         $totalCash = $handovers->sum('cash_amount');
         $totalTransfer = $handovers->sum('transfer_amount');
@@ -229,7 +226,24 @@ class WarehouseSettlementController extends Controller
 
             DB::commit();
 
-            return redirect()->route('warehouse.settlements.index')->with('success', 'Settlement created successfully. All handovers are now marked as deposited.');
+            // 🔔 Kirim notifikasi ke Finance & Admin
+            $whName = $warehouse->warehouse_name ?? $warehouse->name ?? 'Warehouse';
+            \App\Helpers\NotificationHelper::notifyFinance(
+                'new_settlement_submitted',
+                'New Settlement: ' . $whName,
+                "Warehouse Admin has submitted a new settlement of Rp " . number_format($settlement->total_amount, 0, ',', '.'),
+                route('finance.settlements.index'),
+                'warehouse_settlements',
+                $settlement->id
+            );
+
+            // Notify via Reverb
+            event(new \App\Events\SettlementUpdated($targetWhId, $settlement->id, 'created'));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Settlement created successfully. Selected transactions are now deposited.'
+            ]);
 
         } catch (\Exception $e) {
             DB::rollBack();

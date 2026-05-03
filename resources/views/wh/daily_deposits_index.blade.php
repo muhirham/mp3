@@ -377,6 +377,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
     initProofButtons();
     initDetailButtons();
+
+    // Reverb Integration
+    if (typeof Echo !== 'undefined') {
+        Echo.channel('settlement-channel')
+            .listen('.settlement-updated', (e) => {
+                console.log('Real-time Settlement Update:', e);
+                applyFilters(1); 
+            });
+    }
 });
 </script>
 @endpush

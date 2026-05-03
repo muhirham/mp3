@@ -341,7 +341,17 @@ document.addEventListener('DOMContentLoaded', function() {
         proofImg.style.transformOrigin = `${x}% ${y}%`;
     });
 
+    window.applyFilters = applyFilters;
     initButtons();
+
+    // Reverb Integration
+    if (typeof Echo !== 'undefined') {
+        Echo.channel('settlement-channel')
+            .listen('.settlement-updated', (e) => {
+                console.log('Real-time Settlement Update:', e);
+                applyFilters(1); 
+            });
+    }
 });
 </script>
 @endpush

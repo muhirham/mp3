@@ -260,10 +260,12 @@ class DirectSalesController extends Controller
 
             DB::commit();
 
+            // 🔥 Tembak Reverb biar halaman Settlement langsung update cok!
+            broadcast(new \App\Events\HandoverUpdated($handover->sales_id, $handover->warehouse_id, $handover->id, 'direct_sale_created'));
+
             return response()->json([
                 'success' => true, 
-                'message' => "Direct sale {$code} processed successfully.",
-                'redirect' => route('warehouse.direct_sales.index')
+                'message' => "Direct sale {$code} processed successfully."
             ]);
 
         } catch (\Exception $e) {
