@@ -641,10 +641,42 @@ Route::post('/warehouse/stock-requests/{id}/reject', [StockRequestApprovalContro
     Route::get('/sales/{sales}/active-handover-count', [SalesHandoverController::class, 'getActiveCount'])
         ->middleware('menu:wh_issue');
 
-    // === FINANCE ===
-    Route::get('/finance/transfer-verifications', [FinanceTransferController::class, 'index'])
-        ->name('finance.transfers')
-        ->middleware('menu:finance_transfers');
+    // === FINANCE & SETTLEMENTS ===
+    Route::get('/finance/settlements', [FinanceTransferController::class, 'settlementsIndex'])
+        ->name('finance.settlements.index')
+        ->middleware('menu:finance_settlements');
+        
+    Route::get('/finance/settlements/{id}/detail', [FinanceTransferController::class, 'settlementDetail'])
+        ->name('finance.settlements.detail')
+        ->middleware('menu:finance_settlements');
+
+    Route::get('/finance/settlements/export', [FinanceTransferController::class, 'exportSettlements'])
+        ->name('finance.settlements.export')
+        ->middleware('menu:finance_settlements');
+
+    Route::get('/warehouse/settlements', [App\Http\Controllers\Warehouse\WarehouseSettlementController::class, 'index'])
+        ->name('warehouse.settlements.index')
+        ->middleware('menu:wh_settlements');
+
+    Route::get('/warehouse/settlements/{id}/detail', [App\Http\Controllers\Warehouse\WarehouseSettlementController::class, 'showDetail'])
+        ->name('warehouse.settlements.detail')
+        ->middleware('menu:wh_settlements');
+
+    Route::get('/warehouse/settlements/create', [App\Http\Controllers\Warehouse\WarehouseSettlementController::class, 'create'])
+        ->name('warehouse.settlements.create')
+        ->middleware('menu:wh_settlements');
+
+    Route::get('/warehouse/settlements/export-history', [App\Http\Controllers\Warehouse\WarehouseSettlementController::class, 'exportHistory'])
+        ->name('warehouse.settlements.export.history')
+        ->middleware('menu:wh_settlements');
+
+    Route::get('/warehouse/settlements/export-pending', [App\Http\Controllers\Warehouse\WarehouseSettlementController::class, 'exportPending'])
+        ->name('warehouse.settlements.export.pending')
+        ->middleware('menu:wh_settlements');
+
+    Route::post('/warehouse/settlements', [App\Http\Controllers\Warehouse\WarehouseSettlementController::class, 'store'])
+        ->name('warehouse.settlements.store')
+        ->middleware('menu:wh_settlements');
 
     Route::get('/warehouse/sales-reports', [SalesHandoverController::class, 'warehouseSalesReport'])
         ->name('sales.report')

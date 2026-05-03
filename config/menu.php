@@ -128,6 +128,14 @@ return [
             'icon'  => 'bx bx-file-blank',
         ],
 
+        [
+            'key'   => 'wh_settlements',
+            'label' => 'Daily Settlements',
+            'route' => 'warehouse.settlements.index',
+            'group' => 'warehouse',
+            'icon'  => 'bx bx-wallet',
+        ],
+
         // ================== PROCUREMENT ==================
         [
             'key'   => 'wh_restock', // Request Restock Adm WH (view warehouse)
@@ -161,9 +169,9 @@ return [
         ],
         // ================== FINANCE ==================
         [
-            'key'   => 'finance_transfers',
-            'label' => 'Transfer Verifications',
-            'route' => 'finance.transfers',
+            'key'   => 'finance_settlements',
+            'label' => 'Warehouse Settlements',
+            'route' => 'finance.settlements.index',
             'group' => 'finance',
             'icon'  => 'bx bx-receipt',
         ],
