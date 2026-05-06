@@ -231,13 +231,13 @@ class DirectSalesController extends Controller
                 $stock->quantity -= $qty;
                 $stock->save();
 
-                // Log Movement (Sesuaikan dengan skema asli: from_type, to_type, etc)
+                // Log Movement (Full Audit Trail: Warehouse to Sales Category)
                 StockMovement::create([
                     'product_id'   => $product->id,
                     'from_type'    => 'warehouse',
                     'from_id'      => $warehouseId,
-                    'to_type'      => null, 
-                    'to_id'        => null,
+                    'to_type'      => 'sales', 
+                    'to_id'        => $salesId,
                     'quantity'     => $qty,
                     'status'       => 'completed',
                     'approved_by'  => $me->id,
@@ -260,10 +260,12 @@ class DirectSalesController extends Controller
 
             DB::commit();
 
+            // 🔥 Tembak Reverb biar halaman Settlement langsung update cok!
+            broadcast(new \App\Events\HandoverUpdated($handover->sales_id, $handover->warehouse_id, $handover->id, 'direct_sale_created'));
+
             return response()->json([
                 'success' => true, 
-                'message' => "Direct sale {$code} processed successfully.",
-                'redirect' => route('warehouse.direct_sales.index')
+                'message' => "Direct sale {$code} processed successfully."
             ]);
 
         } catch (\Exception $e) {

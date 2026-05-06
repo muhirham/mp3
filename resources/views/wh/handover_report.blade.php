@@ -453,6 +453,11 @@
                 <div class="modal-header d-flex justify-content-between align-items-center">
                     <h5 class="modal-title mb-0">Detail Handover</h5>
                     <div class="d-flex align-items-center gap-2">
+                        @if ($isAdminLike)
+                            <button type="button" id="deleteHandoverButton" class="btn btn-sm btn-outline-danger d-none">
+                                <i class="bx bx-trash"></i> Delete Transaction
+                            </button>
+                        @endif
                         @if ($canOpenApproval)
                             <button type="button" id="approvalButton" class="btn btn-sm btn-primary d-none">
                                 Handover Evening &amp; Approval
@@ -513,6 +518,7 @@
             const bsModal = modalEl ? new bootstrap.Modal(modalEl) : null;
 
             const approvalButton = document.getElementById('approvalButton');
+            const deleteButton = document.getElementById('deleteHandoverButton');
 
             // 2. CONFIG & ROUTES
             const listUrl = @json(route($listRouteName));
@@ -520,6 +526,8 @@
             const canSeeMargin = @json($canSeeMargin);
             const canOpenApproval = @json($canOpenApproval);
             const approvalUrlTemplate = canOpenApproval ? @json(route('warehouse.handovers.payments.form', 0)) : null;
+            const deleteUrlTemplate = @json(route('sales.report.destroy', 0));
+            const isAdminLike = @json($isAdminLike);
 
             let currentHandoverId = null;
             let currentPage = 1;
@@ -749,6 +757,7 @@
 
                     currentHandoverId = null;
                     if (approvalButton) approvalButton.classList.add('d-none');
+                    if (deleteButton) deleteButton.classList.add('d-none');
 
                     detailHeader.innerHTML = 'Loading...';
                     detailTbody.innerHTML =
@@ -820,8 +829,24 @@
                             </div>
                         `;
 
-                        if (canOpenApproval && approvalButton && approvalUrlTemplate && h.can_open_approval) {
-                            approvalButton.classList.remove('d-none');
+                        if (approvalButton) {
+                            if (canOpenApproval && approvalUrlTemplate && h.can_open_approval) {
+                                approvalButton.classList.remove('d-none');
+                            } else {
+                                approvalButton.classList.add('d-none');
+                            }
+                        }
+
+                        if (deleteButton) {
+                            // PM Request: Admin can delete even if settled. Backend handles settlement adjustment.
+                            if (isAdminLike) {
+                                deleteButton.classList.remove('d-none');
+                                deleteButton.dataset.id = h.id;
+                                deleteButton.dataset.code = h.code;
+                                deleteButton.dataset.isSettled = h.settlement_id ? 'yes' : 'no'; // Track for UI warning
+                            } else {
+                                deleteButton.classList.add('d-none');
+                            }
                         }
 
                         let htmlItems = '';
@@ -950,6 +975,57 @@
                     width: 'auto'
                 });
             });
+
+            if (deleteButton) {
+                deleteButton.addEventListener('click', async function() {
+                    this.blur(); // Fix aria-hidden focus warning
+                    const id = deleteButton.dataset.id;
+                    const code = deleteButton.dataset.code;
+                    if (!id) return;
+
+                    const isSettled = deleteButton.dataset.isSettled === 'yes';
+                    let swalText = `You are about to delete transaction ${code}. This will REVERT all sold items back to the warehouse stock. This action cannot be undone!`;
+                    
+                    if (isSettled) {
+                        swalText = `<strong>WARNING:</strong> Transaction ${code} is already <strong>SETTLED</strong>. Deleting this will automatically subtract its value from the financial settlement report. Are you absolutely sure?`;
+                    }
+
+                    const { isConfirmed } = await Swal.fire({
+                        title: isSettled ? 'Delete Settled Transaction?' : 'Are you sure?',
+                        html: swalText,
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonColor: '#d33',
+                        cancelButtonColor: '#3085d6',
+                        confirmButtonText: 'Yes, Delete and Revert Stock!',
+                        showLoaderOnConfirm: true,
+                        preConfirm: async () => {
+                            try {
+                                const res = await fetch(deleteUrlTemplate.replace('/0', '/' + id), {
+                                    method: 'DELETE',
+                                    headers: {
+                                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                                        'Accept': 'application/json',
+                                        'X-Requested-With': 'XMLHttpRequest'
+                                    }
+                                });
+                                const json = await res.json();
+                                if (!res.ok) throw new Error(json.message || 'Failed to delete');
+                                return json;
+                            } catch (error) {
+                                Swal.showValidationMessage(`Request failed: ${error}`);
+                            }
+                        },
+                        allowOutsideClick: () => !Swal.isLoading()
+                    });
+
+                    if (isConfirmed) {
+                        Swal.fire('Deleted!', `Transaction ${code} has been deleted and stock reverted.`, 'success');
+                        bsModal.hide();
+                        reloadList(currentPage);
+                    }
+                });
+            }
 
             approvalButton?.addEventListener('click', () => {
                 if (currentHandoverId) window.location.href = approvalUrlTemplate.replace('/0', '/' +

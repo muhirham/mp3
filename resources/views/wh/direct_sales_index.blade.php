@@ -482,7 +482,11 @@
                             timer: 2000,
                             showConfirmButton: false
                         }).then(() => {
-                            window.location.reload();
+                            // 🔥 Gak usah reload cok, reset form aja biar bisa transaksi lagi
+                            $form[0].reset();
+                            $tbody.empty();
+                            addRow(); // Tambah satu baris kosong awal
+                            calculateTotal();
                         });
                     } else {
                         Swal.fire({

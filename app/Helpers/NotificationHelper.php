@@ -62,6 +62,21 @@ class NotificationHelper
     }
 
     /**
+     * Kirim notif ke semua Finance Admin.
+     */
+    public static function notifyFinance(string $type, string $title, string $body = '', string $url = '', string $refType = '', int $refId = null): void
+    {
+        $finances = User::whereHas('roles', fn($q) => $q->where('slug', 'finance'))->get();
+
+        foreach ($finances as $user) {
+            static::send($user->id, $type, $title, $body, $url, $refType, $refId);
+        }
+
+        // Superadmin/Admin juga dapat notif
+        static::notifyAdmins($type, $title, $body, $url, $refType, $refId);
+    }
+
+    /**
      * Tandai notifikasi sebagai sudah dibaca berdasarkan referensi (agar badge hilang untuk semua admin).
      */
     public static function markAsReadByReference(string $type, string $refType, int $refId): void

@@ -86,6 +86,11 @@ class SalesHandover extends Model
         return $this->belongsTo(User::class, 'sales_id');
     }
 
+    public function settlement()
+    {
+        return $this->belongsTo(WarehouseSettlement::class, 'settlement_id');
+    }
+
     public function issuedBy()
     {
         return $this->belongsTo(User::class, 'issued_by');
