@@ -372,6 +372,12 @@
                                                     <label class="form-check-label">Export</label>
                                                 </div>
 
+                                                <div class="form-check">
+                                                    <input class="form-check-input add-permission" type="checkbox"
+                                                        name="permissions[]" value="users.export_seeder">
+                                                    <label class="form-check-label">Export Seeder (CSV)</label>
+                                                </div>
+
                                             </div>
                                         @endif
                                         @if ($it['key'] === 'roles')
@@ -854,6 +860,14 @@
                                                     <input class="form-check-input edit-permission" type="checkbox"
                                                         name="permissions[]" value="users.export">
                                                     <label class="form-check-label">Export</label>
+                                                </div>
+
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox"
+                                                        name="permissions[]" value="users.export_seeder"
+                                                        id="edit_users_export_seeder">
+                                                    <label class="form-check-label"
+                                                        for="edit_users_export_seeder">Export Seeder (CSV)</label>
                                                 </div>
 
                                             </div>

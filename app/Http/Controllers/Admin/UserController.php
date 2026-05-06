@@ -332,7 +332,7 @@ class UserController extends Controller
 
     public function exportSeeder(Request $request)
     {
-        $this->ensureCanManageUsers('users.export');
+        $this->ensureCanManageUsers('users.export_seeder');
  
         $users = User::with('roles')->orderBy('id')->get();
         $filename = "users_seeder_" . date('Ymd_His') . ".csv";
