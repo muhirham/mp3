@@ -26,7 +26,7 @@
             Use navigation search bar
           </div>
 
-          @if(auth()->user()->hasPermission('uom.create'))
+          @if(auth()->user()->hasPermission('packages.create'))
             <button class="btn btn-sm btn-primary"
                     data-bs-toggle="modal" data-bs-target="#mdlPkg"
                     id="btnShowAdd">

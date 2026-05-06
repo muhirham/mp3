@@ -159,35 +159,6 @@
 
                                             </div>
                                         @endif
-                                        @if ($it['key'] === 'packages')
-                                            <div class="ms-4 mb-2">
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" name="permissions[]"
-                                                        value="uom.view">
-                                                    <label class="form-check-label">View</label>
-                                                </div>
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" name="permissions[]"
-                                                        value="uom.create">
-                                                    <label class="form-check-label">Create</label>
-                                                </div>
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" name="permissions[]"
-                                                        value="uom.update">
-                                                    <label class="form-check-label">Update</label>
-                                                </div>
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" name="permissions[]"
-                                                        value="uom.delete">
-                                                    <label class="form-check-label">Delete</label>
-                                                </div>
-
-                                            </div>
-                                        @endif
                                         @if ($it['key'] === 'categories')
                                             <div class="ms-4 mb-2">
 
@@ -307,6 +278,26 @@
                                                 value="{{ $it['key'] }}">
                                             <label class="form-check-label">{{ $it['label'] }}</label>
                                         </div>
+                                        @if ($it['key'] === 'packages')
+                                            <div class="ms-4 mb-2">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" name="permissions[]" value="packages.view">
+                                                    <label class="form-check-label">View</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" name="permissions[]" value="packages.create">
+                                                    <label class="form-check-label">Create</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" name="permissions[]" value="packages.update">
+                                                    <label class="form-check-label">Update</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" name="permissions[]" value="packages.delete">
+                                                    <label class="form-check-label">Delete</label>
+                                                </div>
+                                            </div>
+                                        @endif
                                         {{-- ADD MASTER PERMISSION --}}
                                         @if ($it['key'] === 'company')
                                             <div class="ms-4 mb-2">
@@ -630,35 +621,6 @@
 
                                             </div>
                                         @endif
-                                        @if ($it['key'] === 'packages')
-                                            <div class="ms-4 mb-2">
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="uom.view" id="edit_uom_view">
-                                                    <label class="form-check-label" for="edit_uom_view">View</label>
-                                                </div>
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="uom.create" id="edit_uom_create">
-                                                    <label class="form-check-label" for="edit_uom_create">Create</label>
-                                                </div>
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="uom.update" id="edit_uom_update">
-                                                    <label class="form-check-label" for="edit_uom_update">Update</label>
-                                                </div>
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="uom.delete" id="edit_uom_delete">
-                                                    <label class="form-check-label" for="edit_uom_delete">Delete</label>
-                                                </div>
-
-                                            </div>
-                                        @endif
                                         @if ($it['key'] === 'categories')
                                             <div class="ms-4 mb-2">
 
@@ -789,6 +751,27 @@
                                                 {{ $it['label'] }}
                                             </label>
                                         </div>
+
+                                        @if ($it['key'] === 'packages')
+                                            <div class="ms-4 mb-2">
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox" name="permissions[]" value="packages.view" id="edit_packages_view">
+                                                    <label class="form-check-label" for="edit_packages_view">View</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox" name="permissions[]" value="packages.create" id="edit_packages_create">
+                                                    <label class="form-check-label" for="edit_packages_create">Create</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox" name="permissions[]" value="packages.update" id="edit_packages_update">
+                                                    <label class="form-check-label" for="edit_packages_update">Update</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox" name="permissions[]" value="packages.delete" id="edit_packages_delete">
+                                                    <label class="form-check-label" for="edit_packages_delete">Delete</label>
+                                                </div>
+                                            </div>
+                                        @endif
 
                                         {{-- EDIT MASTER PERMISSION --}}
                                         @if ($it['key'] === 'company')

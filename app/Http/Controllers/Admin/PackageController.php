@@ -10,25 +10,25 @@ use Illuminate\Support\Facades\Log;
 
 class PackageController extends Controller
 {
-    protected function ensureUomPermission(string $permission = 'uom.view'): void
+    protected function ensurePackagePermission(string $permission = 'packages.view'): void
     {
         $me = auth()->user();
 
         if (! $me || ! $me->hasPermission($permission)) {
-            abort(403, 'Anda tidak punya izin untuk mengakses modul UOM.');
+            abort(403, 'Anda tidak punya izin untuk mengakses modul Packages.');
         }
     }
 
     public function index()
     {
-        $this->ensureUomPermission('uom.view');
+        $this->ensurePackagePermission('packages.view');
 
         return view('admin.masterdata.packages');
     }
 
     public function datatable(Request $r)
     {
-        $this->ensureUomPermission('uom.view');
+        $this->ensurePackagePermission('packages.view');
 
         try {
             $draw        = (int) $r->input('draw', 1);
@@ -55,7 +55,7 @@ class PackageController extends Controller
             $data = $q->offset($start)->limit($length)->get();
 
             $rows = $data->map(function($p, $i) use ($start){
-            $editBtn = auth()->user()->hasPermission('uom.update')
+            $editBtn = auth()->user()->hasPermission('packages.update')
                 ? sprintf(
                     '<button class="btn btn-sm btn-icon btn-outline-secondary js-edit"
                         data-id="%1$d"
@@ -67,7 +67,7 @@ class PackageController extends Controller
                 )
                 : '';
 
-            $deleteBtn = auth()->user()->hasPermission('uom.delete')
+            $deleteBtn = auth()->user()->hasPermission('packages.delete')
                 ? sprintf(
                     '<button class="btn btn-sm btn-icon btn-outline-danger js-del"
                         data-id="%1$d">
@@ -106,7 +106,7 @@ class PackageController extends Controller
 
     public function store(Request $r)
     {
-        $this->ensureUomPermission('uom.create');
+        $this->ensurePackagePermission('packages.create');
 
         $data = $r->validate([
             'package_name' => ['required','max:150','unique:packages,package_name'],
@@ -117,7 +117,7 @@ class PackageController extends Controller
 
     public function update(Request $r, Package $package)
     {
-        $this->ensureUomPermission('uom.update');
+        $this->ensurePackagePermission('packages.update');
 
         $data = $r->validate([
             'package_name' => ['required','max:150', Rule::unique('packages','package_name')->ignore($package->id)],
@@ -128,7 +128,7 @@ class PackageController extends Controller
 
     public function destroy(Package $package)
     {
-        $this->ensureUomPermission('uom.delete');
+        $this->ensurePackagePermission('packages.delete');
 
         $package->delete();
         return response()->json(['success' => 'Satuan dihapus.']);
