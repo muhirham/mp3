@@ -50,7 +50,9 @@
                                 </button>
                                 <ul class="dropdown-menu dropdown-menu-end">
                                     <li><a class="dropdown-item" href="#" id="btnExportExcel">Excel</a></li>
-                                    <li><a class="dropdown-item" href="{{ route('users.export.seeder') }}">Export Seeder (CSV)</a></li>
+                                    @if(auth()->user()->hasPermission('users.export_seeder'))
+                                        <li><a class="dropdown-item" href="{{ route('users.export.seeder') }}">Export Seeder (CSV)</a></li>
+                                    @endif
                                     <li><a class="dropdown-item" href="#" id="btnExportPrint">Print</a></li>
                                 </ul>
                             </div>

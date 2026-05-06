@@ -157,33 +157,10 @@
                                                     <label class="form-check-label">Export Excel</label>
                                                 </div>
 
-                                            </div>
-                                        @endif
-                                        @if ($it['key'] === 'packages')
-                                            <div class="ms-4 mb-2">
-
                                                 <div class="form-check">
                                                     <input class="form-check-input" type="checkbox" name="permissions[]"
-                                                        value="uom.view">
-                                                    <label class="form-check-label">View</label>
-                                                </div>
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" name="permissions[]"
-                                                        value="uom.create">
-                                                    <label class="form-check-label">Create</label>
-                                                </div>
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" name="permissions[]"
-                                                        value="uom.update">
-                                                    <label class="form-check-label">Update</label>
-                                                </div>
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" name="permissions[]"
-                                                        value="uom.delete">
-                                                    <label class="form-check-label">Delete</label>
+                                                        value="products.export_seeder">
+                                                    <label class="form-check-label">Export Seeder (CSV)</label>
                                                 </div>
 
                                             </div>
@@ -212,35 +189,6 @@
                                                 <div class="form-check">
                                                     <input class="form-check-input" type="checkbox" name="permissions[]"
                                                         value="category.delete">
-                                                    <label class="form-check-label">Delete</label>
-                                                </div>
-
-                                            </div>
-                                        @endif
-                                        @if ($it['key'] === 'suppliers')
-                                            <div class="ms-4 mb-2">
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" name="permissions[]"
-                                                        value="supplier.view">
-                                                    <label class="form-check-label">View</label>
-                                                </div>
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" name="permissions[]"
-                                                        value="supplier.create">
-                                                    <label class="form-check-label">Create</label>
-                                                </div>
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" name="permissions[]"
-                                                        value="supplier.update">
-                                                    <label class="form-check-label">Update</label>
-                                                </div>
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" name="permissions[]"
-                                                        value="supplier.delete">
                                                     <label class="form-check-label">Delete</label>
                                                 </div>
 
@@ -292,9 +240,46 @@
                                     @foreach ($groups['procurement'] as $it)
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" name="menu_keys[]"
-                                                value="{{ $it['key'] }}">
-                                            <label class="form-check-label">{{ $it['label'] }}</label>
+                                                value="{{ $it['key'] }}" id="add_{{ $it['key'] }}">
+                                            <label class="form-check-label"
+                                                for="add_{{ $it['key'] }}">{{ $it['label'] }}</label>
                                         </div>
+                                        @if ($it['key'] === 'suppliers')
+                                            <div class="ms-4 mb-2">
+
+                                                <div class="form-check">
+                                                    <input class="form-check-input add-permission" type="checkbox"
+                                                        name="permissions[]" value="supplier.view"
+                                                        id="add_supplier_view">
+                                                    <label class="form-check-label" for="add_supplier_view">View</label>
+                                                </div>
+
+                                                <div class="form-check">
+                                                    <input class="form-check-input add-permission" type="checkbox"
+                                                        name="permissions[]" value="supplier.create"
+                                                        id="add_supplier_create">
+                                                    <label class="form-check-label"
+                                                        for="add_supplier_create">Create</label>
+                                                </div>
+
+                                                <div class="form-check">
+                                                    <input class="form-check-input add-permission" type="checkbox"
+                                                        name="permissions[]" value="supplier.update"
+                                                        id="add_supplier_update">
+                                                    <label class="form-check-label"
+                                                        for="add_supplier_update">Update</label>
+                                                </div>
+
+                                                <div class="form-check">
+                                                    <input class="form-check-input add-permission" type="checkbox"
+                                                        name="permissions[]" value="supplier.delete"
+                                                        id="add_supplier_delete">
+                                                    <label class="form-check-label"
+                                                        for="add_supplier_delete">Delete</label>
+                                                </div>
+
+                                            </div>
+                                        @endif
                                     @endforeach
                                 </div>
 
@@ -307,6 +292,30 @@
                                                 value="{{ $it['key'] }}">
                                             <label class="form-check-label">{{ $it['label'] }}</label>
                                         </div>
+                                        @if ($it['key'] === 'packages')
+                                            <div class="ms-4 mb-2">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" name="permissions[]"
+                                                        value="packages.view">
+                                                    <label class="form-check-label">View</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" name="permissions[]"
+                                                        value="packages.create">
+                                                    <label class="form-check-label">Create</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" name="permissions[]"
+                                                        value="packages.update">
+                                                    <label class="form-check-label">Update</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" name="permissions[]"
+                                                        value="packages.delete">
+                                                    <label class="form-check-label">Delete</label>
+                                                </div>
+                                            </div>
+                                        @endif
                                         {{-- ADD MASTER PERMISSION --}}
                                         @if ($it['key'] === 'company')
                                             <div class="ms-4 mb-2">
@@ -342,37 +351,43 @@
 
                                                 <div class="form-check">
                                                     <input class="form-check-input add-permission" type="checkbox"
-                                                        name="permissions[]" value="users.view">
-                                                    <label class="form-check-label">View</label>
+                                                        name="permissions[]" value="users.view" id="add_users_view">
+                                                    <label class="form-check-label" for="add_users_view">View</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input add-permission" type="checkbox"
-                                                        name="permissions[]" value="users.create">
-                                                    <label class="form-check-label">Create</label>
+                                                        name="permissions[]" value="users.create" id="add_users_create">
+                                                    <label class="form-check-label" for="add_users_create">Create</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input add-permission" type="checkbox"
-                                                        name="permissions[]" value="users.update">
-                                                    <label class="form-check-label">Update</label>
+                                                        name="permissions[]" value="users.update" id="add_users_update">
+                                                    <label class="form-check-label" for="add_users_update">Update</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input add-permission" type="checkbox"
-                                                        name="permissions[]" value="users.delete">
-                                                    <label class="form-check-label">Delete</label>
+                                                        name="permissions[]" value="users.delete" id="add_users_delete">
+                                                    <label class="form-check-label" for="add_users_delete">Delete</label>
                                                 </div>
                                                 <div class="form-check">
                                                     <input class="form-check-input add-permission" type="checkbox"
-                                                        name="permissions[]" value="users.bulk_delete">
-                                                    <label class="form-check-label">Bulk Delete</label>
+                                                        name="permissions[]" value="users.bulk_delete" id="add_users_bulk_delete">
+                                                    <label class="form-check-label" for="add_users_bulk_delete">Bulk Delete</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input add-permission" type="checkbox"
-                                                        name="permissions[]" value="users.export">
-                                                    <label class="form-check-label">Export</label>
+                                                        name="permissions[]" value="users.export" id="add_users_export">
+                                                    <label class="form-check-label" for="add_users_export">Export</label>
+                                                </div>
+
+                                                <div class="form-check">
+                                                    <input class="form-check-input add-permission" type="checkbox"
+                                                        name="permissions[]" value="users.export_seeder" id="add_users_export_seeder">
+                                                    <label class="form-check-label" for="add_users_export_seeder">Export Seeder (CSV)</label>
                                                 </div>
 
                                             </div>
@@ -382,26 +397,26 @@
 
                                                 <div class="form-check">
                                                     <input class="form-check-input add-permission" type="checkbox"
-                                                        name="permissions[]" value="roles.view">
-                                                    <label class="form-check-label">View</label>
+                                                        name="permissions[]" value="roles.view" id="add_roles_view">
+                                                    <label class="form-check-label" for="add_roles_view">View</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input add-permission" type="checkbox"
-                                                        name="permissions[]" value="roles.create">
-                                                    <label class="form-check-label">Create</label>
+                                                        name="permissions[]" value="roles.create" id="add_roles_create">
+                                                    <label class="form-check-label" for="add_roles_create">Create</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input add-permission" type="checkbox"
-                                                        name="permissions[]" value="roles.update">
-                                                    <label class="form-check-label">Update</label>
+                                                        name="permissions[]" value="roles.update" id="add_roles_update">
+                                                    <label class="form-check-label" for="add_roles_update">Update</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input add-permission" type="checkbox"
-                                                        name="permissions[]" value="roles.delete">
-                                                    <label class="form-check-label">Delete</label>
+                                                        name="permissions[]" value="roles.delete" id="add_roles_delete">
+                                                    <label class="form-check-label" for="add_roles_delete">Delete</label>
                                                 </div>
 
                                             </div>
@@ -411,32 +426,32 @@
 
                                                 <div class="form-check">
                                                     <input class="form-check-input add-permission" type="checkbox"
-                                                        name="permissions[]" value="bom.view">
-                                                    <label class="form-check-label">View</label>
+                                                        name="permissions[]" value="bom.view" id="add_bom_view">
+                                                    <label class="form-check-label" for="add_bom_view">View</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input add-permission" type="checkbox"
-                                                        name="permissions[]" value="bom.create">
-                                                    <label class="form-check-label">Create</label>
+                                                        name="permissions[]" value="bom.create" id="add_bom_create">
+                                                    <label class="form-check-label" for="add_bom_create">Create</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input add-permission" type="checkbox"
-                                                        name="permissions[]" value="bom.update">
-                                                    <label class="form-check-label">Update</label>
+                                                        name="permissions[]" value="bom.update" id="add_bom_update">
+                                                    <label class="form-check-label" for="add_bom_update">Update</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input add-permission" type="checkbox"
-                                                        name="permissions[]" value="bom.delete">
-                                                    <label class="form-check-label">Delete</label>
+                                                        name="permissions[]" value="bom.delete" id="add_bom_delete">
+                                                    <label class="form-check-label" for="add_bom_delete">Delete</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input add-permission" type="checkbox"
-                                                        name="permissions[]" value="bom.produce">
-                                                    <label class="form-check-label">Produce</label>
+                                                        name="permissions[]" value="bom.produce" id="add_bom_produce">
+                                                    <label class="form-check-label" for="add_bom_produce">Produce</label>
                                                 </div>
 
                                             </div>
@@ -564,7 +579,8 @@
                                         <option value="">(Auto from first checked)</option>
                                         @foreach ($homeCandidates as $c)
                                             <option value="{{ $c['route'] }}">{{ $c['label'] }}
-                                                ({{ $c['route'] }})</option>
+                                                ({{ $c['route'] }})
+                                            </option>
                                         @endforeach
                                     </select>
                                 </div>
@@ -624,37 +640,16 @@
                                                     <input class="form-check-input edit-permission" type="checkbox"
                                                         name="permissions[]" value="products.export"
                                                         id="edit_products_export">
+                                                    <label class="form-check-label" for="edit_products_export">Export
+                                                        Excel</label>
+                                                </div>
+
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox"
+                                                        name="permissions[]" value="products.export_seeder"
+                                                        id="edit_products_export_seeder">
                                                     <label class="form-check-label"
-                                                        for="edit_products_export">Export Excel</label>
-                                                </div>
-
-                                            </div>
-                                        @endif
-                                        @if ($it['key'] === 'packages')
-                                            <div class="ms-4 mb-2">
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="uom.view" id="edit_uom_view">
-                                                    <label class="form-check-label" for="edit_uom_view">View</label>
-                                                </div>
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="uom.create" id="edit_uom_create">
-                                                    <label class="form-check-label" for="edit_uom_create">Create</label>
-                                                </div>
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="uom.update" id="edit_uom_update">
-                                                    <label class="form-check-label" for="edit_uom_update">Update</label>
-                                                </div>
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="uom.delete" id="edit_uom_delete">
-                                                    <label class="form-check-label" for="edit_uom_delete">Delete</label>
+                                                        for="edit_products_export_seeder">Export Seeder (CSV)</label>
                                                 </div>
 
                                             </div>
@@ -691,35 +686,6 @@
                                                         id="edit_category_delete">
                                                     <label class="form-check-label"
                                                         for="edit_category_delete">Delete</label>
-                                                </div>
-
-                                            </div>
-                                        @endif
-                                        @if ($it['key'] === 'suppliers')
-                                            <div class="ms-4 mb-2">
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="supplier.view">
-                                                    <label class="form-check-label">View</label>
-                                                </div>
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="supplier.create">
-                                                    <label class="form-check-label">Create</label>
-                                                </div>
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="supplier.update">
-                                                    <label class="form-check-label">Update</label>
-                                                </div>
-
-                                                <div class="form-check">
-                                                    <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="supplier.delete">
-                                                    <label class="form-check-label">Delete</label>
                                                 </div>
 
                                             </div>
@@ -775,6 +741,38 @@
                                                 {{ $it['label'] }}
                                             </label>
                                         </div>
+
+                                        @if ($it['key'] === 'suppliers')
+                                            <div class="ms-4 mb-2">
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox"
+                                                        name="permissions[]" value="supplier.view"
+                                                        id="edit_supplier_view">
+                                                    <label class="form-check-label" for="edit_supplier_view">View</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox"
+                                                        name="permissions[]" value="supplier.create"
+                                                        id="edit_supplier_create">
+                                                    <label class="form-check-label"
+                                                        for="edit_supplier_create">Create</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox"
+                                                        name="permissions[]" value="supplier.update"
+                                                        id="edit_supplier_update">
+                                                    <label class="form-check-label"
+                                                        for="edit_supplier_update">Update</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox"
+                                                        name="permissions[]" value="supplier.delete"
+                                                        id="edit_supplier_delete">
+                                                    <label class="form-check-label"
+                                                        for="edit_supplier_delete">Delete</label>
+                                                </div>
+                                            </div>
+                                        @endif
                                     @endforeach
                                 </div>
 
@@ -790,32 +788,70 @@
                                             </label>
                                         </div>
 
+                                        @if ($it['key'] === 'packages')
+                                            <div class="ms-4 mb-2">
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox"
+                                                        name="permissions[]" value="packages.view"
+                                                        id="edit_packages_view">
+                                                    <label class="form-check-label" for="edit_packages_view">View</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox"
+                                                        name="permissions[]" value="packages.create"
+                                                        id="edit_packages_create">
+                                                    <label class="form-check-label"
+                                                        for="edit_packages_create">Create</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox"
+                                                        name="permissions[]" value="packages.update"
+                                                        id="edit_packages_update">
+                                                    <label class="form-check-label"
+                                                        for="edit_packages_update">Update</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox"
+                                                        name="permissions[]" value="packages.delete"
+                                                        id="edit_packages_delete">
+                                                    <label class="form-check-label"
+                                                        for="edit_packages_delete">Delete</label>
+                                                </div>
+                                            </div>
+                                        @endif
+
                                         {{-- EDIT MASTER PERMISSION --}}
                                         @if ($it['key'] === 'company')
                                             <div class="ms-4 mb-2">
 
                                                 <div class="form-check">
                                                     <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="company.view">
-                                                    <label class="form-check-label">View</label>
+                                                        name="permissions[]" value="company.view" id="edit_company_view">
+                                                    <label class="form-check-label" for="edit_company_view">View</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="company.create">
-                                                    <label class="form-check-label">Create</label>
+                                                        name="permissions[]" value="company.create"
+                                                        id="edit_company_create">
+                                                    <label class="form-check-label"
+                                                        for="edit_company_create">Create</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="company.update">
-                                                    <label class="form-check-label">Update</label>
+                                                        name="permissions[]" value="company.update"
+                                                        id="edit_company_update">
+                                                    <label class="form-check-label"
+                                                        for="edit_company_update">Update</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="company.delete">
-                                                    <label class="form-check-label">Delete</label>
+                                                        name="permissions[]" value="company.delete"
+                                                        id="edit_company_delete">
+                                                    <label class="form-check-label"
+                                                        for="edit_company_delete">Delete</label>
                                                 </div>
 
                                             </div>
@@ -825,38 +861,47 @@
 
                                                 <div class="form-check">
                                                     <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="users.view">
-                                                    <label class="form-check-label">View</label>
+                                                        name="permissions[]" value="users.view" id="edit_users_view">
+                                                    <label class="form-check-label" for="edit_users_view">View</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="users.create">
-                                                    <label class="form-check-label">Create</label>
+                                                        name="permissions[]" value="users.create" id="edit_users_create">
+                                                    <label class="form-check-label" for="edit_users_create">Create</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="users.update">
-                                                    <label class="form-check-label">Update</label>
+                                                        name="permissions[]" value="users.update" id="edit_users_update">
+                                                    <label class="form-check-label" for="edit_users_update">Update</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="users.delete">
-                                                    <label class="form-check-label">Delete</label>
+                                                        name="permissions[]" value="users.delete" id="edit_users_delete">
+                                                    <label class="form-check-label" for="edit_users_delete">Delete</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox"
+                                                        name="permissions[]" value="users.bulk_delete"
+                                                        id="edit_users_bulk_delete">
+                                                    <label class="form-check-label" for="edit_users_bulk_delete">Bulk
+                                                        Delete</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="users.bulk_delete">
-                                                    <label class="form-check-label">Bulk Delete</label>
+                                                        name="permissions[]" value="users.export" id="edit_users_export">
+                                                    <label class="form-check-label" for="edit_users_export">Export</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="users.export">
-                                                    <label class="form-check-label">Export</label>
+                                                        name="permissions[]" value="users.export_seeder"
+                                                        id="edit_users_export_seeder">
+                                                    <label class="form-check-label" for="edit_users_export_seeder">Export
+                                                        Seeder (CSV)</label>
                                                 </div>
 
                                             </div>
@@ -895,32 +940,32 @@
 
                                                 <div class="form-check">
                                                     <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="bom.view">
-                                                    <label class="form-check-label">View</label>
+                                                        name="permissions[]" value="bom.view" id="edit_bom_view">
+                                                    <label class="form-check-label" for="edit_bom_view">View</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="bom.create">
-                                                    <label class="form-check-label">Create</label>
+                                                        name="permissions[]" value="bom.create" id="edit_bom_create">
+                                                    <label class="form-check-label" for="edit_bom_create">Create</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="bom.update">
-                                                    <label class="form-check-label">Update</label>
+                                                        name="permissions[]" value="bom.update" id="edit_bom_update">
+                                                    <label class="form-check-label" for="edit_bom_update">Update</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="bom.delete">
-                                                    <label class="form-check-label">Delete</label>
+                                                        name="permissions[]" value="bom.delete" id="edit_bom_delete">
+                                                    <label class="form-check-label" for="edit_bom_delete">Delete</label>
                                                 </div>
 
                                                 <div class="form-check">
                                                     <input class="form-check-input edit-permission" type="checkbox"
-                                                        name="permissions[]" value="bom.produce">
-                                                    <label class="form-check-label">Produce</label>
+                                                        name="permissions[]" value="bom.produce" id="edit_bom_produce">
+                                                    <label class="form-check-label" for="edit_bom_produce">Produce</label>
                                                 </div>
 
                                             </div>
@@ -1131,7 +1176,7 @@
 
                 modalEl.querySelectorAll('input[name="permissions[]"]').forEach((checkbox) => {
                     checkbox.addEventListener('change', () => syncFromPermissionCheckbox(modalEl,
-                    checkbox));
+                        checkbox));
                 });
             }
 

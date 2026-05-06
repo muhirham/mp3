@@ -92,12 +92,15 @@
                 <p class="mb-0 text-muted">Manage product list, central stock, categories, and suppliers.</p>
             </div>
             <div class="ms-auto">
-                @if(auth()->user()->hasPermission('products.create'))
-                    <div class="d-flex gap-2">
+                <div class="d-flex gap-2">
+                    @if(auth()->user()->hasPermission('products.export_seeder'))
                         <a href="{{ route('products.export.seeder') }}" class="btn btn-outline-secondary d-flex align-items-center gap-1">
                             <i class="bx bx-export"></i>
                             <span>Export Seeder (CSV)</span>
                         </a>
+                    @endif
+
+                    @if(auth()->user()->hasPermission('products.create'))
                         <button class="btn btn-primary d-flex align-items-center gap-1"
                                 data-bs-toggle="modal"
                                 data-bs-target="#mdlProduct"
@@ -105,8 +108,8 @@
                             <i class="bx bx-plus"></i>
                             <span>Add Product</span>
                         </button>
-                    </div>
-                @endif
+                    @endif
+                </div>
             </div>
         </div>
 
