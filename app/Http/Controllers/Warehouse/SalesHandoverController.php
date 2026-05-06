@@ -1525,6 +1525,8 @@ EOT;
                 'is_direct_sale' => (bool)$handover->is_direct_sale,
                 'buyer_type'     => $handover->buyer_type ?? 'sales',
                 'customer_name'  => $handover->customer_name,
+                'settlement_id'  => $handover->settlement_id,
+                'can_open_approval' => (bool)$handover->can_open_approval || in_array($handover->status, ['on_sales', 'waiting_evening_otp']),
             ],
             'items'     => $items,
             'summary'   => [
@@ -2219,5 +2221,154 @@ EOT;
             'SALES-REPORT-' . now()->format('Ymd_His') . '.xlsx'
         );
 
+    }
+
+    /**
+     * DELETE HANDOVER (Koreksi Admin):
+     * - Cek role admin/superadmin
+     * - Cek settlement_id harus NULL
+     * - Revert stok ke warehouse berdasarkan status HDO
+     */
+    public function destroy(SalesHandover $handover)
+    {
+        $me = auth()->user();
+        $roles = $me?->roles ?? collect();
+        $isAdminLike = $roles->contains('slug', 'admin') || $roles->contains('slug', 'superadmin');
+
+        if (!$isAdminLike) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized. Only Admin or Superadmin can delete transactions.'], 403);
+        }
+
+        // PM Request: Allow deletion even if settled. 
+        // We will subtract the amounts from the settlement record if it exists.
+        $settlementId = $handover->settlement_id;
+
+        try {
+            DB::beginTransaction();
+
+            $handover->load('items.product');
+
+            foreach ($handover->items as $item) {
+                $product = $item->product;
+                if (!$product) continue;
+
+                $qtyToRevert = 0;
+
+                if ($handover->status === 'closed') {
+                    // Jika sudah closed, yang "hilang" dari sistem adalah qty_sold.
+                    // (qty_returned sudah balik ke gudang pas closing).
+                    $qtyToRevert = (int) $item->qty_sold;
+                } elseif (in_array($handover->status, ['on_sales', 'waiting_evening_otp'])) {
+                    // Jika masih on_sales, seluruh qty_start ada di tangan sales.
+                    $qtyToRevert = (int) $item->qty_start;
+                    
+                    // Kurangi stok sales karena barang ditarik balik (imajiner) lewat delete
+                    DB::table('stock_levels')
+                        ->where('owner_type', 'sales')
+                        ->where('owner_id', $handover->sales_id)
+                        ->where('product_id', $product->id)
+                        ->decrement('quantity', $qtyToRevert);
+                }
+
+                if ($qtyToRevert > 0) {
+                    // Tambahkan kembali ke stok Warehouse
+                    $whStock = DB::table('stock_levels')
+                        ->where('owner_type', 'warehouse')
+                        ->where('owner_id', $handover->warehouse_id)
+                        ->where('product_id', $product->id)
+                        ->first();
+
+                    if ($whStock) {
+                        DB::table('stock_levels')
+                            ->where('id', $whStock->id)
+                            ->increment('quantity', $qtyToRevert);
+                    } else {
+                        DB::table('stock_levels')->insert([
+                            'owner_type' => 'warehouse',
+                            'owner_id'   => $handover->warehouse_id,
+                            'product_id' => $product->id,
+                            'quantity'   => $qtyToRevert,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
+
+                    // Catat pergerakan stok (Reversion dari Sales balik ke Warehouse)
+                    DB::table('stock_movements')->insert([
+                        'product_id'  => $product->id,
+                        'from_type'   => 'sales',
+                        'from_id'     => $handover->sales_id ?? 0,
+                        'to_type'     => 'warehouse',
+                        'to_id'       => $handover->warehouse_id,
+                        'quantity'    => $qtyToRevert,
+                        'status'      => 'completed',
+                        'approved_by' => $me->id,
+                        'approved_at' => now(),
+                        'note'        => "Transaction Deleted ({$handover->code}) by {$me->name}. Status was {$handover->status}. Stock reverted to warehouse.",
+                        'created_at'  => now(),
+                        'updated_at'  => now(),
+                    ]);
+                }
+            }
+
+            $code = $handover->code;
+            
+            // 🔔 Bersihkan notifikasi terkait (Mark all types for this HDO as read)
+            \App\Models\Notification::where('reference_type', 'sales_handovers')
+                ->where('reference_id', $handover->id)
+                ->update(['is_read' => true, 'read_at' => now()]);
+
+            // 💰 PM Request: Adjust Settlement Totals if linked
+            if ($settlementId) {
+                // Cek apakah masih ada HDO lain di settlement ini
+                $otherHdosCount = DB::table('sales_handovers')
+                    ->where('settlement_id', $settlementId)
+                    ->where('id', '!=', $handover->id)
+                    ->count();
+
+                if ($otherHdosCount === 0) {
+                    // Kalau sudah kosong, hapus record settlement & file bukti-nya biar gak nyampah
+                    $settlement = DB::table('warehouse_settlements')->where('id', $settlementId)->first();
+                    if ($settlement) {
+                        if (!empty($settlement->proof_path)) {
+                            \Illuminate\Support\Facades\Storage::delete($settlement->proof_path);
+                        }
+                        DB::table('warehouse_settlements')->where('id', $settlementId)->delete();
+                    }
+                } else {
+                    // Kalau masih ada HDO lain, cukup kurangi totalnya secara ATOMIK biar gak race condition
+                    DB::table('warehouse_settlements')
+                        ->where('id', $settlementId)
+                        ->update([
+                            'total_cash_amount'     => DB::raw("GREATEST(0, total_cash_amount - {$handover->cash_amount})"),
+                            'total_transfer_amount' => DB::raw("GREATEST(0, total_transfer_amount - {$handover->transfer_amount})"),
+                            'updated_at'            => now()
+                        ]);
+                }
+            }
+
+            // Hapus Item & Header
+            $handover->items()->delete();
+            $handover->delete();
+
+            DB::commit();
+
+            // 🔥 Tembak sinyal real-time: Handover dihapus
+            broadcast(new \App\Events\HandoverUpdated($handover->sales_id, $handover->warehouse_id, $handover->id, 'deleted'));
+
+            // 🔥 Tembak sinyal real-time: Settlement berubah (Saldo berkurang atau Settlement hapus)
+            if ($settlementId) {
+                broadcast(new \App\Events\SettlementUpdated($handover->warehouse_id, $settlementId, $otherHdosCount === 0 ? 'deleted' : 'updated'));
+            }
+
+            return response()->json([
+                'success' => true, 
+                'message' => "Transaction {$code} has been deleted successfully. Stock has been reverted to the warehouse."
+            ]);
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => 'Failed to delete transaction: ' . $e->getMessage()], 500);
+        }
     }
 }

@@ -231,13 +231,13 @@ class DirectSalesController extends Controller
                 $stock->quantity -= $qty;
                 $stock->save();
 
-                // Log Movement (Sesuaikan dengan skema asli: from_type, to_type, etc)
+                // Log Movement (Full Audit Trail: Warehouse to Sales Category)
                 StockMovement::create([
                     'product_id'   => $product->id,
                     'from_type'    => 'warehouse',
                     'from_id'      => $warehouseId,
-                    'to_type'      => null, 
-                    'to_id'        => null,
+                    'to_type'      => 'sales', 
+                    'to_id'        => $salesId,
                     'quantity'     => $qty,
                     'status'       => 'completed',
                     'approved_by'  => $me->id,

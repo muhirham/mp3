@@ -146,7 +146,7 @@
                                     <div class="fw-bold text-dark">
                                         {{ \Carbon\Carbon::parse($row->handover_date)->format('d M Y') }}</div>
                                     <small
-                                        class="text-muted">{{ \Carbon\Carbon::parse($row->handover_date)->diffForHumans() }}</small>
+                                        class="text-muted">{{ $row->created_at->diffForHumans() }}</small>
                                 </td>
                                 <td class="py-3">
                                     <div class="fw-bold">{{ $row->code }}</div>
@@ -295,6 +295,7 @@
                 // Individual Settle
                 document.querySelectorAll('.btn-settle-single').forEach(btn => {
                     btn.onclick = function() {
+                        this.blur();
                         const id = this.dataset.id;
                         const formatted = this.dataset.formatted;
                         const cash = this.dataset.cash;
@@ -315,6 +316,7 @@
                 const btnBulkSettle = document.getElementById('btnBulkSettle');
                 if (btnBulkSettle) {
                     btnBulkSettle.onclick = function() {
+                        this.blur();
                         const checked = document.querySelectorAll('.hdo-checkbox:checked');
                         if (checked.length === 0) {
                             Swal.fire({
@@ -422,7 +424,7 @@
                                 </td>
                                 <td class="py-3">
                                     <div class="fw-bold text-dark">${date}</div>
-                                    <small class="text-muted">Just updated</small>
+                                    <small class="text-muted">just now</small>
                                 </td>
                                 <td class="py-3">
                                     <div class="fw-bold">${row.code}</div>

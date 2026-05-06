@@ -327,16 +327,16 @@
                                         if (e.updateType === 'otp_sent' && window.triggerOtpModal) window
                                             .triggerOtpModal();
                                         
-                                        if (e.updateType === 'cancelled' || e.updateType === 'payment_decided' || e.updateType === 'verified') {
+                                        if (e.updateType === 'cancelled' || e.updateType === 'deleted' || e.updateType === 'payment_decided' || e.updateType === 'verified') {
                                             // 🕵️ Ambil handover_id dari URL (kalau ada)
                                             const urlParams = new URLSearchParams(window.location.search);
                                             const currentHandoverId = urlParams.get('handover_id');
 
-                                            // Jika di-cancel oleh admin, redirect ke list utama
-                                            if (e.updateType === 'cancelled' && currentHandoverId == e.handoverId) {
+                                            // Jika di-cancel atau di-delete oleh admin, redirect ke list utama
+                                            if ((e.updateType === 'cancelled' || e.updateType === 'deleted') && currentHandoverId == e.handoverId) {
                                                 Swal.fire({
                                                     icon: 'info',
-                                                    title: 'Handover Cancelled',
+                                                    title: 'Transaction Deleted',
                                                     text: 'The handover you are working on has been deleted by Admin.',
                                                     timer: 3000,
                                                     showConfirmButton: false
@@ -488,6 +488,13 @@
                         });
                     });
                 }
+                
+                // Global Modal Focus Fix: Prevents "Blocked aria-hidden" warnings in console
+                document.addEventListener('hidden.bs.modal', function() {
+                    if (document.activeElement && document.activeElement.tagName !== 'BODY') {
+                        document.activeElement.blur();
+                    }
+                });
             });
 
             // Global exposing

@@ -686,6 +686,10 @@ Route::post('/warehouse/stock-requests/{id}/reject', [StockRequestApprovalContro
         ->name('sales.report.detail')
         ->middleware('menu:wh_sales_reports');
 
+    Route::delete('/warehouse/sales-reports/{handover}', [SalesHandoverController::class, 'destroy'])
+        ->name('sales.report.destroy')
+        ->middleware('menu:wh_sales_reports');
+
     Route::get('/sales/report', [SalesHandoverController::class, 'salesReport'])
         ->name('daily.sales.report')
         ->middleware('menu:sales_daily');
