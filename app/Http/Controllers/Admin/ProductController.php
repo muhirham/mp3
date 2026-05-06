@@ -579,7 +579,7 @@ public function datatable(Request $request)
  
     public function exportSeeder(Request $request)
     {
-        $this->ensureProductPermission('products.view');
+        $this->ensureProductPermission('products.export_seeder');
  
         $products = Product::orderBy('id')->get();
         $filename = "products_seeder_" . date('Ymd_His') . ".csv";

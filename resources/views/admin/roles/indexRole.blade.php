@@ -157,6 +157,12 @@
                                                     <label class="form-check-label">Export Excel</label>
                                                 </div>
 
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" name="permissions[]"
+                                                        value="products.export_seeder">
+                                                    <label class="form-check-label">Export Seeder (CSV)</label>
+                                                </div>
+
                                             </div>
                                         @endif
                                         @if ($it['key'] === 'categories')
@@ -617,6 +623,14 @@
                                                         id="edit_products_export">
                                                     <label class="form-check-label"
                                                         for="edit_products_export">Export Excel</label>
+                                                </div>
+
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox"
+                                                        name="permissions[]" value="products.export_seeder"
+                                                        id="edit_products_export_seeder">
+                                                    <label class="form-check-label"
+                                                        for="edit_products_export_seeder">Export Seeder (CSV)</label>
                                                 </div>
 
                                             </div>
