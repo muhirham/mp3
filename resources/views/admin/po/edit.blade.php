@@ -1,5 +1,71 @@
 @extends('layouts.home')
 
+@push('styles')
+<style>
+  /* Fix Select2 Height to match Bootstrap form-control-sm */
+  .select2-container--default .select2-selection--single {
+    height: 31px !important; /* Standar form-control-sm Sneat */
+    border: 1px solid #d9dee3 !important;
+    border-radius: 0.375rem !important;
+  }
+  .select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 31px !important;
+    padding-left: 10px !important;
+    font-size: 0.8125rem !important;
+    color: #566a7f !important;
+  }
+  .select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 30px !important;
+  }
+  .select2-container--default.select2-container--focus .select2-selection--single {
+    border-color: #696cff !important;
+    outline: 0;
+    box-shadow: 0 0 0.25rem 0.05rem rgba(105, 108, 255, 0.1);
+  }
+  .select2-container--default .select2-selection--single .select2-selection__clear {
+    height: 31px;
+    margin-right: 10px;
+  }
+  
+  /* Table Alignment */
+  #tblItems td {
+    vertical-align: middle !important;
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+  
+  /* Product Column adjustment */
+  .product-col {
+    min-width: 250px;
+  }
+  
+  .js-supplier-label {
+    font-size: 0.65rem !important;
+    margin-top: 2px;
+    display: block;
+    line-height: 1;
+  }
+
+  /* Centering the remove button */
+  .btn-remove {
+    width: 24px;
+    height: 24px;
+    line-height: 20px;
+    padding: 0;
+    text-align: center;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    transition: all 0.2s;
+  }
+  .btn-remove:hover {
+    background: #ffe0e0;
+  }
+</style>
+@endpush
+
 @section('content')
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -135,7 +201,7 @@
 
     <div class="card mb-3">
       <div class="card-body row g-3">
-        <div class="col-md-4">
+        <div class="col-md-3">
           <label class="form-label">Supplier</label>
           <select name="supplier_id" class="form-select @error('supplier_id') is-invalid @enderror" @disabled($poLocked)>
             <option value="">— Select Supplier —</option>
@@ -149,10 +215,32 @@
             <div class="invalid-feedback">{{ $message }}</div>
           @enderror
         </div>
-        <div class="col-md-8">
+
+        <div class="col-md-3">
+          <label class="form-label">Distribution Mode</label>
+          <select id="distribution_mode" class="form-select" @disabled($poLocked || $isFromRequest)>
+            <option value="single">Single Destination</option>
+            <option value="multi" @selected($po->items->pluck('warehouse_id')->filter()->unique()->count() > 1)>Multi Warehouse</option>
+          </select>
+          <small class="text-muted" style="font-size: 0.7rem;">Manual PO only</small>
+        </div>
+
+        <div class="col-md-3" id="global_warehouse_wrapper">
+          <label class="form-label">Target Warehouse</label>
+          <select id="global_warehouse_id" class="form-select" @disabled($poLocked)>
+            <option value="">Central Stock</option>
+            @foreach($warehouses as $w)
+              <option value="{{ $w->id }}" @selected($po->items->pluck('warehouse_id')->unique()->count() === 1 && $po->items->first()?->warehouse_id == $w->id)>
+                {{ $w->warehouse_name }}
+              </option>
+            @endforeach
+          </select>
+        </div>
+
+        <div class="col-md-3">
           <label class="form-label">Notes</label>
           <textarea name="notes"
-                    rows="4"
+                    rows="1"
                     class="form-control"
                     @disabled($notesLocked)>{{ old('notes',$po->notes) }}</textarea>
         </div>
@@ -174,7 +262,7 @@
           <thead>
             <tr>
               <th style="width:40px">#</th>
-              <th>Product</th>
+              <th class="product-col">Product</th>
               <th>Warehouse</th>
               <th style="width:100px" class="text-end">Qty</th>
               <th style="width:120px" class="text-end">Unit Price</th>
@@ -191,10 +279,10 @@
                 $rowFromRequest = $isFromRequest && $it->request_id;
               @endphp
               <tr data-index="{{ $idx }}">
-                <td class="row-num"></td>
+                <td class="row-num text-center"></td>
 
                 {{-- PRODUCT --}}
-                <td>
+                <td class="product-col">
                   <input type="hidden" name="items[{{ $idx }}][id]" value="{{ $it->id }}">
                   <input type="hidden" name="items[{{ $idx }}][request_id]" value="{{ $it->request_id }}">
 
@@ -243,9 +331,9 @@
                   @else
                     @if($isFromRequest)
                       <select name="items[{{ $idx }}][warehouse_id]"
-                              class="form-select form-select-sm"
+                              class="form-select form-select-sm warehouse-select"
                               @disabled($poLocked)>
-                        <option value="">— Select —</option>
+                        <option value="">Central Stock</option>
                         @foreach($warehouses as $w)
                           <option value="{{ $w->id }}" @selected($w->id == $it->warehouse_id)>
                             {{ $w->warehouse_name }}
@@ -253,8 +341,16 @@
                         @endforeach
                       </select>
                     @else
-                      <input type="hidden" name="items[{{ $idx }}][warehouse_id]" value="">
-                      <span class="text-muted">– Central Stock –</span>
+                      <select name="items[{{ $idx }}][warehouse_id]"
+                              class="form-select form-select-sm warehouse-select"
+                              @disabled($poLocked)>
+                        <option value="">Central Stock</option>
+                        @foreach($warehouses as $w)
+                          <option value="{{ $w->id }}" @selected($w->id == $it->warehouse_id)>
+                            {{ $w->warehouse_name }}
+                          </option>
+                        @endforeach
+                      </select>
                     @endif
                   @endif
                 </td>
@@ -305,7 +401,7 @@
                 {{-- HAPUS --}}
                 <td class="text-center">
                   @unless($poLocked || $rowFromRequest)
-                    <button type="button" class="btn btn-xs btn-link text-danger btn-remove">&times;</button>
+                    <button type="button" class="btn btn-link text-danger btn-remove">&times;</button>
                   @endunless
                 </td>
               </tr>
@@ -528,13 +624,26 @@
     */
   }
 
+  function initSelect2(select) {
+    if (!select) return;
+    $(select).select2({
+      width: '100%',
+      dropdownAutoWidth: true,
+      placeholder: '— Select —',
+      allowClear: true
+    });
+  }
+
   function attachProductAutoPrice(tr) {
     const select = tr.querySelector('.product-select');
     if (!select) return;
 
+    // Inisialisasi Select2
+    initSelect2(select);
+
     const priceMode = isFromRequest ? 'sell' : 'buy';
 
-    select.addEventListener('change', function () {
+    $(select).on('change', function () {
       if (poLocked) return;
 
       const opt       = this.options[this.selectedIndex];
@@ -571,35 +680,73 @@
     }
   }
 
+  function attachWarehouseSync(tr) {
+    const sel = tr.querySelector('.warehouse-select');
+    if (!sel) return;
+
+    // Jika mode Single, warehouse row harus ikut global
+    const mode = document.getElementById('distribution_mode')?.value || 'single';
+    const globalWh = document.getElementById('global_warehouse_id')?.value || '';
+
+    if (mode === 'single' && !isFromRequest) {
+      sel.value = globalWh;
+      sel.style.display = 'none';
+      
+      // Tampilkan label text sebagai pengganti dropdown yang di-hide
+      let label = tr.querySelector('.js-wh-label-static');
+      if (!label) {
+        label = document.createElement('span');
+        label.className = 'text-muted js-wh-label-static small';
+        sel.parentNode.appendChild(label);
+      }
+      label.innerText = sel.options[sel.selectedIndex]?.text || 'Central Stock';
+      label.style.display = 'inline';
+    } else {
+      sel.style.display = 'block';
+      const label = tr.querySelector('.js-wh-label-static');
+      if (label) label.style.display = 'none';
+    }
+  }
+
+  // Listener Mode Distribusi
+  const distMode = document.getElementById('distribution_mode');
+  const globalWhWrapper = document.getElementById('global_warehouse_wrapper');
+  const globalWhSelect = document.getElementById('global_warehouse_id');
+
+  if (distMode) {
+    distMode.addEventListener('change', function() {
+      if (this.value === 'single') {
+        globalWhWrapper.style.display = 'block';
+      } else {
+        globalWhWrapper.style.display = 'none';
+      }
+      document.querySelectorAll('#tblItems tbody tr').forEach(tr => attachWarehouseSync(tr));
+    });
+
+    // Inisialisasi awal
+    if (distMode.value === 'multi') {
+      globalWhWrapper.style.display = 'none';
+    }
+  }
+
+  if (globalWhSelect) {
+    globalWhSelect.addEventListener('change', function() {
+      document.querySelectorAll('#tblItems tbody tr').forEach(tr => attachWarehouseSync(tr));
+    });
+  }
+
   const btnAdd = document.getElementById('btnAddRow');
   if (btnAdd && !poLocked) {
     btnAdd.addEventListener('click', () => {
       const tbody = document.querySelector('#tblItems tbody');
       const idx   = nextIndex++;
 
-      let warehouseCellHtml;
-      if (isFromRequest) {
-        warehouseCellHtml = `
-          <select name="items[${idx}][warehouse_id]" class="form-select form-select-sm">
-            <option value="">— Select —</option>
-            @foreach($warehouses as $w)
-              <option value="{{ $w->id }}">{{ $w->warehouse_name }}</option>
-            @endforeach
-          </select>
-        `;
-      } else {
-        warehouseCellHtml = `
-          <input type="hidden" name="items[${idx}][warehouse_id]" value="">
-          <span class="text-muted">– Central Stock –</span>
-        `;
-      }
-
       const tr = document.createElement('tr');
       tr.setAttribute('data-index', idx);
       tr.innerHTML = `
-        <td class="row-num"></td>
+        <td class="row-num text-center"></td>
 
-        <td>
+        <td class="product-col">
           <input type="hidden" name="items[${idx}][id]" value="">
           <input type="hidden" name="items[${idx}][request_id]" value="">
           <select name="items[${idx}][product_id]" class="form-select form-select-sm product-select">
@@ -620,7 +767,14 @@
           <div class="small text-muted js-supplier-label">-</div>
         </td>
 
-        <td>${warehouseCellHtml}</td>
+        <td>
+          <select name="items[${idx}][warehouse_id]" class="form-select form-select-sm warehouse-select">
+            <option value="">Central Stock</option>
+            @foreach($warehouses as $w)
+              <option value="{{ $w->id }}">{{ $w->warehouse_name }}</option>
+            @endforeach
+          </select>
+        </td>
 
         <td>
           <input type="number" min="1" class="form-control text-end qty"
@@ -656,6 +810,7 @@
 
       tbody.appendChild(tr);
       attachProductAutoPrice(tr);
+      attachWarehouseSync(tr);
       renumberRows();
       recalc();
     });
@@ -682,7 +837,10 @@
     }
   });
 
-  document.querySelectorAll('#tblItems tbody tr').forEach(tr => attachProductAutoPrice(tr));
+  document.querySelectorAll('#tblItems tbody tr').forEach(tr => {
+    attachProductAutoPrice(tr);
+    attachWarehouseSync(tr);
+  });
 
   renumberRows();
   recalc();

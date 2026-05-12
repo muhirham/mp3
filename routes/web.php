@@ -299,6 +299,10 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->name('goodreceived.detail')
         ->middleware('menu:goodreceived');
 
+    Route::get('/good-received/{code}/print', [GoodReceivedController::class, 'printGr'])
+        ->name('goodreceived.print')
+        ->middleware('menu:goodreceived');
+
     // Halaman daftar permohonan
     // ================== MASTER COMPANY ==================
 

@@ -374,8 +374,10 @@
                                                 </div>
                                                 <div class="form-check">
                                                     <input class="form-check-input add-permission" type="checkbox"
-                                                        name="permissions[]" value="users.bulk_delete" id="add_users_bulk_delete">
-                                                    <label class="form-check-label" for="add_users_bulk_delete">Bulk Delete</label>
+                                                        name="permissions[]" value="users.bulk_delete"
+                                                        id="add_users_bulk_delete">
+                                                    <label class="form-check-label" for="add_users_bulk_delete">Bulk
+                                                        Delete</label>
                                                 </div>
 
                                                 <div class="form-check">
@@ -386,8 +388,10 @@
 
                                                 <div class="form-check">
                                                     <input class="form-check-input add-permission" type="checkbox"
-                                                        name="permissions[]" value="users.export_seeder" id="add_users_export_seeder">
-                                                    <label class="form-check-label" for="add_users_export_seeder">Export Seeder (CSV)</label>
+                                                        name="permissions[]" value="users.export_seeder"
+                                                        id="add_users_export_seeder">
+                                                    <label class="form-check-label" for="add_users_export_seeder">Export
+                                                        Seeder (CSV)</label>
                                                 </div>
 
                                             </div>

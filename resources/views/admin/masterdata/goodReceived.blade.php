@@ -175,7 +175,7 @@
                 <div class="d-inline-flex gap-1">
                   <button type="button"
                     class="btn btn-sm btn-outline-primary btn-detail-gr"
-                    data-detail-url="{{ route('goodreceived.detail', ['code' => $rr->code]) }}">
+                    data-detail-url="{{ route('goodreceived.detail', ['code' => $rr->code, 'wh_id' => $rr->warehouse_id]) }}">
                     <i class="bx bx-show me-1"></i> Detail
                   </button>
                   

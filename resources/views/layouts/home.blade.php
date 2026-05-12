@@ -24,6 +24,7 @@
         <link rel="stylesheet" href="{{ asset('sneat/assets/css/demo.css') }}" />
         <link rel="stylesheet" href="{{ asset('sneat/assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.css') }}" />
         <link rel="stylesheet" href="{{ asset('sneat/assets/vendor/libs/apex-charts/apex-charts.css') }}" />
+        <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 
         {{-- Custom Theme (dark/light sync) --}}
         <style>
@@ -605,6 +606,7 @@
 
         {{-- Core JS --}}
         <script src="{{ asset('sneat/assets/vendor/libs/jquery/jquery.js') }}"></script>
+        <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
         <script src="{{ asset('sneat/assets/vendor/libs/popper/popper.js') }}"></script>
         <script src="{{ asset('sneat/assets/vendor/js/bootstrap.js') }}"></script>
         <script src="{{ asset('sneat/assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.js') }}"></script>

@@ -2,7 +2,7 @@ id,name,username,email,phone,position,signature_path,password,warehouse_id,wareh
 1,"Admin Pusat",admin,admin@local,081200000001,,ImageAsset/1.jpg,$2y$12$ppKlEsp.8yckS0J4kB88cuTkfCoNj6QU88bWw1MgXcyXkIqCX6FGW,,,active,superadmin
 2,"Admin DEPO Bukittinggi",wh_bukittinggi,wh_bukittinggi@local,081200000010,"Warehouse Admin",ImageAsset/3.jpg,$2y$12$y09Pr8hF/q2DkaMesQ104OmMstkLDdW4zjjwnSO464PpUpz7RcX9m,1,DEPO-BUKITTINGGI,active,warehouse
 3,"Admin DEPO Padang",wh_padang,wh_padang@local,081200000011,"Warehouse Admin",ImageAsset/3.jpg,$2y$12$JXubvgsfsUtDM.pVScfmoucGCDWxmaDxD2ILBzOpVDwZsR1j/Y.3W,2,DEPO-PADANG-A,active,warehouse
-4,"Sales padang Sinta",Spadang,sales_padang@local,081200000013,Sales,ImageAsset/5.jpg,$2y$12$tm1GKKsjQqsfVvLEFH/HHeIBCyuUCCsqrw/M109IJCEvfb7lps5.O,2,DEPO-PADANG-A,active,sales
+4,"Sales DEPO Padang",Spadang,sales_padang@local,081200000013,Sales,ImageAsset/5.jpg,$2y$12$tm1GKKsjQqsfVvLEFH/HHeIBCyuUCCsqrw/M109IJCEvfb7lps5.O,2,DEPO-PADANG-A,active,sales
 5,"Sales Padang Rudi",Rudi,sales_padang@loscal,081200000014,Sales,ImageAsset/5.jpg,$2y$12$RNP5v/qAY25Beyfy5ugfUOWZX3YtrWL5Yv7SgP29ypJIzwHHj3J0S,2,DEPO-PADANG-A,active,sales
 6,"User Procurement",procurement,procurement@local,081200000015,Procurement,ImageAsset/4.jpg,$2y$12$MG.QktEfVG6uPW09iqKEc.d0G0UkqRlt4ciuqWckJh6zG.KbkbkaK,,,active,procurement
 7,"Chief Executive Officer",ceo,ceo@local,081200000016,CEO,ImageAsset/1.jpg,$2y$12$lpEEmc1kQ59plJUkZWraJ.yxtDqeM.pVSx2NIjX3LYAoEIO9FsFz6,,,active,ceo

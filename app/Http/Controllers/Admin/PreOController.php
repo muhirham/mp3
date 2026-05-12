@@ -277,20 +277,27 @@ class PreOController extends Controller
 
         $data = [];
         foreach ($pos as $po) {
-            $hasGr = (int) ($po->gr_count ?? 0) > 0;
+            $hasGr       = (int) ($po->gr_count ?? 0) > 0;
             $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
-            $poWhIds = $po->items->pluck('warehouse_id')->filter()->unique();
-            $isMyWarehousePo = !$myWhId || $poWhIds->contains($myWhId);
+            $poWhIds     = $po->items->pluck('warehouse_id')->filter()->unique();
+
+            // ✅ Strict: admin harus punya warehouse_id DAN ada di PO ini
+            $isMyWarehousePo    = $myWhId && $poWhIds->contains($myWhId);
+            $warehouseCanReceive = $isWarehouse && $isMyWarehousePo;
 
             // Perm logic unification
-            $isOrdered = $po->status === 'ordered';
+            $isOrdered  = $po->status === 'ordered';
             $isApproved = $po->approval_status === 'approved';
-            $hasItems = $po->items_count > 0;
+            $hasItems   = $po->items_count > 0;
 
+            // ✅ Superadmin selalu bisa, Warehouse admin bisa kalau ada item untuk deponya
             $canReceive = !$hasGr && $isOrdered && $isApproved && $hasItems &&
-                         (($fromRequest && $isWarehouse && $isMyWarehousePo) || (!$fromRequest && $isSuperadmin));
+                         ($isSuperadmin || $warehouseCanReceive);
 
-            $showBlockedReceive = $isSuperadmin && $fromRequest && !$hasGr && $isOrdered && $isApproved && $hasItems;
+            // Tombol "blocked receive" untuk superadmin: PO request yang sudah approved tapi
+            // tidak bisa di-receive oleh superadmin sendiri (harus WH admin) → informasi saja
+            $showBlockedReceive = $isSuperadmin && $fromRequest && !$hasGr && $isOrdered && $isApproved && $hasItems && !$warehouseCanReceive;
+
 
             // Supplier Label
             $supplierNames = collect();
@@ -304,17 +311,23 @@ class PreOController extends Controller
             else $supplierLabel = $supplierNames->first() . ' + ' . ($supplierNames->count() - 1) . ' supplier';
 
             // Warehouse Label
-            if (!$fromRequest) {
+            $whNames = collect();
+            foreach($po->items as $it) {
+                if($it->warehouse) $whNames->push($it->warehouse->warehouse_name ?? $it->warehouse->name);
+            }
+            $whNames = $whNames->filter()->unique()->values();
+            
+            if ($whNames->isEmpty()) {
                 $warehouseLabel = 'Central Stock';
+            } elseif ($whNames->count() === 1) {
+                $warehouseLabel = $whNames->first();
+                // Opsional: Jika sebagian item central, sebagian depo
+                $hasCentral = $po->items->whereNull('warehouse_id')->isNotEmpty();
+                if ($hasCentral) $warehouseLabel .= ' + Central';
             } else {
-                $whNames = collect();
-                foreach($po->items as $it) {
-                    if($it->warehouse) $whNames->push($it->warehouse->warehouse_name ?? $it->warehouse->name);
-                }
-                $whNames = $whNames->filter()->unique()->values();
-                if ($whNames->isEmpty()) $warehouseLabel = '-';
-                elseif ($whNames->count() === 1) $warehouseLabel = $whNames->first();
-                else $warehouseLabel = $whNames->first() . ' + ' . ($whNames->count() - 1) . ' wh';
+                $warehouseLabel = $whNames->first() . ' + ' . ($whNames->count() - 1) . ' wh';
+                $hasCentral = $po->items->whereNull('warehouse_id')->isNotEmpty();
+                if ($hasCentral) $warehouseLabel .= ' + Central';
             }
 
             // Approval Badge
@@ -380,24 +393,30 @@ class PreOController extends Controller
         $hasGr = (int) ($po->restockReceipts()->where(function($qq){ $qq->where('qty_good','>',0)->orWhere('qty_damaged','>',0);})->count() ?? 0) > 0;
         $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
 
+        // ✅ isMyWarehousePo: strict — admin harus punya warehouse DAN ada di PO ini
         $poWhIds = $po->items->pluck('warehouse_id')->filter()->unique();
-        $isMyWarehousePo = !$myWhId || $poWhIds->contains($myWhId);
+        $isMyWarehousePo = $myWhId && $poWhIds->contains($myWhId);
 
-        $isOrdered = $po->status === 'ordered';
+        // ✅ Admin WH boleh receive kalau ada minimal 1 item untuk warehousenya (baik PO request maupun manual)
+        $warehouseCanReceive = $isWarehouse && $isMyWarehousePo;
+
+        $isOrdered  = $po->status === 'ordered';
         $isApproved = $po->approval_status === 'approved';
-        $hasItems = $po->items()->count() > 0;
+        $hasItems   = $po->items()->count() > 0;
 
         $canReceive = !$hasGr && $isOrdered && $isApproved && $hasItems &&
-                     (($fromRequest && $isWarehouse && $isMyWarehousePo) || (!$fromRequest && $isSuperadmin));
+                     ($isSuperadmin || $warehouseCanReceive);
 
         if (!$canReceive) {
             $reason = "You do not have permission to receive this PO.";
-            if ($hasGr) $reason = "This PO has already been received (GR EXIST).";
-            elseif (!$isOrdered) $reason = "This PO status is not 'ordered' (Current: {$po->status}).";
+            if ($hasGr)       $reason = "This PO has already been received (GR EXIST).";
+            elseif (!$isOrdered)  $reason = "This PO status is not 'ordered' (Current: {$po->status}).";
             elseif (!$isApproved) $reason = "This PO is not yet approved (Current: " . ($po->approval_status ?: 'draft') . ").";
-            elseif ($fromRequest && !$isWarehouse) $reason = "This is a Restock Request PO. It must be received by a Warehouse account.";
-            elseif (!$fromRequest && !$isSuperadmin) $reason = "This is a manual PO. It must be received by a Superadmin account.";
-            
+            elseif ($isWarehouse && !$isMyWarehousePo)
+                $reason = "This PO has no items assigned to your warehouse (" . ($me->warehouse->warehouse_name ?? 'Unknown') . ").";
+            elseif (!$isSuperadmin && !$isWarehouse)
+                $reason = "Only Superadmin or Warehouse account can receive this PO.";
+
             return '<div class="alert alert-danger">'.$reason.'</div>';
         }
 
@@ -413,19 +432,24 @@ class PreOController extends Controller
         else $supplierLabel = $supplierNames->first() . ' + ' . ($supplierNames->count() - 1) . ' supplier';
 
         // Warehouse Label
-        if (!$fromRequest) {
-            $whLabel = 'Central Stock';
-        } else {
-            $whNames = collect();
-            foreach ($po->items as $it) {
-                if ($it->warehouse) {
-                    $whNames->push($it->warehouse->warehouse_name ?? $it->warehouse->name);
-                }
+        $whNames = collect();
+        foreach ($po->items as $it) {
+            if ($it->warehouse) {
+                $whNames->push($it->warehouse->warehouse_name ?? $it->warehouse->name);
             }
-            $whNames = $whNames->filter()->unique()->values();
-            if ($whNames->isEmpty()) $whLabel = '-';
-            elseif ($whNames->count() === 1) $whLabel = $whNames->first();
-            else $whLabel = $whNames->first() . ' + ' . ($whNames->count() - 1) . ' wh';
+        }
+        $whNames = $whNames->filter()->unique()->values();
+        
+        if ($whNames->isEmpty()) {
+            $whLabel = 'Central Stock';
+        } elseif ($whNames->count() === 1) {
+            $whLabel = $whNames->first();
+            $hasCentral = $po->items->whereNull('warehouse_id')->isNotEmpty();
+            if ($hasCentral) $whLabel .= ' + Central';
+        } else {
+            $whLabel = $whNames->first() . ' + ' . ($whNames->count() - 1) . ' wh';
+            $hasCentral = $po->items->whereNull('warehouse_id')->isNotEmpty();
+            if ($hasCentral) $whLabel .= ' + Central';
         }
 
         // Render the modal body HTML
@@ -458,14 +482,21 @@ class PreOController extends Controller
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($po->items as $i => $item):
+                            <?php 
+                            $counter = 1;
+                            foreach ($po->items as $i => $item):
+                                // ✅ FILTER: Kalau bukan Superadmin, cuma tampilin item jatah gudang dia
+                                if (!$isSuperadmin && $myWhId && $item->warehouse_id != $myWhId) {
+                                    continue;
+                                }
+
                                 $ordered = (int) ($item->qty_ordered ?? 0);
                                 $received = (int) ($item->qty_received ?? 0);
                                 $remaining = max(0, $ordered - $received);
                                 $key = $item->id;
                             ?>
                                 <tr>
-                                    <td class="ps-3 small"><?= $i + 1 ?></td>
+                                    <td class="ps-3 small"><?= $counter++ ?></td>
                                     <td>
                                         <div class="fw-bold text-dark"><?= e($item->product->name ?? '-') ?></div>
                                         <div class="text-muted small" style="font-size: 0.65rem;"><?= e($item->product->product_code ?? '') ?></div>
@@ -715,11 +746,8 @@ class PreOController extends Controller
                     $item->product_id  = $row['product_id'];
                     $item->qty_ordered = (int) ($row['qty'] ?? 0);
 
-                    if ($wasFromRequest) {
-                        $item->warehouse_id = $row['warehouse_id'] ?? null;
-                    } else {
-                        $item->warehouse_id = null;
-                    }
+                    // ✅ Ambil warehouse_id dari input, kalau kosong baru NULL (Pusat)
+                    $item->warehouse_id = $row['warehouse_id'] ?: null;
 
                     $rawPrice = array_key_exists('unit_price', $row) ? $row['unit_price'] : null;
 
