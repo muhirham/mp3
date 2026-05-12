@@ -88,33 +88,51 @@
         {{-- Table Card --}}
         <style>
             .table-tiny {
-                font-size: 0.775rem !important; /* Slightly larger base */
+                font-size: 0.775rem !important;
+                /* Slightly larger base */
             }
-            .table-tiny th, .table-tiny td {
-                padding: 4px 8px !important; /* Tighter padding */
+
+            .table-tiny th,
+            .table-tiny td {
+                padding: 4px 8px !important;
+                /* Tighter padding */
             }
+
             .table-tiny th {
                 font-weight: 700;
                 text-transform: uppercase;
                 background-color: #f8f9fa;
             }
+
             .table-tiny td {
                 vertical-align: middle !important;
             }
+
             /* Specific column adjustments */
-            .col-checkbox { width: 30px !important; padding-right: 0 !important; }
-            .col-no { width: 35px !important; }
-            .col-product { 
+            .col-checkbox {
+                width: 30px !important;
+                padding-right: 0 !important;
+            }
+
+            .col-no {
+                width: 35px !important;
+            }
+
+            .col-product {
                 max-width: 250px;
                 overflow: hidden;
                 text-overflow: ellipsis;
             }
-            .text-xs { font-size: 0.65rem !important; }
+
+            .text-xs {
+                font-size: 0.65rem !important;
+            }
         </style>
         <div class="card shadow-sm border-0">
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-striped table-hover align-middle mb-0 table-bordered w-100 table-tiny" id="mainTable">
+                    <table class="table table-striped table-hover align-middle mb-0 table-bordered w-100 table-tiny"
+                        id="mainTable">
                         <thead>
                             <tr>
                                 <th class="text-center no-sort col-checkbox">
@@ -322,6 +340,9 @@
 @endsection
 
 @push('scripts')
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         $(function() {
@@ -339,25 +360,6 @@
             // DataTables AJAX init
             const table = $('#mainTable').DataTable({
                 processing: true,
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
-    <script>
-        $(function() {
-            const isWarehouse = @json($isWarehouse);
-            const Alert = Swal.mixin({
-                customClass: {
-                    confirmButton: 'btn btn-primary',
-                    cancelButton: 'btn btn-outline-secondary ms-2'
-                },
-                buttonsStyling: false
-            });
-
-            // DataTables AJAX init
-            const table = $('#mainTable').DataTable({
-                processing: true,
                 serverSide: true,
                 ajax: {
                     url: "{{ route('damaged-stocks.data') }}",
@@ -368,70 +370,108 @@
                         d.condition = $('select[name="condition"]').val();
                     }
                 },
-                columns: [
-                    { data: null, orderable: false, className: 'text-center', render: function(data, type, row) {
-                        if (['quarantine', 'rejected'].includes(row.status)) {
-                            return `<input type="checkbox" class="form-check-input check-item" value="${row.id}" data-name="${row.product.name}" data-code="${row.product.product_code}">`;
+                columns: [{
+                        data: null,
+                        orderable: false,
+                        className: 'text-center',
+                        render: function(data, type, row) {
+                            if (['quarantine', 'rejected'].includes(row.status)) {
+                                return `<input type="checkbox" class="form-check-input check-item" value="${row.id}" data-name="${row.product.name}" data-code="${row.product.product_code}">`;
+                            }
+                            return '';
                         }
-                        return '';
-                    }},
-                    { data: null, orderable: false, className: 'text-center', render: (data, type, row, meta) => meta.row + meta.settings._iDisplayStart + 1 },
-                    { data: 'product.name', render: function(data, type, row) {
-                        return `<div style="line-height: 1.1;">
+                    },
+                    {
+                        data: null,
+                        orderable: false,
+                        className: 'text-center',
+                        render: (data, type, row, meta) => meta.row + meta.settings._iDisplayStart + 1
+                    },
+                    {
+                        data: 'product.name',
+                        render: function(data, type, row) {
+                            return `<div style="line-height: 1.1;">
                             <div class="fw-bold text-dark">${data}</div>
                             <div class="text-muted italic" style="font-size: 0.65rem;">${row.product.product_code} | ${row.condition.toUpperCase()}</div>
                         </div>`;
-                    }},
-                    { data: 'created_at_html', render: function(data, type, row) {
-                        const source = (row.source_type || 'Manual').toUpperCase().replace(/_/g, ' ');
-                        return `<div style="line-height: 1.1;">
+                        }
+                    },
+                    {
+                        data: 'created_at_html',
+                        render: function(data, type, row) {
+                            const source = (row.source_type || 'Manual').toUpperCase().replace(/_/g,
+                                ' ');
+                            return `<div style="line-height: 1.1;">
                             <div class="fw-medium">${data}</div>
                             <div class="text-muted italic" style="font-size: 0.65rem; margin-top: 2px;">${source}</div>
                         </div>`;
-                    }},
-                    { data: 'quantity', className: 'text-center fw-bold' },
-                    { data: 'status', render: function(data) {
-                        const colors = { quarantine: 'warning', pending_approval: 'info', in_progress: 'primary', resolved: 'success', rejected: 'danger' };
-                        const label = data.toUpperCase().replace(/_/g, ' ');
-                        return `<span class="badge bg-label-${colors[data] || 'secondary'}">${label}</span>`;
-                    }},
-                    { data: 'resolved_at_html', render: function(data, type, row) {
-                        const approverName = row.approver ? row.approver.name : 'System';
-                        if (data) {
-                            return `<div style="line-height: 1.1;">
+                        }
+                    },
+                    {
+                        data: 'quantity',
+                        className: 'text-center fw-bold'
+                    },
+                    {
+                        data: 'status',
+                        render: function(data) {
+                            const colors = {
+                                quarantine: 'warning',
+                                pending_approval: 'info',
+                                in_progress: 'primary',
+                                resolved: 'success',
+                                rejected: 'danger'
+                            };
+                            const label = data.toUpperCase().replace(/_/g, ' ');
+                            return `<span class="badge bg-label-${colors[data] || 'secondary'}">${label}</span>`;
+                        }
+                    },
+                    {
+                        data: 'resolved_at_html',
+                        render: function(data, type, row) {
+                            const approverName = row.approver ? row.approver.name : 'System';
+                            if (data) {
+                                return `<div style="line-height: 1.1;">
                                 <div class="text-success fw-medium">${data}</div>
                                 <div class="text-muted italic" style="font-size: 0.65rem; margin-top: 2px;">By: ${approverName}</div>
                             </div>`;
-                        } else if (row.approved_at) {
-                            return `<div style="line-height: 1.1;">
+                            } else if (row.approved_at) {
+                                return `<div style="line-height: 1.1;">
                                 <div class="text-info fw-medium">Approved</div>
                                 <div class="text-muted italic" style="font-size: 0.65rem; margin-top: 2px;">By: ${approverName}</div>
                             </div>`;
+                            }
+                            return `<span class="text-muted italic" style="font-size: 0.65rem;">Waiting...</span>`;
                         }
-                        return `<span class="text-muted italic" style="font-size: 0.65rem;">Waiting...</span>`;
-                    }},
-                    { data: null, orderable: false, className: 'text-center', render: function(data, type, row) {
-                        let btns = `<div class="d-flex gap-1 justify-content-center">
+                    },
+                    {
+                        data: null,
+                        orderable: false,
+                        className: 'text-center',
+                        render: function(data, type, row) {
+                            let btns = `<div class="d-flex gap-1 justify-content-center">
                             <button class="btn btn-outline-primary btn-sm px-2 btn-detail" data-id="${row.id}">
                                 <i class="bx bx-show me-1"></i> Detail
                             </button>`;
-                        
-                        if (['quarantine', 'rejected'].includes(row.status)) {
-                            btns += `<button class="btn btn-primary btn-sm px-2 btn-request" data-id="${row.id}" data-notes="${row.notes || ''}">
+
+                            if (['quarantine', 'rejected'].includes(row.status)) {
+                                btns += `<button class="btn btn-primary btn-sm px-2 btn-request" data-id="${row.id}" data-notes="${row.notes || ''}">
                                 <i class="bx bx-paper-plane me-1"></i> Request
                             </button>`;
-                        }
+                            }
 
-                        if (row.status === 'in_progress' && isWarehouse) {
-                            btns += `<button class="btn btn-success btn-sm px-2 btn-resolve" data-id="${row.id}" data-action="${row.action}">
+                            if (row.status === 'in_progress' && isWarehouse) {
+                                btns += `<button class="btn btn-success btn-sm px-2 btn-resolve" data-id="${row.id}" data-action="${row.action}">
                                 <i class="bx bx-check-square me-1"></i> ${row.action === 'dispose' ? 'Confirm' : 'Receive'}
                             </button>`;
+                            }
+                            btns += `</div>`;
+                            return btns;
                         }
-                        btns += `</div>`;
-                        return btns;
-                    }}
+                    }
                 ],
-                order: [[3, 'desc']],
+                order: [
+                    [3, 'desc']
+                ],
                 pageLength: 10,
                 pagingType: "simple_numbers",
                 dom: 'rt<"d-flex justify-content-between align-items-center p-2"ip>',
@@ -457,9 +497,10 @@
             });
 
             // Filters reload
-            $('select[name="warehouse_id"], select[name="status"], select[name="condition"]').on('change', function() {
-                table.ajax.reload();
-            });
+            $('select[name="warehouse_id"], select[name="status"], select[name="condition"]').on('change',
+                function() {
+                    table.ajax.reload();
+                });
 
             // Update bulk when clicking checks
             $(document).on('change', '.check-item, #checkAll', function() {
@@ -484,13 +525,15 @@
 
                 const st = item.status.toUpperCase().replace(/_/g, ' ');
                 $('#detStatusBadge').html(`<span class="badge bg-label-info">${st}</span>`);
-                $('#detAction').text(item.action ? item.action.toUpperCase().replace(/_/g, ' ') : 'PENDING ANALYSIS');
-                
+                $('#detAction').text(item.action ? item.action.toUpperCase().replace(/_/g, ' ') :
+                    'PENDING ANALYSIS');
+
                 let approverHtml = item.approver ?
                     `Approved by <b>${item.approver.name}</b> on ${new Date(item.approved_at).toLocaleDateString('id-ID')}` :
                     '<span class="text-danger">Not yet reviewed</span>';
                 if (item.resolver) {
-                    approverHtml += `<br><span class="text-success">Resolved by <b>${item.resolver.name}</b></span>`;
+                    approverHtml +=
+                        `<br><span class="text-success">Resolved by <b>${item.resolver.name}</b></span>`;
                 }
                 $('#detApprover').html(approverHtml);
                 $('#detNotes').text(item.notes || 'No notes available.');
@@ -506,7 +549,8 @@
                         </div>`;
                     });
                 } else {
-                    photoHtml = '<div class="col-12 py-3 text-center text-muted small border-dashed rounded">No proof photos.</div>';
+                    photoHtml =
+                        '<div class="col-12 py-3 text-center text-muted small border-dashed rounded">No proof photos.</div>';
                 }
                 $('#divPhotos').html(photoHtml);
                 $('#mdlDetail').modal('show');
@@ -516,7 +560,8 @@
             $(document).on('click', '.btn-request', function() {
                 const id = $(this).data('id');
                 const notes = $(this).data('notes');
-                $('#frmRequest').attr('action', `{{ url('admin/warehouse/damaged-stocks') }}/${id}/request`);
+                $('#frmRequest').attr('action',
+                    `{{ url('admin/warehouse/damaged-stocks') }}/${id}/request`);
                 $('#frmRequest textarea[name="notes"]').val(notes || '');
                 $('#mdlRequest').modal('show');
             });
@@ -531,9 +576,14 @@
                 if (action !== 'dispose') {
                     let typeCode = action === 'repair' ? 'RP' : 'RT';
                     $('#grTitle').html(`Goods Received – ${typeCode}-${id}`);
-                    $('#grSupplier').html(`Supplier: <strong>${rowData.product.supplier ? rowData.product.supplier.name : 'Unknown Supplier'}</strong>`);
-                    $('#grWarehouse').html(`Warehouse: <strong>${rowData.warehouse ? rowData.warehouse.warehouse_name : 'Unknown Warehouse'}</strong>`);
-                    $('#frmResolveGR').attr('action', `{{ url('admin/warehouse/damaged-stocks') }}/${id}/resolve`);
+                    $('#grSupplier').html(
+                        `Supplier: <strong>${rowData.product.supplier ? rowData.product.supplier.name : 'Unknown Supplier'}</strong>`
+                    );
+                    $('#grWarehouse').html(
+                        `Warehouse: <strong>${rowData.warehouse ? rowData.warehouse.warehouse_name : 'Unknown Warehouse'}</strong>`
+                    );
+                    $('#frmResolveGR').attr('action',
+                        `{{ url('admin/warehouse/damaged-stocks') }}/${id}/resolve`);
 
                     let html = `
                     <tr>
@@ -561,12 +611,22 @@
                     $('#mdlResolveGR').modal('show');
                 } else {
                     const result = await Alert.fire({
-                        icon: 'warning', title: 'Confirm Disposal?', text: 'Verify destruction. Stock will NOT increase.',
-                        showCancelButton: true, confirmButtonText: 'Yes, Confirm'
+                        icon: 'warning',
+                        title: 'Confirm Disposal?',
+                        text: 'Verify destruction. Stock will NOT increase.',
+                        showCancelButton: true,
+                        confirmButtonText: 'Yes, Confirm'
                     });
                     if (result.isConfirmed) {
-                        const form = $('<form>', { action: `{{ url('admin/warehouse/damaged-stocks') }}/${id}/resolve`, method: 'POST' })
-                            .append($('<input>', { type: 'hidden', name: '_token', value: '{{ csrf_token() }}' }));
+                        const form = $('<form>', {
+                                action: `{{ url('admin/warehouse/damaged-stocks') }}/${id}/resolve`,
+                                method: 'POST'
+                            })
+                            .append($('<input>', {
+                                type: 'hidden',
+                                name: '_token',
+                                value: '{{ csrf_token() }}'
+                            }));
                         $('body').append(form);
                         form.submit();
                     }
@@ -627,8 +687,22 @@
                 offcanvas.show();
             });
 
-            @if (session('success')) Alert.fire({ icon: 'success', title: 'Success!', text: "{{ session('success') }}", timer: 3000, showConfirmButton: false }); @endif
-            @if (session('error')) Alert.fire({ icon: 'error', title: 'Oops!', text: "{{ session('error') }}" }); @endif
+            @if (session('success'))
+                Alert.fire({
+                    icon: 'success',
+                    title: 'Success!',
+                    text: "{{ session('success') }}",
+                    timer: 3000,
+                    showConfirmButton: false
+                });
+            @endif
+            @if (session('error'))
+                Alert.fire({
+                    icon: 'error',
+                    title: 'Oops!',
+                    text: "{{ session('error') }}"
+                });
+            @endif
         });
 
         function previewImage(src) {

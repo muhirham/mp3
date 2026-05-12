@@ -190,7 +190,7 @@
                 </table>
             </div>
             <div id="paginationContainer" class="card-footer d-flex justify-content-center">
-                {{ $unsettled->links() }}
+                {{ $unsettled->links('pagination::bootstrap-5') }}
             </div>
         </div>
     </div>
