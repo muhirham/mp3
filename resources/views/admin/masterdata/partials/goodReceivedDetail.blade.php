@@ -45,8 +45,15 @@
         }
 
         // Hitung Subtotal Berdasarkan Barang Bagus (Actual Payable)
-        $subtotal = $displayItems->sum(function($it) use ($goodByProduct) {
-             return (int)($goodByProduct[$it->product_id] ?? 0) * (float)($it->unit_price ?? 0);
+        $subtotal = $displayItems->sum(function($item) use ($receipts) {
+             // ✅ Filter presisi: cocokkan produk, gudang, dan request
+             $itemGood = $receipts->filter(function($r) use ($item) {
+                 return $r->product_id == $item->product_id && 
+                        ($r->warehouse_id ?: null) == ($item->warehouse_id ?: null) &&
+                        ($r->request_id ?: null) == ($item->request_id ?: null);
+             })->sum('qty_good');
+             
+             return (int)$itemGood * (float)($item->unit_price ?? 0);
         });
         $discountTotal = $po ? (float) ($po->discount_total ?? 0) : 0;
         $grandTotal = $subtotal - $discountTotal;
@@ -56,12 +63,24 @@
         $formatRupiah = fn($v) => 'Rp ' . number_format($v, 0, ',', '.');
     @endphp
 
-    <div class="modal-header border-0 pb-1">
+    <div class="modal-header border-0 pb-1 d-flex justify-content-between align-items-center">
         <h5 class="modal-title fw-bold">
             Goods Received Details
             <span class="badge bg-label-{{ $typeLabel['color'] }} ms-2" style="font-size: 0.7rem;">{{ $typeLabel['text'] }}</span>
         </h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        
+        <div class="d-flex align-items-center gap-3">
+            @php
+                $printUrl = route('goodreceived.print', ['code' => $first->code]);
+                if (request()->has('wh_id')) {
+                    $printUrl .= '?wh_id=' . request()->query('wh_id');
+                }
+            @endphp
+            <a href="{{ $printUrl }}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                <i class="bx bx-printer me-1"></i> Print GR
+            </a>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" style="margin: 0;"></button>
+        </div>
     </div>
 
     <div class="modal-body pt-0" style="font-size: 0.9rem;">
@@ -149,10 +168,16 @@
                     @foreach ($displayItems as $idx => $item)
                         @php
                             $price = $item->unit_price ?? 0;
-                            $itemGood = $goodByProduct[$item->product_id] ?? 0;
+                            // ✅ Filter presisi per baris item
+                            $itemReceipts = $receipts->filter(function($r) use ($item) {
+                                return $r->product_id == $item->product_id && 
+                                       ($r->warehouse_id ?: null) == ($item->warehouse_id ?: null) &&
+                                       ($r->request_id ?: null) == ($item->request_id ?: null);
+                            });
+                            
+                            $itemGood = $itemReceipts->sum('qty_good');
+                            $itemDamaged = $itemReceipts->sum('qty_damaged');
                             $subtotalItem = (int) $itemGood * (float) $price;
-                            $itemGood = $goodByProduct[$item->product_id] ?? 0;
-                            $itemDamaged = $damagedByProduct[$item->product_id] ?? 0;
                         @endphp
                         <tr class="align-middle">
                             <td class="text-center text-muted">{{ $idx + 1 }}</td>

@@ -203,9 +203,12 @@ class GoodReceivedController extends Controller
         $first = $receipts->first();
 
         // Security Audit: Pastikan orang gudang gak bisa ngintip gudang orang lewat URL
+        // ✅ Fix Multi-WH: cek apakah SALAH SATU receipt ada yang milik gudang admin ini
         $isWarehouse = $roles->contains('slug', 'warehouse');
         if ($isWarehouse && !$isSuperadmin) {
-            if ($first->warehouse_id != $me->warehouse_id) {
+            $myWhId      = $me->warehouse_id ?? null;
+            $receiptWhIds = $receipts->pluck('warehouse_id')->filter()->unique();
+            if ($myWhId && !$receiptWhIds->contains($myWhId)) {
                 abort(403, 'Unauthorized. You cannot view Goods Received records from another warehouse.');
             }
         }
@@ -213,19 +216,50 @@ class GoodReceivedController extends Controller
         // Re-eager load to ensure we have all data for the detail modal
         $receipts->loadMissing(['product.supplier', 'supplier', 'receiver', 'request.product.supplier', 'warehouseTransfer.items.product.supplier', 'salesReturn.product.supplier']);
 
+        // ✅ Tentukan gudang mana yang mau difilter
+        $filterByWh = false;
+        $myWhIdForFilter = null;
+
+        if ($isWarehouse && !$isSuperadmin) {
+            // Admin WH cuma boleh liat gudang dia sendiri
+            $filterByWh = true;
+            $myWhIdForFilter = $me->warehouse_id ?? null;
+        } elseif (request()->has('wh_id')) {
+            // Superadmin nge-klik baris gudang spesifik di dashboard
+            $filterByWh = true;
+            $myWhIdForFilter = request()->query('wh_id') ?: null; // ubah '' string kosong jadi null
+        }
+
+        if ($filterByWh) {
+            $receipts = $receipts->filter(function($r) use ($myWhIdForFilter) {
+                return ($r->warehouse_id ?? null) == $myWhIdForFilter;
+            })->values();
+        }
+
         $first = $receipts->first();
-        $po    = $first->purchaseOrder; 
+        if (!$first) {
+            return "<div class='p-4 text-center text-danger fw-bold'>Data Goods Received untuk gudang ini tidak ditemukan.</div>";
+        }
+
+        $po = $first?->purchaseOrder;
 
         $company = Company::where('is_default', true)
             ->where('is_active', true)
             ->first();
 
         $displayItems = collect();
-        
+
         if ($po) {
             $po->load(['items.product.supplier', 'supplier']);
             $displayItems = $po->items;
-        } elseif ($first->gr_type == 'gr_transfer' && $first->warehouseTransfer) {
+
+            // ✅ Filter item PO biar cuma tampil untuk gudang ini aja
+            if ($filterByWh) {
+                $displayItems = $displayItems->filter(function($it) use ($myWhIdForFilter) {
+                    return ($it->warehouse_id ?? null) == $myWhIdForFilter;
+                })->values();
+            }
+        } elseif ($first?->gr_type == 'gr_transfer' && $first?->warehouseTransfer) {
             // Mapping WarehouseTransfer items biar polanya sama kayak PO item
             foreach($first->warehouseTransfer->items as $it) {
                 $displayItems->push((object)[
@@ -235,7 +269,7 @@ class GoodReceivedController extends Controller
                     'unit_price'   => $it->unit_cost ?? 0,
                 ]);
             }
-        } elseif (in_array($first->gr_type, ['request_stock', 'gr_return'])) {
+        } elseif (in_array($first?->gr_type, ['request_stock', 'gr_return'])) {
             // Karena Request & Return itu per item, kita mapping dari koleksi receipts-nya
             $grouped = $receipts->groupBy('product_id');
             foreach ($grouped as $productId => $rows) {
@@ -243,7 +277,7 @@ class GoodReceivedController extends Controller
                 $displayItems->push((object)[
                     'product_id'   => $productId,
                     'product'      => $pRow->product,
-                    'qty_ordered'  => $rows->sum('qty_requested'), 
+                    'qty_ordered'  => $rows->sum('qty_requested'),
                     'unit_price'   => $pRow->cost_per_item ?? 0,
                 ]);
             }
@@ -261,8 +295,9 @@ class GoodReceivedController extends Controller
             }
         }
 
-        $goodByProduct = $receipts->groupBy('product_id')->map(fn($g) => $g->sum('qty_good'));
+        $goodByProduct    = $receipts->groupBy('product_id')->map(fn($g) => $g->sum('qty_good'));
         $damagedByProduct = $receipts->groupBy('product_id')->map(fn($g) => $g->sum('qty_damaged'));
+
 
         return view('admin.masterdata.partials.goodReceivedDetail', compact(
             'receipts',
@@ -273,6 +308,149 @@ class GoodReceivedController extends Controller
             'isSuperadmin',
             'goodByProduct',
             'damagedByProduct'
+        ));
+    }
+
+    public function printGr($code)
+    {
+        $me    = auth()->user();
+        $roles = $me?->roles ?? collect();
+        $isSuperadmin = $roles->contains('slug', 'superadmin');
+
+        $receipts = RestockReceipt::with([
+                'purchaseOrder.supplier', 
+                'purchaseOrder.items.product', 
+                'supplier', 
+                'warehouse', 
+                'product', 
+                'photos', 
+                'receiver', 
+                'request.product',
+                'warehouseTransfer.items.product',
+                'salesReturn.product'
+            ])
+            ->where('code', $code)
+            ->get();
+
+        if ($receipts->isEmpty() && is_numeric($code)) {
+            $fallback = RestockReceipt::find($code);
+            if ($fallback) {
+                $realCode = $fallback->code;
+                $receipts = RestockReceipt::with([
+                    'purchaseOrder.supplier', 
+                    'purchaseOrder.items.product', 
+                    'supplier', 
+                    'warehouse', 
+                    'product', 
+                    'photos', 
+                    'receiver', 
+                    'request.product', 
+                    'salesReturn.product',
+                    'warehouseTransfer.items.product'
+                ])
+                ->where('code', $realCode ?: 'NONE')
+                ->orWhere('id', $code)
+                ->get();
+            }
+        }
+
+        if ($receipts->isEmpty()) {
+            abort(404, 'Goods Received records not found.');
+        }
+
+        $isWarehouse = $roles->contains('slug', 'warehouse');
+        if ($isWarehouse && !$isSuperadmin) {
+            $myWhId      = $me->warehouse_id ?? null;
+            $receiptWhIds = $receipts->pluck('warehouse_id')->filter()->unique();
+            if ($myWhId && !$receiptWhIds->contains($myWhId)) {
+                abort(403, 'Unauthorized. You cannot view Goods Received records from another warehouse.');
+            }
+        }
+
+        $receipts->loadMissing(['product.supplier', 'supplier', 'receiver', 'request.product.supplier', 'warehouseTransfer.items.product.supplier', 'salesReturn.product.supplier']);
+
+        $filterByWh = false;
+        $myWhIdForFilter = null;
+
+        if ($isWarehouse && !$isSuperadmin) {
+            $filterByWh = true;
+            $myWhIdForFilter = $me->warehouse_id ?? null;
+        } elseif (request()->has('wh_id')) {
+            $filterByWh = true;
+            $myWhIdForFilter = request()->query('wh_id') ?: null;
+        }
+
+        if ($filterByWh) {
+            $receipts = $receipts->filter(function($r) use ($myWhIdForFilter) {
+                return ($r->warehouse_id ?? null) == $myWhIdForFilter;
+            })->values();
+        }
+
+        $first = $receipts->first();
+        if (!$first) {
+            abort(404, 'Data Goods Received untuk gudang ini tidak ditemukan.');
+        }
+
+        $po = $first?->purchaseOrder;
+        $company = Company::where('is_default', true)->where('is_active', true)->first();
+        $displayItems = collect();
+
+        if ($po) {
+            $po->load(['items.product.supplier', 'supplier']);
+            $displayItems = $po->items;
+            if ($filterByWh) {
+                $displayItems = $displayItems->filter(function($it) use ($myWhIdForFilter) {
+                    return ($it->warehouse_id ?? null) == $myWhIdForFilter;
+                })->values();
+            }
+        } elseif ($first?->gr_type == 'gr_transfer' && $first?->warehouseTransfer) {
+            foreach($first->warehouseTransfer->items as $it) {
+                $displayItems->push((object)[
+                    'product_id'   => $it->product_id,
+                    'product'      => $it->product,
+                    'qty_ordered'  => $it->qty_transfer,
+                    'unit_price'   => $it->unit_cost ?? 0,
+                ]);
+            }
+        } elseif (in_array($first?->gr_type, ['request_stock', 'gr_return'])) {
+            $grouped = $receipts->groupBy('product_id');
+            foreach ($grouped as $productId => $rows) {
+                $pRow = $rows->first();
+                $displayItems->push((object)[
+                    'product_id'   => $productId,
+                    'product'      => $pRow->product,
+                    'qty_ordered'  => $rows->sum('qty_requested'),
+                    'unit_price'   => $pRow->cost_per_item ?? 0,
+                ]);
+            }
+        } else {
+            $grouped = $receipts->groupBy('product_id');
+            foreach ($grouped as $productId => $rows) {
+                $pRow = $rows->first();
+                $displayItems->push((object)[
+                    'product_id'   => $productId,
+                    'product'      => $pRow->product,
+                    'qty_ordered'  => $rows->sum('qty_requested'),
+                    'unit_price'   => $pRow->cost_per_item ?? 0,
+                ]);
+            }
+        }
+
+        $goodByProduct    = $receipts->groupBy('product_id')->map(fn($g) => $g->sum('qty_good'));
+        $damagedByProduct = $receipts->groupBy('product_id')->map(fn($g) => $g->sum('qty_damaged'));
+
+        $autoPrint = true;
+
+        return view('admin.masterdata.partials.goodReceivedPrint', compact(
+            'receipts',
+            'first',
+            'po',
+            'displayItems',
+            'company',
+            'isSuperadmin',
+            'goodByProduct',
+            'damagedByProduct',
+            'autoPrint'
         ));
     }
 
@@ -290,22 +468,25 @@ class GoodReceivedController extends Controller
         $po->loadMissing('items');
         $fromRequest = $po->items->whereNotNull('request_id')->isNotEmpty();
 
+        $myWhId  = $user->warehouse_id ?? null;
+        $poWhIds = $po->items->pluck('warehouse_id')->filter()->unique();
+
+        // ✅ Admin WH ini punya item di PO ini?
+        $isMyWarehousePo = $myWhId && $poWhIds->contains($myWhId);
+
         if ($fromRequest) {
             // PO dari Request Restock → hanya Admin Warehouse
             if (! $isWarehouse) {
                 return back()->with('error', 'GR PO dari Request Restock hanya bisa dilakukan Admin Warehouse.');
             }
-
-            // pastiin PO ini buat warehouse dia
-            $myWhId = $user->warehouse_id ?? null;
-            if ($myWhId) {
-                $poWhIds = $po->items->pluck('warehouse_id')->filter()->unique();
-                if (! $poWhIds->contains($myWhId)) {
-                    abort(403, 'PO ini bukan untuk warehouse kamu.');
-                }
+            if ($myWhId && ! $isMyWarehousePo) {
+                abort(403, 'PO ini bukan untuk warehouse kamu.');
             }
+        } elseif ($isWarehouse && $isMyWarehousePo) {
+            // ✅ Manual PO dengan item yang di-assign ke warehouse ini → izinkan Admin WH
+            // (lanjut — tidak perlu guard tambahan)
         } else {
-            // PO Central → hanya Superadmin
+            // PO Central atau item campuran → hanya Superadmin
             if (! $isSuperadmin) {
                 abort(403, 'GR PO Central hanya bisa dilakukan Superadmin.');
             }
@@ -352,15 +533,21 @@ class GoodReceivedController extends Controller
                 $received  = (int) ($item->qty_received ?? 0);
                 $remaining = max(0, $ordered - $received);
 
-                // ✅ safety backend (biar ga lewat remaining)
-                if ($remaining > 0 && ($good + $bad) > $remaining) {
-                    DB::rollBack();
-                    return back()->with('error', 'Qty Good + Damaged melebihi Qty Remaining untuk salah satu item.');
+                // ✅ 1. SECURITY FIX: Pastikan Admin WH cuma bisa proses item gudang dia!
+                if ($isWarehouse && !$isSuperadmin) {
+                    if (($item->warehouse_id ?? null) != $myWhId) {
+                        continue; // Skip, ini item punya depo lain
+                    }
                 }
 
-                // PO manual superadmin → CENTRAL (warehouse_id null)
-                // PO dari request → boleh simpan warehouse_id dari item (kalau kolomnya ada)
-                $warehouseId = $fromRequest ? ($item->warehouse_id ?? null) : null;
+                // ✅ 2. LOGIC FIX: Cegah Over-receive (termasuk kalau remaining udah 0)
+                if (($good + $bad) > $remaining) {
+                    DB::rollBack();
+                    return back()->with('error', 'Qty Good + Damaged melebihi Qty Remaining untuk item: ' . ($item->product->name ?? 'Unknown'));
+                }
+
+                // ✅ Tentukan gudang tujuan dari item (kalau kosong baru NULL/Central)
+                $warehouseId = $item->warehouse_id ?? null;
 
                 $payload = [
                     'purchase_order_id' => $po->id,
@@ -404,13 +591,16 @@ class GoodReceivedController extends Controller
 
                 // update stok (warehouse atau central)
                 if (Schema::hasTable('stock_levels')) {
-                    if ($item->request_id && $warehouseId) {
-                        // FIX: Request Stock wajib potong pusat sejumlah TOTAL (Bagus + Rusak)
-                        // dan tambah cabang hanya yang Bagus
+                    if ($warehouseId) {
+                        // Masuk ke Gudang Cabang/Depo
                         $this->adjustWarehouseStock($warehouseId, $item->product_id, $good);
-                        $this->adjustCentralStock($item->product_id, -($good + $bad)); 
+                        
+                        // Kalau ini dari Request Restock, berarti barangnya "diambil" dari pusat
+                        if ($item->request_id) {
+                            $this->adjustCentralStock($item->product_id, -($good + $bad)); 
+                        }
                     } else {
-                        // PO Manual: barang datang dari luar, masuk ke pusat
+                        // PO Manual / Pusat: barang datang dari luar, masuk ke pusat
                         $this->adjustCentralStock($item->product_id, $good);
                     }
                 }
