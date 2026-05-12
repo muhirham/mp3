@@ -117,7 +117,7 @@
             </table>
         </div>
         <div id="paginationContainer" class="card-footer d-flex justify-content-center">
-            {{ $settlements->links('pagination::bootstrap-5') }}
+            {{ $settlements->links('pagination::bootstrap-4') }}
         </div>
     </div>
 </div>
