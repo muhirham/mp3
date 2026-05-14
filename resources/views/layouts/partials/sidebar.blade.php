@@ -3,6 +3,7 @@ use Illuminate\Support\Facades\Route as R;
 
 $u    = auth()->user();
 $role = $u?->primaryRole()?->slug ?? 'guest';
+$displayName = $u?->name ?? 'Guest';
 
 // helper route aman
 $rl = function (string $name, array $params = []) {
@@ -42,8 +43,24 @@ $isGroupActive = function ($groupKey, $list) {
 <aside id="layout-menu" class="layout-menu menu-vertical menu bg-menu-theme">
     <div class="app-brand demo">
         <a href="{{ $rl($dashboardRoute) }}" class="app-brand-link">
-            <span class="app-brand-text demo menu-text fw-bolder ms-2">{{ ucfirst($role) }}</span>
+            <span
+                class="app-brand-text demo menu-text fw-bolder ms-2"
+                title="{{ $displayName }}"
+                style="
+                    display:block;
+                    max-width:190px;
+                    white-space:normal;
+                    overflow-wrap:anywhere;
+                    line-height:1.15;
+                    letter-spacing:0;
+                    font-size:1.5rem !important;
+                    text-transform:capitalize;
+                "
+            >
+                {{ strtolower($displayName) }}
+            </span>
         </a>
+
         <a href="javascript:void(0);" class="layout-menu-toggle menu-link text-large ms-auto d-block d-xl-none">
             <i class="bx bx-chevron-left bx-sm align-middle"></i>
         </a>

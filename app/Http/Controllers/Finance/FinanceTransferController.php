@@ -56,7 +56,7 @@ class FinanceTransferController extends Controller
             return response()->json([
                 'success' => true,
                 'settlements' => $settlements->items(),
-                'pagination' => (string) $settlements->links(),
+                'pagination' => (string) $settlements->links('pagination::bootstrap-4'),
             ]);
         }
 
