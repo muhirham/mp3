@@ -233,6 +233,10 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->name('po.cancel')
         ->middleware('menu:po');
 
+    Route::delete('/po/{po}',          [PreOController::class, 'destroy'])
+        ->name('po.destroy')
+        ->middleware('menu:po');
+
     Route::post('/po/{po}/approve', [PreOController::class, 'approve'])
         ->name('po.approve')
         ->middleware('menu:po');
@@ -518,7 +522,7 @@ Route::middleware(['auth', 'active'])->group(function () {
 
     Route::post('/warehouse/transfer-forms/{transfer}/cancel', [WarehouseTransferController::class, 'cancel'])
         ->name('warehouse-transfer-forms.cancel')
-        ->middleware('menu: wh_transfers');
+        ->middleware('menu:wh_transfers');
 
     Route::get('/warehouse-transfer/{transfer}/print-sj', [WarehouseTransferController::class, 'printSJ'])
         ->name('warehouse-transfer.print-sj')

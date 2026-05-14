@@ -150,7 +150,9 @@
               if($rr->gr_type == 'po') {
                   $sourceLabel = $rr->purchaseOrder?->po_code ?? '-';
               } elseif($rr->gr_type == 'request_stock') {
-                  $sourceLabel = $rr->request?->code ?? ('RS-'.$rr->request_id);
+                  $poRef = $rr->purchaseOrder?->po_code;
+                  $rrRef = $rr->request?->code ?? ('RS-'.$rr->request_id);
+                  $sourceLabel = $poRef ? ($poRef . ' / ' . $rrRef) : $rrRef;
               }
 
               $recDate = optional($rr->received_at)->format('d/m/Y H:i') ?? '-';
