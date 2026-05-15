@@ -280,6 +280,43 @@
 
                                             </div>
                                         @endif
+
+                                        @if ($it['key'] === 'po')
+                                            <div class="ms-4 mb-2">
+
+                                                <div class="form-check">
+                                                    <input class="form-check-input add-permission" type="checkbox"
+                                                        name="permissions[]" value="po.view"
+                                                        id="add_po_view">
+                                                    <label class="form-check-label" for="add_po_view">View</label>
+                                                </div>
+
+                                                <div class="form-check">
+                                                    <input class="form-check-input add-permission" type="checkbox"
+                                                        name="permissions[]" value="po.create"
+                                                        id="add_po_create">
+                                                    <label class="form-check-label"
+                                                        for="add_po_create">Create</label>
+                                                </div>
+
+                                                <div class="form-check">
+                                                    <input class="form-check-input add-permission" type="checkbox"
+                                                        name="permissions[]" value="po.update"
+                                                        id="add_po_update">
+                                                    <label class="form-check-label"
+                                                        for="add_po_update">Update</label>
+                                                </div>
+
+                                                <div class="form-check">
+                                                    <input class="form-check-input add-permission" type="checkbox"
+                                                        name="permissions[]" value="po.delete"
+                                                        id="add_po_delete">
+                                                    <label class="form-check-label"
+                                                        for="add_po_delete">Delete</label>
+                                                </div>
+
+                                            </div>
+                                        @endif
                                     @endforeach
                                 </div>
 
@@ -774,6 +811,38 @@
                                                         id="edit_supplier_delete">
                                                     <label class="form-check-label"
                                                         for="edit_supplier_delete">Delete</label>
+                                                </div>
+                                            </div>
+                                        @endif
+
+                                        @if ($it['key'] === 'po')
+                                            <div class="ms-4 mb-2">
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox"
+                                                        name="permissions[]" value="po.view"
+                                                        id="edit_po_view">
+                                                    <label class="form-check-label" for="edit_po_view">View</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox"
+                                                        name="permissions[]" value="po.create"
+                                                        id="edit_po_create">
+                                                    <label class="form-check-label"
+                                                        for="edit_po_create">Create</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox"
+                                                        name="permissions[]" value="po.update"
+                                                        id="edit_po_update">
+                                                    <label class="form-check-label"
+                                                        for="edit_po_update">Update</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox"
+                                                        name="permissions[]" value="po.delete"
+                                                        id="edit_po_delete">
+                                                    <label class="form-check-label"
+                                                        for="edit_po_delete">Delete</label>
                                                 </div>
                                             </div>
                                         @endif

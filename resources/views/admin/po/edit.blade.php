@@ -386,10 +386,10 @@
 
                 {{-- DISC VALUE --}}
                 <td>
-                  <input type="number" min="0" step="1"
+                  <input type="number" min="0" step="0.01"
                          class="form-control form-control-sm text-end disc-val"
                          name="items[{{ $idx }}][discount_value]"
-                         value="{{ (int)$it->discount_value }}"
+                         value="{{ old('items.' . $idx . '.discount_value', rtrim(rtrim(number_format((float) $it->discount_value, 2, '.', ''), '0'), '.')) }}"
                          @disabled($poLocked)>
                 </td>
 
@@ -796,7 +796,7 @@
         </td>
 
         <td>
-          <input type="number" min="0" step="1"
+          <input type="number" min="0" step="0.01"
                  class="form-control form-control-sm text-end disc-val"
                  name="items[${idx}][discount_value]" value="0">
         </td>

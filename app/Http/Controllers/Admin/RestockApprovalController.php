@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\RequestRestock;
+use App\Support\PurchaseOrderCodeGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Throwable;
 
 class RestockApprovalController extends Controller
 {
@@ -215,9 +217,12 @@ class RestockApprovalController extends Controller
 
             $pendingIds    = $requests->pluck('id')->all();
             $skippedStatus = array_diff($eligibleIds, $pendingIds);
-            $createdPoIds  = [];
+            $createdPoIds = [];
 
-            try {
+            for ($attempt = 1; $attempt <= PurchaseOrderCodeGenerator::MAX_RETRIES; $attempt++) {
+                $createdPoIds = [];
+
+                try {
                 DB::transaction(function () use (&$createdPoIds, $requests) {
 
                     // ======================================
@@ -245,8 +250,7 @@ class RestockApprovalController extends Controller
                         $po->ordered_by = auth()->id();
                         $po->status     = 'draft';
 
-                        $code = 'PO-' . now()->format('Ymd') . '-' . str_pad(mt_rand(1, 9999), 4, '0', STR_PAD_LEFT);
-                        $po->po_code = $code;
+                        $po->po_code = PurchaseOrderCodeGenerator::generate();
 
                         $po->subtotal       = 0;
                         $po->discount_total = 0;
@@ -319,10 +323,24 @@ class RestockApprovalController extends Controller
                         $createdPoIds[] = $po->id;
                     }
                 });
-            } catch (\Throwable $e) {
-                return response()->json([
-                    'error' => 'Gagal membuat PO: ' . $e->getMessage()
-                ], 200);
+
+                    break;
+                } catch (Throwable $e) {
+                    if (
+                        $attempt < PurchaseOrderCodeGenerator::MAX_RETRIES &&
+                        PurchaseOrderCodeGenerator::isDuplicateCodeException($e)
+                    ) {
+                        continue;
+                    }
+
+                    $message = PurchaseOrderCodeGenerator::isDuplicateCodeException($e)
+                        ? 'Nomor PO bentrok saat dibuat. Silakan coba lagi.'
+                        : 'Gagal membuat PO: ' . $e->getMessage();
+
+                    return response()->json([
+                        'error' => $message
+                    ], 200);
+                }
             }
 
             $msg = 'PO dibuat dari request restock.';

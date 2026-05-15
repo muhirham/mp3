@@ -10,6 +10,7 @@ use App\Models\Supplier;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\GrDeleteRequest;
+use App\Models\ActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
@@ -511,7 +512,7 @@ class GoodReceivedController extends Controller
         $firstReceiptId = null;
 
         $hasCodeColumn = Schema::hasColumn('restock_receipts', 'code');
-        $grCode = $hasCodeColumn ? $this->nextReceiptCode() : null;
+        $manualPoGrCode = null;
 
         $touchedRrIds   = [];
         DB::beginTransaction();
@@ -569,6 +570,10 @@ class GoodReceivedController extends Controller
                 ];
 
                 if ($hasCodeColumn) {
+                    $grCode = $item->request_id
+                        ? $this->nextReceiptCode()
+                        : ($manualPoGrCode ??= $this->nextReceiptCode());
+
                     $payload['code'] = $grCode;
                 }
 
@@ -721,6 +726,7 @@ class GoodReceivedController extends Controller
         try {
             DB::beginTransaction();
 
+            $this->logCancelGrActivity($code);
             $this->rollbackByCode($code);
 
             DB::commit();
@@ -749,15 +755,15 @@ class GoodReceivedController extends Controller
         // 1. ROLLBACK STOK & UPDATE MODEL ASAL
         foreach ($receipts as $rr) {
             $qtyGood = (int) $rr->qty_good;
+            $qtyDamaged = (int) $rr->qty_damaged;
+            $totalQty = $qtyGood + $qtyDamaged;
             $productId = (int) $rr->product_id;
-            if ($qtyGood <= 0 && (int)$rr->qty_damaged <= 0) continue;
+            if ($totalQty <= 0) continue;
 
             // --- TIPE PO / REQUEST STOCK (RR) ---
             if (in_array($grType, [RestockReceipt::TYPE_PO, RestockReceipt::TYPE_REQUEST_STOCK])) {
                 if ($rr->request_id) {
                     // Update Request Restocks (RR) - decrement manual (optional but safe)
-                    $totalDeduction = $qtyGood + (int)$rr->qty_damaged;
-                    
                     DB::table('request_restocks')
                         ->where('id', $rr->request_id)
                         ->decrement('quantity_received', $qtyGood);
@@ -768,17 +774,34 @@ class GoodReceivedController extends Controller
                     if ($rr->warehouse_id) {
                         $this->adjustWarehouseStock($rr->warehouse_id, $productId, -$qtyGood);
                     }
-                    $this->adjustCentralStock($productId, $qtyGood);
+                    $this->adjustCentralStock($productId, $totalQty);
                 } else {
                     // Balikkan stok PO Pusat: Kurangi Pusat
                     $this->adjustCentralStock($productId, -$qtyGood);
                 }
 
                 // 3) Kurangi qty_received di PO Item
-                DB::table('purchase_order_items')
-                    ->where('purchase_order_id', $rr->purchase_order_id)
-                    ->where('product_id', $productId)
-                    ->decrement('qty_received', $qtyGood + (int)$rr->qty_damaged);
+                $poItemQuery = DB::table('purchase_order_items')
+                    ->where('purchase_order_id', $rr->purchase_order_id);
+
+                if ($rr->request_id) {
+                    $poItemQuery->where('request_id', $rr->request_id);
+                } else {
+                    $poItemQuery
+                        ->where('product_id', $productId)
+                        ->where('warehouse_id', $rr->warehouse_id);
+                }
+
+                $poItemQuery->decrement('qty_received', $totalQty);
+
+                if ($qtyDamaged > 0 && Schema::hasTable('damaged_stocks')) {
+                    DB::table('damaged_stocks')
+                        ->where('source_type', $rr->request_id ? 'request_stock' : 'purchase_order')
+                        ->where('source_id', $rr->request_id ?: $rr->purchase_order_id)
+                        ->where('product_id', $productId)
+                        ->where('status', 'quarantine')
+                        ->delete();
+                }
 
                 // recalc status PO akan diproses di akhir
             } 
@@ -838,6 +861,58 @@ class GoodReceivedController extends Controller
         if ($first->purchase_order_id) {
             $this->recalcPoFromReceipts($first->purchase_order_id);
         }
+    }
+
+    protected function logCancelGrActivity(string $code): void
+    {
+        if (! Schema::hasTable('activity_logs')) {
+            return;
+        }
+
+        $receipts = RestockReceipt::with(['purchaseOrder', 'request'])
+            ->where('code', $code)
+            ->get();
+
+        if ($receipts->isEmpty()) {
+            return;
+        }
+
+        $first = $receipts->first();
+        $poCode = $first->purchaseOrder->po_code ?? '-';
+        $requestCodes = $receipts
+            ->map(fn ($receipt) => $receipt->request->code ?? ($receipt->request_id ? 'RR#' . $receipt->request_id : null))
+            ->filter()
+            ->unique()
+            ->values()
+            ->implode(', ');
+
+        $itemsText = $receipts
+            ->map(function ($receipt) {
+                return sprintf(
+                    'product#%s good=%d damaged=%d wh=%s',
+                    $receipt->product_id,
+                    (int) $receipt->qty_good,
+                    (int) $receipt->qty_damaged,
+                    $receipt->warehouse_id ?? 'central'
+                );
+            })
+            ->implode('; ');
+
+        ActivityLog::create([
+            'user_id'     => auth()->id(),
+            'action'      => 'gr.cancel',
+            'entity_type' => 'restock_receipt',
+            'entity_id'   => $first->id,
+            'description' => sprintf(
+                'GR %s cancelled by %s. type=%s po=%s request_refs=[%s] rollback_items=[%s]',
+                $code,
+                auth()->user()->name ?? ('user#' . auth()->id()),
+                $first->gr_type ?? '-',
+                $poCode,
+                $requestCodes !== '' ? $requestCodes : 'none',
+                $itemsText
+            ),
+        ]);
     }
 
 
@@ -926,7 +1001,7 @@ class GoodReceivedController extends Controller
  * - Kalau GR supplier → pusat dikurangi
  * - Kalau GR restock → warehouse dikurangi, pusat dikembalikan
  * - Item.qty_received dikurangi
- * - PO status balik ke 'draft' dan approval direset (bisa diedit & diajukan lagi)
+ * - PO status balik ke 'ordered' dan approval tetap approved (bisa GR ulang)
  * - Request Restock di-recalc
  */
     protected function rollbackGoodsReceivedForPo(int $poId): void
@@ -949,8 +1024,10 @@ class GoodReceivedController extends Controller
                     $warehouseId = (int) ($rr->warehouse_id ?? 0);
                     $requestId   = (int) ($rr->request_id ?? 0);
                     $qtyGood     = (int) $rr->qty_good;
+                    $qtyDamaged  = (int) $rr->qty_damaged;
+                    $totalQty    = $qtyGood + $qtyDamaged;
 
-                    if (! $productId || $qtyGood <= 0) {
+                    if (! $productId || $totalQty <= 0) {
                         continue;
                     }
 
@@ -960,10 +1037,19 @@ class GoodReceivedController extends Controller
                         if ($warehouseId) {
                             $this->adjustWarehouseStock($warehouseId, $productId, -$qtyGood);
                         }
-                        $this->adjustCentralStock($productId, $qtyGood);
+                        $this->adjustCentralStock($productId, $totalQty);
                     } else {
                         // GR dari Supplier: Balikin stok pusat (kurangi karena barang batal masuk)
                         $this->adjustCentralStock($productId, -$qtyGood);
+                    }
+
+                    if ($qtyDamaged > 0 && Schema::hasTable('damaged_stocks')) {
+                        DB::table('damaged_stocks')
+                            ->where('source_type', $requestId ? 'request_stock' : 'purchase_order')
+                            ->where('source_id', $requestId ?: $rr->purchase_order_id)
+                            ->where('product_id', $productId)
+                            ->where('status', 'quarantine')
+                            ->delete();
                     }
                 }
             }
@@ -1024,27 +1110,15 @@ class GoodReceivedController extends Controller
 
             // ============= 6. RESET STATUS & APPROVAL PO =============
             $updatePo = [
-                // status barang kembali seperti sebelum ada GR
-                'status'     => 'draft',
-                'approval_status' => 'draft',      // buka lagi flow approval
+                // status barang kembali seperti sebelum GR, approval tetap final
+                'status'          => 'ordered',
+                'approval_status' => 'approved',
                 'updated_at'      => $now,
             ];
 
             // amanin pakai Schema::hasColumn biar kalau kolom belum ada nggak error
             if (Schema::hasColumn('purchase_orders', 'approval_status')) {
-                $updatePo['approval_status'] = 'draft';
-            }
-            if (Schema::hasColumn('purchase_orders', 'procurement_approved_by')) {
-                $updatePo['procurement_approved_by'] = null;
-            }
-            if (Schema::hasColumn('purchase_orders', 'procurement_approved_at')) {
-                $updatePo['procurement_approved_at'] = null;
-            }
-            if (Schema::hasColumn('purchase_orders', 'ceo_approved_by')) {
-                $updatePo['ceo_approved_by'] = null;
-            }
-            if (Schema::hasColumn('purchase_orders', 'ceo_approved_at')) {
-                $updatePo['ceo_approved_at'] = null;
+                $updatePo['approval_status'] = 'approved';
             }
             if (Schema::hasColumn('purchase_orders', 'received_at')) {
                 $updatePo['received_at'] = null;

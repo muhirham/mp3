@@ -433,6 +433,23 @@
                     confirmButtonText: 'I Understand'
                 });
             });
+
+            $(document).on('submit', '.frm-delete', function(e) {
+                e.preventDefault();
+                const form = this;
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Delete PO?',
+                    text: 'Deleting a PO will rollback received stock and cannot be undone.',
+                    showCancelButton: true,
+                    confirmButtonText: 'Yes, delete',
+                    cancelButtonText: 'Cancel'
+                }).then(result => {
+                    if (result.isConfirmed) {
+                        form.submit();
+                    }
+                });
+            });
         });
     </script>
 @endpush

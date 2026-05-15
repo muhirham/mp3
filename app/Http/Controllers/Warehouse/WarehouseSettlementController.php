@@ -66,7 +66,7 @@ class WarehouseSettlementController extends Controller
             return response()->json([
                 'success' => true,
                 'settlements' => $settlements->items(),
-                'pagination' => (string) $settlements->links(),
+                'pagination' => (string) $settlements->links('pagination::bootstrap-4'),
             ]);
         }
 
@@ -135,7 +135,7 @@ class WarehouseSettlementController extends Controller
             return response()->json([
                 'success' => true,
                 'unsettled' => $unsettled->items(),
-                'pagination' => (string) $unsettled->links(),
+                'pagination' => (string) $unsettled->links('pagination::bootstrap-4'),
                 'grand_cash' => $grandCash,
                 'grand_tf' => $grandTf,
                 'grand_count' => $grandCount,

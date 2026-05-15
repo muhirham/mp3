@@ -9,6 +9,9 @@ use App\Models\PurchaseOrderItem;
 use App\Models\Supplier;
 use App\Models\Product;
 use App\Models\Warehouse;
+use App\Models\ActivityLog;
+use App\Support\PurchaseOrderCodeGenerator;
+use App\Traits\RestockSyncTrait;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -17,6 +20,7 @@ use Carbon\Carbon;
 use App\Exports\PO\PoIndexWithItemsExport;
 use Illuminate\Validation\ValidationException;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use Throwable;
 
 
 
@@ -24,6 +28,8 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class PreOController extends Controller
 {
+    use RestockSyncTrait;
+
     /** LIST PO */
     private const CEO_MIN_TOTAL = 1_000_001;
     public function index(Request $request)
@@ -289,6 +295,7 @@ class PreOController extends Controller
             $isOrdered  = $po->status === 'ordered';
             $isApproved = $po->approval_status === 'approved';
             $hasItems   = $po->items_count > 0;
+            $canDelete  = $me?->hasPermission('po.delete');
 
             // ✅ Superadmin selalu bisa, Warehouse admin bisa kalau ada item untuk deponya
             $canReceive = !$hasGr && $isOrdered && $isApproved && $hasItems &&
@@ -364,6 +371,12 @@ class PreOController extends Controller
                             <button type="button" class="btn btn-sm btn-outline-success js-gr-blocked" data-po="'.$po->po_code.'">
                                 <i class="bx bx-info-circle"></i> Receive
                             </button>' : '') . '
+                        ' . ($canDelete ? '
+                            <form method="POST" action="'.route('po.destroy', $po->id).'" class="d-inline frm-delete" style="display:inline;margin-left:.25rem;">
+                                <input type="hidden" name="_token" value="'.csrf_token().'">
+                                <input type="hidden" name="_method" value="DELETE">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                            </form>' : '') . '
                     </div>'
             ];
         }
@@ -939,6 +952,115 @@ class PreOController extends Controller
             return back()->with('success', 'PO dibatalkan dan request ikut CANCELLED.');
         }
 
+        public function destroy(PurchaseOrder $po)
+        {
+            $user = auth()->user();
+            abort_unless($user && $user->hasPermission('po.delete'), 403, 'Hanya user dengan permission PO.DELETE yang boleh menghapus PO.');
+
+            DB::transaction(function () use ($po, $user) {
+                $po->load(['items.product', 'restockReceipts']);
+
+                $stockEntries = [];
+                $itemSummaries = [];
+                $requestIds = [];
+
+                foreach ($po->items as $item) {
+                    if ($item->request_id) {
+                        $requestIds[] = $item->request_id;
+                    }
+
+                    $qtyReceived = (int) ($item->qty_received ?? 0);
+                    $productLabel = $item->product->name ?? 'product_id:' . $item->product_id;
+
+                    $itemSummaries[] = sprintf('%s x%d', $productLabel, $qtyReceived);
+
+                    if ($qtyReceived <= 0) {
+                        continue;
+                    }
+
+                    if ($item->warehouse_id) {
+                        $this->adjustWarehouseStock($item->warehouse_id, $item->product_id, -$qtyReceived);
+                        $stockEntries[] = sprintf('WH(%s) %s -%d', $item->warehouse_id, $productLabel, $qtyReceived);
+
+                        if ($item->request_id) {
+                            $this->adjustCentralStock($item->product_id, $qtyReceived);
+                            $stockEntries[] = sprintf('Central %s +%d', $productLabel, $qtyReceived);
+                        }
+                    } else {
+                        $this->adjustCentralStock($item->product_id, -$qtyReceived);
+                        $stockEntries[] = sprintf('Central %s -%d', $productLabel, $qtyReceived);
+                    }
+
+                }
+
+                $requestIds = collect($requestIds)->unique()->values()->all();
+                $deleteRequestIds = [];
+
+                if (! empty($requestIds) && Schema::hasTable('request_restocks')) {
+                    $usedByOtherPo = DB::table('purchase_order_items')
+                        ->whereIn('request_id', $requestIds)
+                        ->where('purchase_order_id', '!=', $po->id)
+                        ->pluck('request_id')
+                        ->unique()
+                        ->all();
+
+                    $deleteRequestIds = array_values(array_diff($requestIds, $usedByOtherPo));
+                }
+
+                if ($po->restockReceipts->isNotEmpty()) {
+                    $po->restockReceipts()->delete();
+                }
+
+                // ✅ Cleanup GrDeleteRequest records (prevent orphaned data)
+                if (Schema::hasTable('gr_delete_requests')) {
+                    DB::table('gr_delete_requests')->where('purchase_order_id', $po->id)->delete();
+                }
+
+                $poId = $po->id;
+                $poCode = $po->po_code;
+                $status = $po->status ?? 'unknown';
+                $approvalStatus = $po->approval_status ?? 'unknown';
+                $itemsText = implode(', ', $itemSummaries);
+                $stocksText = ! empty($stockEntries) ? implode(', ', $stockEntries) : 'no stock rollback';
+                $requestsText = ! empty($requestIds) ? implode(', ', $requestIds) : 'none';
+
+                $po->items()->delete();
+                $po->delete();
+
+                if (! empty($deleteRequestIds)) {
+                    DB::table('request_restocks')
+                        ->whereIn('id', $deleteRequestIds)
+                        ->delete();
+                }
+
+                foreach (array_diff($requestIds, $deleteRequestIds) as $requestId) {
+                    $this->recalcRequestRestock((int) $requestId);
+                }
+
+                if (Schema::hasTable('activity_logs')) {
+                    ActivityLog::create([
+                        'user_id' => $user->id,
+                        'action' => 'po.delete',
+                        'entity_type' => 'purchase_order',
+                        'entity_id' => $poId,
+                        'description' => sprintf(
+                            'PO %s deleted by %s. status=%s approval=%s items=[%s] rollback=[%s] request_ids=[%s]',
+                            $poCode,
+                            $user->name ?? ('user#' . $user->id),
+                            $status,
+                            $approvalStatus,
+                            $itemsText,
+                            $stocksText,
+                            $requestsText
+                        ),
+                    ]);
+                }
+            });
+
+            return redirect()->route('po.index')
+                ->with('success', 'PO berhasil dihapus. Stok rollback dan log telah dibuat.');
+        }
+
         protected function appendRejectNote(PurchaseOrder $po, string $stage, string $reason): string
         {
             [$userNote, $rejectLog] = $this->splitNotes($po->notes);
@@ -1160,42 +1282,49 @@ class PreOController extends Controller
         {
             abort_unless($this->isSuperadminUser(auth()->user()), 403, 'Hanya superadmin yang boleh membuat PO.');
 
-            $code = $this->generateManualPoCode();
+            for ($attempt = 1; $attempt <= PurchaseOrderCodeGenerator::MAX_RETRIES; $attempt++) {
+                try {
+                    $po = DB::transaction(function () {
+                        $supplierId = Supplier::orderBy('id')->value('id');
 
-            $supplierId = Supplier::orderBy('id')->value('id');
+                        return PurchaseOrder::create([
+                            'po_code'         => $this->generateManualPoCode(),
+                            'supplier_id'     => $supplierId,
+                            'ordered_by'      => auth()->id(),
+                            'status'          => 'draft',
+                            'subtotal'        => 0,
+                            'discount_total'  => 0,
+                            'grand_total'     => 0,
+                            'notes'           => null,
+                        ]);
+                    });
 
-            $po = PurchaseOrder::create([
-                'po_code'         => $code,
-                'supplier_id'     => $supplierId,
-                'ordered_by'      => auth()->id(),
-                'status'          => 'draft',
-                'subtotal'        => 0,
-                'discount_total'  => 0,
-                'grand_total'     => 0,
-                'notes'           => null,
-            ]);
+                    return redirect()
+                        ->route('po.edit', $po->id)
+                        ->with('success', 'PO baru berhasil dibuat, silakan isi item.');
+                } catch (Throwable $e) {
+                    if (
+                        $attempt < PurchaseOrderCodeGenerator::MAX_RETRIES &&
+                        PurchaseOrderCodeGenerator::isDuplicateCodeException($e)
+                    ) {
+                        continue;
+                    }
 
-            return redirect()
-                ->route('po.edit', $po->id)
-                ->with('success', 'PO baru berhasil dibuat, silakan isi item.');
+                    if (PurchaseOrderCodeGenerator::isDuplicateCodeException($e)) {
+                        return back()->with('error', 'Nomor PO bentrok saat dibuat. Silakan coba lagi.');
+                    }
+
+                    throw $e;
+                }
+            }
+
+            return back()->with('error', 'PO gagal dibuat. Silakan coba lagi.');
         }
 
 
     protected function generateManualPoCode(): string
     {
-        $prefix = 'PO-' . now()->format('Ymd') . '-';
-
-        $lastCode = PurchaseOrder::where('po_code', 'like', $prefix . '%')
-            ->orderByDesc('id')
-            ->value('po_code');
-
-        $next = 1;
-        if ($lastCode) {
-            $lastSeq = (int) substr($lastCode, strlen($prefix));
-            $next    = $lastSeq + 1;
-        }
-
-        return $prefix . str_pad($next, 4, '0', STR_PAD_LEFT);
+        return PurchaseOrderCodeGenerator::generate();
     }
 
     protected function getCentralWarehouseId(): ?int
