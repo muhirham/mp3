@@ -94,7 +94,14 @@
                         <td class="text-end text-success fw-bold">Rp {{ number_format($set->total_cash_amount, 0, ',', '.') }}</td>
                         <td class="text-end text-info fw-bold">Rp {{ number_format($set->total_transfer_amount, 0, ',', '.') }}</td>
                         <td class="text-center">
-                            @if($set->proof_path)
+                            @if($set->proof_path && is_array($set->proof_path) && count($set->proof_path) > 0)
+                                @php
+                                    $urls = array_map(fn($p) => asset('storage/' . $p), $set->proof_path);
+                                @endphp
+                                <button type="button" class="btn btn-sm btn-outline-primary btn-view-proof" data-urls="{{ json_encode($urls) }}">
+                                    <i class="bx bx-image"></i> View ({{ count($set->proof_path) }})
+                                </button>
+                            @elseif($set->proof_path && is_string($set->proof_path))
                                 <button type="button" class="btn btn-sm btn-outline-primary btn-view-proof" data-url="{{ asset('storage/' . $set->proof_path) }}">
                                     <i class="bx bx-image"></i> View
                                 </button>
@@ -162,11 +169,14 @@
                 <h5 class="modal-title text-white">Deposit Proof</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body p-0 text-center bg-dark overflow-hidden position-relative" style="height: 75vh;">
-                <div id="zoomContainer" class="w-100 h-100 d-flex align-items-center justify-content-center" style="cursor: zoom-in;">
-                    <img id="proofImage" src="" alt="Proof" class="img-fluid zoomable-img">
+            <div class="modal-body p-0 text-center bg-dark overflow-hidden position-relative d-flex flex-column" style="height: 75vh;">
+                <div id="zoomContainer" class="flex-grow-1 w-100 d-flex align-items-center justify-content-center" style="cursor: zoom-in; overflow: hidden; min-height: 0;">
+                    <img id="proofImage" src="" alt="Proof" class="img-fluid zoomable-img" style="max-height: 100%; object-fit: contain;">
                 </div>
-                <div class="position-absolute bottom-0 start-0 w-100 py-2 bg-dark bg-opacity-75 text-white text-center pointer-events-none">
+                <!-- Thumbnail bar for multiple proofs -->
+                <div id="proofThumbsContainer" class="w-100 py-2 bg-black bg-opacity-75 d-none flex-wrap justify-content-center gap-2 border-top border-secondary" style="z-index: 10;">
+                </div>
+                <div class="py-2 bg-dark bg-opacity-75 text-white text-center pointer-events-none" style="z-index: 5;">
                     <small id="zoomHint"><i class="bx bx-pointer me-1"></i> Click to zoom & explore</small>
                 </div>
             </div>
@@ -233,8 +243,24 @@ document.addEventListener('DOMContentLoaded', function() {
                         const date = new Date(row.settlement_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
                         const cash = new Intl.NumberFormat('id-ID').format(row.total_cash_amount);
                         const tf = new Intl.NumberFormat('id-ID').format(row.total_transfer_amount);
-                        const proofUrl = `/storage/${row.proof_path}`;
                         const code = 'SET-' + row.id.toString().padStart(5, '0');
+                        let proofBtn = '<span class="badge bg-label-warning">None</span>';
+                        if (row.proof_path) {
+                            if (Array.isArray(row.proof_path) && row.proof_path.length > 0) {
+                                const urls = row.proof_path.map(p => `/storage/${p}`);
+                                proofBtn = `
+                                    <button type="button" class="btn btn-sm btn-outline-primary btn-view-proof" data-urls='${JSON.stringify(urls)}'>
+                                        <i class="bx bx-image"></i> View (${row.proof_path.length})
+                                    </button>
+                                `;
+                            } else if (typeof row.proof_path === 'string') {
+                                proofBtn = `
+                                    <button type="button" class="btn btn-sm btn-outline-primary btn-view-proof" data-url="/storage/${row.proof_path}">
+                                        <i class="bx bx-image"></i> View
+                                    </button>
+                                `;
+                            }
+                        }
                         
                         tableBody.innerHTML += `
                             <tr>
@@ -244,9 +270,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <td class="text-end text-success fw-bold">Rp ${cash}</td>
                                 <td class="text-end text-info fw-bold">Rp ${tf}</td>
                                 <td class="text-center">
-                                    <button type="button" class="btn btn-sm btn-outline-primary btn-view-proof" data-url="${proofUrl}">
-                                        <i class="bx bx-image"></i> View
-                                    </button>
+                                    ${proofBtn}
                                 </td>
                                 <td class="text-center">
                                     <button type="button" class="btn btn-sm btn-info btn-detail text-white" data-id="${row.id}">
@@ -299,10 +323,46 @@ document.addEventListener('DOMContentLoaded', function() {
     const zoomContainer = document.getElementById('zoomContainer');
     const zoomHint = document.getElementById('zoomHint');
 
+    const thumbsContainer = document.getElementById('proofThumbsContainer');
+
     function initProofButtons() {
         document.querySelectorAll('.btn-view-proof').forEach(btn => {
             btn.onclick = function() {
-                proofImg.src = this.dataset.url;
+                let urls = [];
+                if (this.dataset.urls) {
+                    try {
+                        urls = JSON.parse(this.dataset.urls);
+                    } catch (e) {
+                        console.error('Failed to parse urls:', e);
+                    }
+                } else if (this.dataset.url) {
+                    urls = [this.dataset.url];
+                }
+
+                if (urls.length > 0) {
+                    proofImg.src = urls[0];
+                    
+                    // Render thumbnails if multiple
+                    if (urls.length > 1) {
+                        thumbsContainer.classList.remove('d-none');
+                        thumbsContainer.classList.add('d-flex');
+                        thumbsContainer.innerHTML = urls.map((url, idx) => `
+                            <img src="${url}" class="img-thumbnail proof-thumb-item ${idx === 0 ? 'border-primary' : 'border-secondary'}" 
+                                 style="width: 50px; height: 50px; object-fit: cover; cursor: pointer; opacity: ${idx === 0 ? '1' : '0.6'}; transition: all 0.2s;"
+                                 onclick="changeProofActiveImage(this, '${url}')">
+                        `).join('');
+                    } else {
+                        thumbsContainer.classList.add('d-none');
+                        thumbsContainer.classList.remove('d-flex');
+                        thumbsContainer.innerHTML = '';
+                    }
+                } else {
+                    proofImg.src = '';
+                    thumbsContainer.classList.add('d-none');
+                    thumbsContainer.classList.remove('d-flex');
+                    thumbsContainer.innerHTML = '';
+                }
+
                 zoomContainer.classList.remove('is-zoomed');
                 zoomContainer.style.cursor = 'zoom-in';
                 zoomHint.innerHTML = '<i class="bx bx-pointer me-1"></i> Click to zoom & explore';
@@ -310,6 +370,23 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
     }
+
+    window.changeProofActiveImage = function(thumb, url) {
+        proofImg.src = url;
+        document.querySelectorAll('.proof-thumb-item').forEach(el => {
+            el.classList.remove('border-primary');
+            el.classList.add('border-secondary');
+            el.style.opacity = '0.6';
+        });
+        thumb.classList.remove('border-secondary');
+        thumb.classList.add('border-primary');
+        thumb.style.opacity = '1';
+        
+        // Reset zoom state
+        zoomContainer.classList.remove('is-zoomed');
+        zoomContainer.style.cursor = 'zoom-in';
+        zoomHint.innerHTML = '<i class="bx bx-pointer me-1"></i> Click to zoom & explore';
+    };
 
     const detailModal = new bootstrap.Modal(document.getElementById('detailModal'));
     const tbodyDetail = document.querySelector('#detailTable tbody');

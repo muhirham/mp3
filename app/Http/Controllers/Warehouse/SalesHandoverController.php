@@ -1425,13 +1425,68 @@ EOT;
             ?? $handover->transfer_proof_file
             ?? null;
 
-        if (!empty($handover->transfer_proof_url)) {
-            $proofUrl = $handover->transfer_proof_url;
-        } elseif ($proofPath) {
-            $proofUrl = Storage::url($proofPath);
-        } else {
-            $proofUrl = null;
+        // Fail-safe decoder for double-serialized legacy/invalid transfer proof records
+        if (is_string($proofPath)) {
+            $decoded = json_decode($proofPath, true);
+            if (is_array($decoded)) {
+                $proofPath = $decoded;
+            } elseif (json_last_error() === JSON_ERROR_NONE && is_string($decoded)) {
+                $decodedSecond = json_decode($decoded, true);
+                if (is_array($decodedSecond)) {
+                    $proofPath = $decodedSecond;
+                }
+            }
         }
+
+        $proofUrls = [];
+        if (!empty($handover->transfer_proof_url)) {
+            $proofUrls[] = $handover->transfer_proof_url;
+        }
+
+        if ($proofPath) {
+            if (is_array($proofPath)) {
+                foreach ($proofPath as $path) {
+                    if ($path) {
+                        $proofUrls[] = Storage::url($path);
+                    }
+                }
+            } else {
+                $proofUrls[] = Storage::url($proofPath);
+            }
+        }
+
+        // 🔥 HDO (Standard Handover): Kumpulkan semua bukti transfer yang diunggah per item produk oleh Sales
+        if (!$handover->is_direct_sale) {
+            foreach ($handover->items as $it) {
+                // Ambil dari kolom paths multiple (array JSON)
+                $itemPaths = $it->payment_transfer_proof_paths ?? [];
+                if (is_string($itemPaths) && $itemPaths !== '') {
+                    $decoded = json_decode($itemPaths, true);
+                    $itemPaths = is_array($decoded) ? $decoded : [];
+                }
+                if (is_array($itemPaths)) {
+                    foreach ($itemPaths as $entry) {
+                        $path = null;
+                        if (is_string($entry) && $entry !== '') {
+                            $path = $entry;
+                        } elseif (is_array($entry) && !empty($entry['path'])) {
+                            $path = $entry['path'];
+                        }
+                        if ($path) {
+                            $proofUrls[] = Storage::url($path);
+                        }
+                    }
+                }
+                // Ambil dari kolom path legacy single (jika ada)
+                if (!empty($it->payment_transfer_proof_path)) {
+                    $proofUrls[] = Storage::url($it->payment_transfer_proof_path);
+                }
+            }
+        }
+
+        // Bersihkan duplikasi dan data kosong
+        $proofUrls = array_values(array_unique(array_filter($proofUrls)));
+        $proofUrl = count($proofUrls) > 0 ? $proofUrls[0] : null;
 
         // ==== ITEMS + HITUNG TOTAL SOLD DARI ITEM
         $items = [];
@@ -1538,6 +1593,7 @@ EOT;
                 'total_deposit'         => $setorTotal,
                 'diff_sold_vs_deposit'  => $selisihJualSetor,
                 'proof_url'             => $proofUrl,
+                'proof_urls'            => $proofUrls,
             ]
         ]);
     }
@@ -2244,6 +2300,47 @@ EOT;
         $settlementId = $handover->settlement_id;
 
         try {
+            // ==== Hapus berkas bukti transfer fisik dari storage agar tidak menumpuk
+            $proofPath = $handover->transfer_proof_path
+                ?? $handover->transfer_proof
+                ?? $handover->transfer_proof_file
+                ?? null;
+
+            // Fail-safe decoder for double-serialized JSON strings
+            if (is_string($proofPath)) {
+                $decoded = json_decode($proofPath, true);
+                if (is_array($decoded)) {
+                    $proofPath = $decoded;
+                } elseif (json_last_error() === JSON_ERROR_NONE && is_string($decoded)) {
+                    $decodedSecond = json_decode($decoded, true);
+                    if (is_array($decodedSecond)) {
+                        $proofPath = $decodedSecond;
+                    }
+                }
+            }
+
+            if ($proofPath) {
+                if (is_array($proofPath)) {
+                    foreach ($proofPath as $path) {
+                        if ($path) {
+                            if (\Illuminate\Support\Facades\Storage::exists($path)) {
+                                \Illuminate\Support\Facades\Storage::delete($path);
+                            }
+                            if (\Illuminate\Support\Facades\Storage::disk('public')->exists($path)) {
+                                \Illuminate\Support\Facades\Storage::disk('public')->delete($path);
+                            }
+                        }
+                    }
+                } else {
+                    if (\Illuminate\Support\Facades\Storage::exists($proofPath)) {
+                        \Illuminate\Support\Facades\Storage::delete($proofPath);
+                    }
+                    if (\Illuminate\Support\Facades\Storage::disk('public')->exists($proofPath)) {
+                        \Illuminate\Support\Facades\Storage::disk('public')->delete($proofPath);
+                    }
+                }
+            }
+
             DB::beginTransaction();
 
             $handover->load('items.product');

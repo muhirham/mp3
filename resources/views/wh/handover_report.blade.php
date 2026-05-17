@@ -10,6 +10,27 @@
             z-index: 2005 !important;
         }
 
+        #proofModal {
+            z-index: 1090 !important;
+        }
+
+        #proofModal + .modal-backdrop {
+            z-index: 1085 !important;
+        }
+
+        .zoomable-img {
+            transition: transform 0.25s ease-out;
+            transform-origin: center center;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            pointer-events: none;
+        }
+
+        #zoomContainer.is-zoomed .zoomable-img {
+            transform: scale(3.5);
+        }
+
         .table {
             font-size: 11.5px;
             table-layout: auto;
@@ -493,6 +514,29 @@
             </div>
         </div>
     </div>
+
+    <!-- Modal Proof -->
+    <div class="modal fade" id="proofModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-primary py-2 border-bottom">
+                    <h5 class="modal-title text-white">Deposit Proof</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0 text-center bg-dark overflow-hidden position-relative d-flex flex-column" style="height: 75vh;">
+                    <div id="zoomContainer" class="flex-grow-1 w-100 d-flex align-items-center justify-content-center" style="cursor: zoom-in; overflow: hidden; min-height: 0;">
+                        <img id="proofImage" src="" alt="Proof" class="img-fluid zoomable-img" style="max-height: 100%; object-fit: contain;">
+                    </div>
+                    <!-- Thumbnail bar for multiple proofs -->
+                    <div id="proofThumbsContainer" class="w-100 py-2 bg-black bg-opacity-75 d-none flex-wrap justify-content-center gap-2 border-top border-secondary" style="z-index: 10;">
+                    </div>
+                    <div class="py-2 bg-dark bg-opacity-75 text-white text-center pointer-events-none" style="z-index: 5;">
+                        <small id="zoomHint"><i class="bx bx-pointer me-1"></i> Click to zoom & explore</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 @endsection
 
 @push('scripts')
@@ -892,11 +936,28 @@
 
                         const s = json.summary || {};
                         let proofHtml = '-';
-                        if (s.proof_url) {
+                        if (s.proof_urls && s.proof_urls.length > 0) {
+                            const totalProofs = s.proof_urls.length;
+                            const firstUrl = s.proof_urls[0];
                             proofHtml = `
-                                <div class="mt-1">
-                                    <img src="${s.proof_url}" class="img-thumbnail proof-thumb" style="max-width:140px;cursor:pointer;" onclick="window.open('${s.proof_url}')">
-                                    <div class="small text-muted mt-1">Click image to enlarge.</div>
+                                <div class="mt-2">
+                                    <div class="position-relative d-inline-block shadow-sm rounded overflow-hidden" style="cursor:pointer;" id="btnOpenHandoverProof" data-urls='${JSON.stringify(s.proof_urls)}'>
+                                        <img src="${firstUrl}" class="img-thumbnail" style="max-width:140px; height:120px; object-fit:cover; display:block;">
+                                        ${totalProofs > 1 ? `
+                                            <div class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center bg-dark bg-opacity-50 text-white fw-bold fs-6">
+                                                <i class="bx bx-images me-1"></i> +${totalProofs - 1} More
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                    <div class="small text-muted mt-1"><i class="bx bx-search-alt me-1"></i>Click to view proof</div>
+                                </div>`;
+                        } else if (s.proof_url) {
+                            proofHtml = `
+                                <div class="mt-2">
+                                    <div class="position-relative d-inline-block shadow-sm rounded overflow-hidden" style="cursor:pointer;" id="btnOpenHandoverProof" data-urls='${JSON.stringify([s.proof_url])}'>
+                                        <img src="${s.proof_url}" class="img-thumbnail" style="max-width:140px; height:120px; object-fit:cover; display:block;">
+                                    </div>
+                                    <div class="small text-muted mt-1"><i class="bx bx-search-alt me-1"></i>Click to view proof</div>
                                 </div>`;
                         }
 
@@ -966,14 +1027,104 @@
                 }
             });
 
-            // Zoom Proof via Event Delegation on modal
-            modalEl?.addEventListener('click', (e) => {
-                const img = e.target.closest('.proof-thumb');
-                if (img) Swal.fire({
-                    imageUrl: img.src,
-                    showConfirmButton: false,
-                    width: 'auto'
+            // View Handover Proof Modal
+            document.addEventListener('click', (e) => {
+                const btn = e.target.closest('#btnOpenHandoverProof');
+                if (btn) {
+                    let urls = [];
+                    try {
+                        urls = JSON.parse(btn.dataset.urls);
+                    } catch (err) {
+                        console.error('Failed to parse urls:', err);
+                    }
+
+                    const proofModalEl = document.getElementById('proofModal');
+                    const proofImg = document.getElementById('proofImage');
+                    const thumbsContainer = document.getElementById('proofThumbsContainer');
+                    const zoomContainer = document.getElementById('zoomContainer');
+                    const zoomHint = document.getElementById('zoomHint');
+
+                    if (urls && urls.length > 0) {
+                        proofImg.src = urls[0];
+                        
+                        // Render thumbnails if multiple
+                        if (urls.length > 1) {
+                            thumbsContainer.classList.remove('d-none');
+                            thumbsContainer.classList.add('d-flex');
+                            thumbsContainer.innerHTML = urls.map((url, idx) => `
+                                <img src="${url}" class="img-thumbnail proof-thumb-item ${idx === 0 ? 'border-primary' : 'border-secondary'}" 
+                                     style="width: 50px; height: 50px; object-fit: cover; cursor: pointer; opacity: ${idx === 0 ? '1' : '0.6'}; transition: all 0.2s;"
+                                     onclick="changeHandoverProofActiveImage(this, '${url}')">
+                            `).join('');
+                        } else {
+                            thumbsContainer.classList.add('d-none');
+                            thumbsContainer.classList.remove('d-flex');
+                            thumbsContainer.innerHTML = '';
+                        }
+                    } else {
+                        proofImg.src = '';
+                        thumbsContainer.classList.add('d-none');
+                        thumbsContainer.classList.remove('d-flex');
+                        thumbsContainer.innerHTML = '';
+                    }
+
+                    zoomContainer.classList.remove('is-zoomed');
+                    zoomContainer.style.cursor = 'zoom-in';
+                    zoomHint.innerHTML = '<i class="bx bx-pointer me-1"></i> Click to zoom & explore';
+
+                    const bsProofModal = new bootstrap.Modal(proofModalEl);
+                    bsProofModal.show();
+                }
+            });
+
+            window.changeHandoverProofActiveImage = function(thumb, url) {
+                const proofImg = document.getElementById('proofImage');
+                const zoomContainer = document.getElementById('zoomContainer');
+                const zoomHint = document.getElementById('zoomHint');
+
+                proofImg.src = url;
+                document.querySelectorAll('.proof-thumb-item').forEach(el => {
+                    el.classList.remove('border-primary');
+                    el.classList.add('border-secondary');
+                    el.style.opacity = '0.6';
                 });
+                thumb.classList.remove('border-secondary');
+                thumb.classList.add('border-primary');
+                thumb.style.opacity = '1';
+                
+                // Reset zoom state
+                zoomContainer.classList.remove('is-zoomed');
+                zoomContainer.style.cursor = 'zoom-in';
+                zoomHint.innerHTML = '<i class="bx bx-pointer me-1"></i> Click to zoom & explore';
+            };
+
+            // Zoom interactivity
+            document.addEventListener('click', (e) => {
+                const zoomContainer = e.target.closest('#zoomContainer');
+                if (zoomContainer) {
+                    const isZoomed = zoomContainer.classList.toggle('is-zoomed');
+                    const zoomHint = document.getElementById('zoomHint');
+                    if (isZoomed) {
+                        zoomContainer.style.cursor = 'zoom-out';
+                        zoomHint.innerHTML = '<i class="bx bx-move me-1"></i> Move to explore | Click to zoom out';
+                    } else {
+                        zoomContainer.style.cursor = 'zoom-in';
+                        zoomHint.innerHTML = '<i class="bx bx-pointer me-1"></i> Click to zoom & explore';
+                    }
+                }
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                const zoomContainer = e.target.closest('#zoomContainer');
+                if (zoomContainer && zoomContainer.classList.contains('is-zoomed')) {
+                    const rect = zoomContainer.getBoundingClientRect();
+                    const x = ((e.clientX - rect.left) / rect.width) * 100;
+                    const y = ((e.clientY - rect.top) / rect.height) * 100;
+                    const proofImg = document.getElementById('proofImage');
+                    if (proofImg) {
+                        proofImg.style.transformOrigin = `${x}% ${y}%`;
+                    }
+                }
             });
 
             if (deleteButton) {

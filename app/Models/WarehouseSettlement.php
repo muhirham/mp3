@@ -22,6 +22,7 @@ class WarehouseSettlement extends Model
         'settlement_date' => 'date',
         'total_cash_amount' => 'integer',
         'total_transfer_amount' => 'integer',
+        'proof_path' => 'array',
     ];
 
     public function warehouse()

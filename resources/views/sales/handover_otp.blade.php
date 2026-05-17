@@ -340,7 +340,7 @@
                                                 <i class="bx bx-check-circle"></i> View Proof
                                             </a>
                                         @endforeach
-                                        <input type="file" class="form-control form-control-sm" name="items[{{ $row->id }}][payment_proof]" @disabled($isLocked)>
+                                        <input type="file" class="form-control form-control-sm" name="items[{{ $row->id }}][payment_proof][]" multiple @disabled($isLocked)>
                                         @if (count($allProofs) > 0)
                                             <div class="small text-muted mt-1">File already attached. Upload again to replace.</div>
                                         @endif
