@@ -46,15 +46,34 @@ class DirectSalesController extends Controller
         // 3. Tanggal (Biar pas ganti gudang gak reset cok!)
         $selectedDate = $request->query('handover_date', date('Y-m-d'));
 
-        // List Produk yang HANYA ADA STOKNYA di gudang terpilih
         $products = Product::whereHas('stockLevels', function($q) use ($activeWarehouseId) {
             $q->where('owner_id', $activeWarehouseId)
               ->where('owner_type', 'warehouse')
               ->where('quantity', '>', 0);
-        })->with(['stockLevels' => function($q) use ($activeWarehouseId) {
-            $q->where('owner_id', $activeWarehouseId)
-              ->where('owner_type', 'warehouse');
-        }])->orderBy('name')->get();
+        })->with([
+            'stockLevels' => function($q) use ($activeWarehouseId) {
+                $q->where('owner_id', $activeWarehouseId)
+                  ->where('owner_type', 'warehouse');
+            },
+            'category'
+        ])->orderBy('name')->get();
+
+        if ($request->ajax() || $request->wantsJson() || $request->query('json') == 1) {
+            $productsData = $products->map(function($p) {
+                return [
+                    'id' => $p->id,
+                    'name' => $p->name,
+                    'selling_price' => (int) $p->selling_price,
+                    'stock' => (int) ($p->stockLevels->first()?->quantity ?? 0),
+                    'discounts' => []
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'products' => $productsData
+            ]);
+        }
 
         // Cari Akun Sales Internal untuk gudang terpilih
         $internalSales = User::where('warehouse_id', $warehouse->id)
@@ -103,7 +122,8 @@ class DirectSalesController extends Controller
             // Payment
             'cash_amount'     => 'nullable|integer|min:0',
             'transfer_amount' => 'nullable|integer|min:0',
-            'transfer_proof'  => 'nullable|image|max:5120', // 5MB
+            'transfer_proof' => 'nullable|array',
+            'transfer_proof.*' => 'image|max:14336', // 5MB
             'handover_date'   => 'required|date',
             'warehouse_id'    => 'required|exists:warehouses,id',
         ]);
@@ -166,10 +186,21 @@ class DirectSalesController extends Controller
                 'transfer_amount' => $data['transfer_amount'] ?? 0,
             ]);
 
-            // Handle Proof Upload
+            // Handle Multiple Proof Upload
             if ($request->hasFile('transfer_proof')) {
-                $path = $request->file('transfer_proof')->store('transfer_proofs/direct', 'public');
-                $handover->transfer_proof_path = $path;
+
+                $proofPaths = [];
+
+                foreach ($request->file('transfer_proof') as $file) {
+
+                    $path = $file->store('transfer_proofs/direct', 'public');
+
+                    $proofPaths[] = $path;
+                }
+
+                // simpan sebagai array (Eloquent cast array otomatis melakukan json_encode)
+                $handover->transfer_proof_path = $proofPaths;
+
                 $handover->save();
             }
 

@@ -224,10 +224,10 @@
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Upload Deposit Receipt</label>
-                            <input type="file" name="proof_path" class="form-control form-control-lg"
-                                accept="image/jpeg,image/png,image/jpg" required>
-                            <div class="form-text">Photo/Screenshot of your bank transfer or cash deposit slip.</div>
+                            <label class="form-label fw-bold">Upload Deposit Receipt(s)</label>
+                            <input type="file" name="proof_path[]" class="form-control form-control-lg"
+                                accept="image/jpeg,image/png,image/jpg" multiple required>
+                            <div class="form-text">Photo/Screenshot of one or more bank transfers or cash deposit slips.</div>
                         </div>
 
                         <div class="alert alert-info py-2 mb-0 d-flex align-items-center" style="font-size: 0.85rem">

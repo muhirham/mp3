@@ -102,33 +102,37 @@
                     <p class="text-muted small mb-0" style="font-size: 0.75rem;">Manual warehouse stock transaction</p>
                 </div>
             </div>
-            
+
             <div class="d-flex gap-4 align-items-center bg-white px-3 py-1 rounded-3 shadow-sm border">
                 <div class="header-item text-end">
                     <label class="text-muted d-block fs-tiny text-uppercase fw-bold mb-0">Transaction Date</label>
-                    <input type="date" name="handover_date" form="directSalesForm" 
-                        class="form-control form-control-sm fw-bold text-primary border-0 bg-transparent p-0" 
-                        value="{{ $selectedDate }}" style="text-align: right; width: 120px; cursor: pointer; font-size: 0.9rem;">
+                    <input type="date" name="handover_date" form="directSalesForm"
+                        class="form-control form-control-sm fw-bold text-primary border-0 bg-transparent p-0"
+                        value="{{ $selectedDate }}"
+                        style="text-align: right; width: 120px; cursor: pointer; font-size: 0.9rem;">
                 </div>
-                
+
                 <div class="vr" style="height: 30px; opacity: 0.1;"></div>
-                
+
                 <div class="header-item text-end">
                     <label class="text-muted d-block fs-tiny text-uppercase fw-bold mb-0">Warehouse Source</label>
-                    @if(auth()->user()->hasRole(['superadmin', 'admin']))
+                    @if (auth()->user()->hasRole(['superadmin', 'admin']))
                         <div class="dropdown-wrapper position-relative">
-                            <select id="whSwitcher" class="form-select form-select-sm border-0 bg-transparent fw-bold text-primary p-0" 
+                            <select id="whSwitcher"
+                                class="form-select form-select-sm border-0 bg-transparent fw-bold text-primary p-0"
                                 style="text-align: right; cursor: pointer; width: auto; min-width: 150px; appearance: none; -webkit-appearance: none; font-size: 0.9rem;">
-                                @foreach($warehouses as $wh)
+                                @foreach ($warehouses as $wh)
                                     <option value="{{ $wh->id }}" {{ $warehouse->id == $wh->id ? 'selected' : '' }}>
                                         {{ $wh->warehouse_name }}
                                     </option>
                                 @endforeach
                             </select>
-                            <i class="bx bx-chevron-down position-absolute text-muted" style="right: -12px; top: 50%; transform: translateY(-50%); pointer-events: none; font-size: 0.8rem;"></i>
+                            <i class="bx bx-chevron-down position-absolute text-muted"
+                                style="right: -12px; top: 50%; transform: translateY(-50%); pointer-events: none; font-size: 0.8rem;"></i>
                         </div>
                     @else
-                        <span class="fw-bold text-primary" style="font-size: 0.9rem;">{{ $warehouse->warehouse_name }}</span>
+                        <span class="fw-bold text-primary"
+                            style="font-size: 0.9rem;">{{ $warehouse->warehouse_name }}</span>
                     @endif
                 </div>
             </div>
@@ -253,7 +257,8 @@
 
                             <div class="mb-4">
                                 <label class="small fw-bold text-muted mb-1">Transfer Proof (Optional)</label>
-                                <input type="file" name="transfer_proof" class="form-control form-control-sm">
+                                <input type="file" name="transfer_proof[]" class="form-control form-control-sm"
+                                    multiple>
                             </div>
 
                             <button type="submit" class="btn btn-primary btn-lg w-100 rounded-pill shadow-sm py-3"
@@ -321,9 +326,92 @@
 
     <script>
         $(document).ready(function() {
+            // Global products list to support real-time stock updates
+            window.allProducts = [
+                @foreach ($products as $p)
+                    {
+                        id: {{ $p->id }},
+                        name: @json($p->name),
+                        selling_price: {{ $p->selling_price }},
+                        stock: {{ $p->stockLevels->first()?->quantity ?? 0 }},
+                        discounts: @json($p->category?->priceCategory?->discounts ?? [])
+                    },
+                @endforeach
+            ];
+
             let rowIndex = 0;
             const template = document.getElementById('itemRowTemplate').innerHTML;
             const $tbody = $('#itemsTable tbody');
+
+            // Fetch latest stocks and refresh dropdowns
+            async function refreshProducts() {
+                try {
+                    const separator = window.location.href.includes('?') ? '&' : '?';
+                    const response = await fetch(window.location.href + separator + 'json=1', {
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json'
+                        }
+                    });
+                    const result = await response.json();
+                    if (result.success && result.products) {
+                        window.allProducts = result.products;
+                        updateAllActiveDropdowns();
+                    }
+                } catch (err) {
+                    console.error('Failed to refresh products stock:', err);
+                }
+            }
+
+            // Update option list of currently open dropdowns without breaking user selection
+            function updateAllActiveDropdowns() {
+                $('.js-product-select').each(function() {
+                    const $select = $(this);
+                    const currentVal = $select.val();
+
+                    $select.empty().append('<option value="">Select Product...</option>');
+                    window.allProducts.forEach(function(p) {
+                        const formattedStock = new Intl.NumberFormat('id-ID').format(p.stock);
+                        const opt = $('<option></option>')
+                            .val(p.id)
+                            .attr('data-price', p.selling_price)
+                            .attr('data-name', p.name)
+                            .attr('data-stock', p.stock)
+                            .attr('data-discounts', JSON.stringify(p.discounts))
+                            .text(`${p.name} (Stock: ${formattedStock})`);
+                        $select.append(opt);
+                    });
+
+                    // Restore user's current selection
+                    $select.val(currentVal);
+                    
+                    // Trigger select2 update to render new stocks
+                    if ($select.hasClass('select2-hidden-accessible')) {
+                        $select.trigger('change.select2');
+                    }
+                });
+            }
+
+            // Reverb (WebSockets) Real-Time Synchronization Listener
+            if (typeof Echo !== 'undefined') {
+                // Listen to sales-channel changes (handover, return, request)
+                Echo.channel('sales-channel')
+                    .listen('.handover-updated', async (e) => {
+                        await refreshProducts();
+                    })
+                    .listen('.stock-request-updated', async (e) => {
+                        await refreshProducts();
+                    })
+                    .listen('.sales-return-updated', async (e) => {
+                        await refreshProducts();
+                    });
+
+                // Listen to warehouse transfer channel
+                Echo.channel('warehouse-transfer-channel')
+                    .listen('.warehouse-transfer-updated', async (e) => {
+                        await refreshProducts();
+                    });
+            }
 
             function formatRupiah(val) {
                 return 'Rp ' + new Intl.NumberFormat('id-ID').format(val);
@@ -377,7 +465,23 @@
                 $tbody.append(content);
 
                 const $newRow = $tbody.find('.item-row').last();
-                $newRow.find('.js-product-select').select2({
+                const $select = $newRow.find('.js-product-select');
+
+                // Populate options dynamically
+                $select.empty().append('<option value="">Select Product...</option>');
+                window.allProducts.forEach(function(p) {
+                    const formattedStock = new Intl.NumberFormat('id-ID').format(p.stock);
+                    const opt = $('<option></option>')
+                        .val(p.id)
+                        .attr('data-price', p.selling_price)
+                        .attr('data-name', p.name)
+                        .attr('data-stock', p.stock)
+                        .attr('data-discounts', JSON.stringify(p.discounts))
+                        .text(`${p.name} (Stock: ${formattedStock})`);
+                    $select.append(opt);
+                });
+
+                $select.select2({
                     theme: 'bootstrap-5'
                 });
 
@@ -475,6 +579,9 @@
                     const result = await response.json();
 
                     if (result.success) {
+                        // Local fallback refresh in case of WebSocket latency
+                        await refreshProducts();
+
                         Swal.fire({
                             icon: 'success',
                             title: 'Sale Completed',
@@ -485,6 +592,7 @@
                             // 🔥 Gak usah reload cok, reset form aja biar bisa transaksi lagi
                             $form[0].reset();
                             $tbody.empty();
+                            rowIndex = 0; // Reset index to 0 so next sale starts clean at index 0 without F5!
                             addRow(); // Tambah satu baris kosong awal
                             calculateTotal();
                         });
@@ -509,7 +617,8 @@
             $('#whSwitcher').change(function() {
                 const whId = $(this).val();
                 const date = $('input[name="handover_date"]').val();
-                window.location.href = `{{ route('warehouse.direct_sales.index') }}?warehouse_id=${whId}&handover_date=${date}`;
+                window.location.href =
+                    `{{ route('warehouse.direct_sales.index') }}?warehouse_id=${whId}&handover_date=${date}`;
             });
 
             // Initial Row

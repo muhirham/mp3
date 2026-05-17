@@ -61,6 +61,7 @@ class SalesHandover extends Model
     'morning_otp_verified_at' => 'datetime',
     'evening_otp_sent_at'     => 'datetime',
     'evening_otp_verified_at' => 'datetime',
+    'transfer_proof_path' => 'array',
 
     // ===== TOTAL =====
     'total_dispatched_amount'    => 'integer',

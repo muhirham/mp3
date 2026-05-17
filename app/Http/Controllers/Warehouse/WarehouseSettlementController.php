@@ -154,6 +154,9 @@ class WarehouseSettlementController extends Controller
         $whId = $me->warehouse_id;
 
         if (!$whId && !$me->hasRole(['superadmin', 'admin'])) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => 'You are not assigned to any warehouse.'], 403);
+            }
             return back()->with('error', 'You are not assigned to any warehouse.');
         }
 
@@ -163,8 +166,18 @@ class WarehouseSettlementController extends Controller
             'sales_id' => 'nullable|exists:users,id',
             'ids' => 'nullable|array',
             'ids.*' => 'exists:sales_handovers,id',
-            'proof_path' => 'required|image|mimes:jpeg,png,jpg|max:10240',
+            'proof_path' => 'required',
         ]);
+
+        if (is_array($request->file('proof_path'))) {
+            $request->validate([
+                'proof_path.*' => 'image|mimes:jpeg,png,jpg|max:10240',
+            ]);
+        } else {
+            $request->validate([
+                'proof_path' => 'image|mimes:jpeg,png,jpg|max:10240',
+            ]);
+        }
 
         $handoversQuery = SalesHandover::whereNull('settlement_id')
             ->whereIn('status', ['closed']);
@@ -192,6 +205,9 @@ class WarehouseSettlementController extends Controller
         $handovers = $handoversQuery->get();
 
         if ($handovers->isEmpty()) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => 'No unsettled transactions found for this selection.'], 422);
+            }
             return back()->with('error', 'No unsettled transactions found for this selection.');
         }
 
@@ -203,11 +219,22 @@ class WarehouseSettlementController extends Controller
         // Tentukan Warehouse ID yang akan dicatat di settlement
         // Jika admin wh, pakai id dia. Jika superadmin, pakai wh_id dari transaksi yang ditarik.
         $targetWhId = $whId ?: $handovers->first()->warehouse_id;
+        $warehouse = \App\Models\Warehouse::find($targetWhId);
 
         try {
             DB::beginTransaction();
 
-            $proofPath = $request->file('proof_path')->store('settlements_proofs', 'public');
+            $proofPaths = [];
+            if ($request->hasFile('proof_path')) {
+                $files = $request->file('proof_path');
+                if (is_array($files)) {
+                    foreach ($files as $file) {
+                        $proofPaths[] = $file->store('settlements_proofs', 'public');
+                    }
+                } else {
+                    $proofPaths[] = $files->store('settlements_proofs', 'public');
+                }
+            }
 
             // 1. Buat record settlement
             $settlement = WarehouseSettlement::create([
@@ -216,7 +243,7 @@ class WarehouseSettlementController extends Controller
                 'settlement_date' => $opDate, 
                 'total_cash_amount' => $totalCash,
                 'total_transfer_amount' => $totalTransfer,
-                'proof_path' => $proofPath,
+                'proof_path' => $proofPaths,
             ]);
 
             // 2. Update semua handover yang bersangkutan
@@ -231,7 +258,7 @@ class WarehouseSettlementController extends Controller
             \App\Helpers\NotificationHelper::notifyFinance(
                 'new_settlement_submitted',
                 'New Settlement: ' . $whName,
-                "Warehouse Admin has submitted a new settlement of Rp " . number_format($settlement->total_amount, 0, ',', '.'),
+                "Warehouse Admin has submitted a new settlement of Rp " . number_format($settlement->total_cash_amount + $settlement->total_transfer_amount, 0, ',', '.'),
                 route('finance.settlements.index'),
                 'warehouse_settlements',
                 $settlement->id
@@ -247,6 +274,12 @@ class WarehouseSettlementController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to create settlement: ' . $e->getMessage()
+                ], 500);
+            }
             return back()->with('error', 'Failed to create settlement: ' . $e->getMessage());
         }
     }
