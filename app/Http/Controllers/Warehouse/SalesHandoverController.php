@@ -1455,6 +1455,37 @@ EOT;
             }
         }
 
+        // 🔥 HDO (Standard Handover): Kumpulkan semua bukti transfer yang diunggah per item produk oleh Sales
+        if (!$handover->is_direct_sale) {
+            foreach ($handover->items as $it) {
+                // Ambil dari kolom paths multiple (array JSON)
+                $itemPaths = $it->payment_transfer_proof_paths ?? [];
+                if (is_string($itemPaths) && $itemPaths !== '') {
+                    $decoded = json_decode($itemPaths, true);
+                    $itemPaths = is_array($decoded) ? $decoded : [];
+                }
+                if (is_array($itemPaths)) {
+                    foreach ($itemPaths as $entry) {
+                        $path = null;
+                        if (is_string($entry) && $entry !== '') {
+                            $path = $entry;
+                        } elseif (is_array($entry) && !empty($entry['path'])) {
+                            $path = $entry['path'];
+                        }
+                        if ($path) {
+                            $proofUrls[] = Storage::url($path);
+                        }
+                    }
+                }
+                // Ambil dari kolom path legacy single (jika ada)
+                if (!empty($it->payment_transfer_proof_path)) {
+                    $proofUrls[] = Storage::url($it->payment_transfer_proof_path);
+                }
+            }
+        }
+
+        // Bersihkan duplikasi dan data kosong
+        $proofUrls = array_values(array_unique(array_filter($proofUrls)));
         $proofUrl = count($proofUrls) > 0 ? $proofUrls[0] : null;
 
         // ==== ITEMS + HITUNG TOTAL SOLD DARI ITEM

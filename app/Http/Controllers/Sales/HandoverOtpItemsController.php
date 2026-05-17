@@ -273,14 +273,18 @@ class HandoverOtpItemsController extends Controller
                     $proofFiles = $proofFile ? (is_array($proofFile) ? $proofFile : [$proofFile]) : [];
 
                     if (!empty($proofFiles)) {
-                        // 🔥 REPLACE LOGIC: Delete old files from storage before replacing
-                        foreach ($proofPaths as $oldProof) {
-                            $oldPath = $oldProof['path'] ?? null;
-                            if ($oldPath && Storage::disk('public')->exists($oldPath)) {
-                                Storage::disk('public')->delete($oldPath);
+                        // Jika statusnya rejected, hapus berkas fisik lama dari storage dan bersihkan list agar input ulang bersih
+                        if ($isRejected) {
+                            $oldPaths = $this->normalizeTransferProofPaths($item);
+                            foreach ($oldPaths as $oldProof) {
+                                $oldPath = $oldProof['path'] ?? null;
+                                if ($oldPath && Storage::disk('public')->exists($oldPath)) {
+                                    Storage::disk('public')->delete($oldPath);
+                                }
                             }
+                            $proofPaths = []; // Reset list agar hanya yang baru yang masuk
                         }
-                        $proofPaths = []; // Reset list so only new ones are stored
+                        // Jika tidak rejected (sedang draf biasa), jangan hapus/reset! Cukup append di bawah.
                     }
 
                     $qtySold = $isReinput
@@ -327,8 +331,8 @@ class HandoverOtpItemsController extends Controller
                         $stored = save_optimized_image($pf, 'handover_item_transfer_proofs');
                         $proofPaths[] = [
                             'path'   => $stored,
-                            'qty'    => $transferQty,
-                            'amount' => $transferAmount,
+                            'qty'    => 0,
+                            'amount' => 0,
                             'saved_at' => now()->format('Y-m-d H:i:s'),
                         ];
                     }
