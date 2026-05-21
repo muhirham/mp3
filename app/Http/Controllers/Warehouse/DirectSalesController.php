@@ -13,6 +13,7 @@ use App\Models\StockMovement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use App\Support\SalesHandoverCodeGenerator;
 
 class DirectSalesController extends Controller
 {
@@ -143,6 +144,7 @@ class DirectSalesController extends Controller
             }
             
             $date = Carbon::parse($request->handover_date)->toDateString();
+$code = SalesHandoverCodeGenerator::generate('SI', $date);
 
             // 1. Tentukan Sales ID (Owner Transaksi)
             $salesId = null;
@@ -163,12 +165,7 @@ class DirectSalesController extends Controller
                 throw new \Exception("Could not find a valid Sales account for this transaction.");
             }
 
-            // 2. Generate Code SI (Sales Internal)
-            $dayPrefix = Carbon::parse($date)->format('ymd');
-            $codePrefix = 'SI-' . $dayPrefix . '-'; // Prefix SI sesuai request lo cok
-            $lastToday = SalesHandover::where('code', 'like', $codePrefix . '%')->orderByDesc('id')->first();
-            $nextNumber = $lastToday ? ((int) substr($lastToday->code, -4)) + 1 : 1;
-            $code = $codePrefix . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+
 
             // 3. Simpan Header (Langsung CLOSED)
             $handover = SalesHandover::create([

@@ -9,6 +9,7 @@ use App\Models\SalesHandoverItem;
 use App\Models\StockLevel;
 use App\Models\Warehouse;
 use Illuminate\Support\Facades\DB;
+use App\Support\SalesHandoverCodeGenerator;
 use Illuminate\Http\Request;
 
 class StockRequestApprovalController extends Controller
@@ -165,45 +166,19 @@ class StockRequestApprovalController extends Controller
                     ->first();
             }
 
-            $today = now()->format('ymd');
-            $codePrefix = 'HDO-' . $today . '-';
+            // Generate kode HDO using helper to avoid collisions
+            $code = \App\Support\SalesHandoverCodeGenerator::generate('HDO', now());
 
-            $last = SalesHandover::where('code', 'like', $codePrefix . '%')
-                ->lockForUpdate()
-                ->latest('id')
-                ->first();
-
-            $next = $last
-                ? ((int) substr($last->code, -4)) + 1
-                : 1;
-
-            $code = 'HDO-' . $today . '-' . str_pad($next, 4, '0', STR_PAD_LEFT);
-
-                if (!$handover) {
-
-                    $today = now()->format('ymd');
-                    $codePrefix = 'HDO-' . $today . '-';
-
-                    $last = SalesHandover::where('code', 'like', $codePrefix . '%')
-                        ->lockForUpdate()
-                        ->latest('id')
-                        ->first();
-
-                    $next = $last
-                        ? ((int) substr($last->code, -4)) + 1
-                        : 1;
-
-                    $code = 'HDO-' . $today . '-' . str_pad($next, 4, '0', STR_PAD_LEFT);
-
-                    $handover = SalesHandover::create([
-                        'code'          => $code,
-                        'warehouse_id'  => $stockRequest->warehouse_id,
-                        'sales_id'      => $stockRequest->user_id,
-                        'handover_date' => today(),
-                        'status' => 'draft',
-                        'issued_by'     => auth()->id(),
-                    ]);
-                }
+            if (!$handover) {
+                $handover = SalesHandover::create([
+                    'code'          => $code,
+                    'warehouse_id'  => $stockRequest->warehouse_id,
+                    'sales_id'      => $stockRequest->user_id,
+                    'handover_date' => today(),
+                    'status'        => 'draft',
+                    'issued_by'     => auth()->id(),
+                ]);
+            }
 
             // =========================
             // ITEM MASUK HDO
