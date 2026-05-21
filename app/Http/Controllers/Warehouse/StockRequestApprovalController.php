@@ -166,8 +166,9 @@ class StockRequestApprovalController extends Controller
             }
 
             $today = now()->format('ymd');
+            $codePrefix = 'HDO-' . $today . '-';
 
-            $last = SalesHandover::whereDate('handover_date', today())
+            $last = SalesHandover::where('code', 'like', $codePrefix . '%')
                 ->lockForUpdate()
                 ->latest('id')
                 ->first();
@@ -181,8 +182,9 @@ class StockRequestApprovalController extends Controller
                 if (!$handover) {
 
                     $today = now()->format('ymd');
+                    $codePrefix = 'HDO-' . $today . '-';
 
-                    $last = SalesHandover::whereDate('handover_date', today())
+                    $last = SalesHandover::where('code', 'like', $codePrefix . '%')
                         ->lockForUpdate()
                         ->latest('id')
                         ->first();

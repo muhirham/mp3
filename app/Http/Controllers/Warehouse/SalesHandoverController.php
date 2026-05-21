@@ -305,7 +305,7 @@ class SalesHandoverController extends Controller
                 $dayPrefix  = Carbon::parse($date)->format('ymd');
                 $codePrefix = 'HDO-' . $dayPrefix . '-';
 
-                $lastToday = SalesHandover::whereDate('handover_date', $date)
+                $lastToday = SalesHandover::where('code', 'like', $codePrefix . '%')
                     ->orderByDesc('id')
                     ->first();
 
