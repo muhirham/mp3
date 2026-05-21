@@ -301,19 +301,9 @@ class SalesHandoverController extends Controller
             try {
                 DB::beginTransaction();
 
-                // Generate kode HDO-YYMMDD-XXXX
-                $dayPrefix  = Carbon::parse($date)->format('ymd');
-                $codePrefix = 'HDO-' . $dayPrefix . '-';
+                // Generate kode using helper to avoid collisions
+                $code = \App\Support\SalesHandoverCodeGenerator::generate('HDO', $date);
 
-                $lastToday = SalesHandover::where('code', 'like', $codePrefix . '%')
-                    ->orderByDesc('id')
-                    ->first();
-
-                $nextNumber = $lastToday
-                    ? ((int) substr($lastToday->code, -4)) + 1
-                    : 1;
-
-                $code = $codePrefix . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
 
                 // Buat header
                 $handover = null;
