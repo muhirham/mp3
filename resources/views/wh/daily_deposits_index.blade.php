@@ -226,9 +226,12 @@ document.addEventListener('DOMContentLoaded', function() {
         
         params.append('page', page);
         
+        const exportBaseUrl = "{{ route('warehouse.settlements.export.history') }}";
+        // Optional base for storage URLs (if needed elsewhere)
+        const storageBase = "{{ asset('storage') }}";
+
         const url = `${filterForm.action}?${params.toString()}`;
 
-        const exportBaseUrl = "{{ route('warehouse.settlements.export.history') }}";
         btnExportHistory.href = `${exportBaseUrl}?${params.toString()}`;
 
         fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
@@ -247,7 +250,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         let proofBtn = '<span class="badge bg-label-warning">None</span>';
                         if (row.proof_path) {
                             if (Array.isArray(row.proof_path) && row.proof_path.length > 0) {
-                                const urls = row.proof_path.map(p => `/storage/${p}`);
+                                const urls = row.proof_path.map(p => `${storageBase}/${p}`);
                                 proofBtn = `
                                     <button type="button" class="btn btn-sm btn-outline-primary btn-view-proof" data-urls='${JSON.stringify(urls)}'>
                                         <i class="bx bx-image"></i> View (${row.proof_path.length})
@@ -255,7 +258,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 `;
                             } else if (typeof row.proof_path === 'string') {
                                 proofBtn = `
-                                    <button type="button" class="btn btn-sm btn-outline-primary btn-view-proof" data-url="/storage/${row.proof_path}">
+                                    <button type="button" class="btn btn-sm btn-outline-primary btn-view-proof" data-url="${storageBase}/${row.proof_path}">
                                         <i class="bx bx-image"></i> View
                                     </button>
                                 `;
