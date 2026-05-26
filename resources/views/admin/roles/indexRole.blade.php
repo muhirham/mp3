@@ -540,6 +540,17 @@
 
                                             </div>
                                         @endif
+                                        @if ($it['key'] === 'wh_stocklevel')
+                                            <div class="ms-4 mb-2">
+                                                <div class="form-check">
+                                                    <input class="form-check-input add-permission" type="checkbox"
+                                                        name="permissions[]" value="stock_levels.export"
+                                                        id="add_stock_levels_export">
+                                                    <label class="form-check-label"
+                                                        for="add_stock_levels_export">Export Stock Levels</label>
+                                                </div>
+                                            </div>
+                                        @endif
                                     @endforeach
                                 </div>
 
@@ -1086,6 +1097,17 @@
                                                     <label class="form-check-label">Delete</label>
                                                 </div>
 
+                                            </div>
+                                        @endif
+                                        @if ($it['key'] === 'wh_stocklevel')
+                                            <div class="ms-4 mb-2">
+                                                <div class="form-check">
+                                                    <input class="form-check-input edit-permission" type="checkbox"
+                                                        name="permissions[]" value="stock_levels.export"
+                                                        id="edit_stock_levels_export">
+                                                    <label class="form-check-label"
+                                                        for="edit_stock_levels_export">Export Stock Levels</label>
+                                                </div>
                                             </div>
                                         @endif
                                     @endforeach

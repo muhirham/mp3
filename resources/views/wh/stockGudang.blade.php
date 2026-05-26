@@ -76,7 +76,7 @@
                     </div>
 
                     {{-- Export & Date Range Filter --}}
-                    @if($me->hasPermission('products.export'))
+                    @if($me->hasPermission('stock_levels.export'))
                     <div class="col-12 mt-3 d-flex justify-content-end align-items-end gap-2">
                         <div>
                             <label class="form-label mb-1">Date Start</label>
