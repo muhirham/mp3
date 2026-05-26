@@ -265,8 +265,8 @@ class StockLevelController extends Controller
     {
         $me = auth()->user();
 
-        // Cek Permission. Siapapun yang boleh harus punya "products.export"
-        if (!$me->hasPermission('products.export')) {
+        // Cek Permission. Siapapun yang boleh harus punya "stock_levels.export"
+        if (!$me->hasPermission('stock_levels.export')) {
             abort(403, 'Anda tidak memiliki hak akses untuk Export Data.');
         }
 

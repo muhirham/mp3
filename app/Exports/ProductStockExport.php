@@ -155,6 +155,14 @@ class ProductStockExport implements FromArray, WithEvents, ShouldAutoSize
         // DATA QUERY
         $query = Product::with(['category', 'supplier', 'package']);
         
+        // Hanya ekspor produk yang memiliki record di gudang terkait
+        if ($this->warehouseId) {
+            $query->whereHas('stockLevels', function ($q) {
+                $q->where('owner_id', $this->warehouseId)
+                  ->where('owner_type', 'warehouse');
+            });
+        }
+
         $query->with(['stockLevels' => function ($q) {
             if ($this->warehouseId) {
                 $q->where('owner_id', $this->warehouseId);
