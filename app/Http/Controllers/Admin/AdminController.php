@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\SalesHandover;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Models\StockLevel;
 use App\Models\PurchaseOrder;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -61,6 +62,15 @@ class AdminController extends Controller
         $productsTotal   = (int) Product::count();
         $warehousesTotal = Schema::hasTable('warehouses') ? (int) Warehouse::count() : 0;
 
+        $stockValue = (int) StockLevel::query()
+            ->join('products', 'products.id', '=', 'stock_levels.product_id')
+            ->whereIn('stock_levels.owner_type', ['warehouse', 'sales'])
+            ->selectRaw('SUM(stock_levels.quantity * products.selling_price) as total')
+            ->value('total');
+
+        $productsTotal   = (int) Product::count();
+        $warehousesTotal = Schema::hasTable('warehouses') ? (int) Warehouse::count() : 0;
+
         $closedCount = SalesHandover::whereRaw('LOWER(status)="closed"')
             ->whereBetween($handoverDate, [$start, $end])
             ->count();
@@ -70,6 +80,11 @@ class AdminController extends Controller
                 ->whereBetween($handoverDate, [$start, $end])
                 ->sum('total_sold_amount')
             : 0;
+
+            // =========================
+            // TOP 10 BEST SELLING PRODUCT (Moved to AJAX)
+            // =========================
+            $warehouseOptions = Warehouse::orderBy('warehouse_name')->get();
 
         // =========================
         // CHART 1: YEARLY (MONTHLY)
@@ -184,7 +199,7 @@ class AdminController extends Controller
         // FINAL DATA
         // =========================
         $stats = [
-            'users_total'           => $usersTotal,
+            'stock_value' => $stockValue,
             'products_total'        => $productsTotal,
             'warehouses_total'      => $warehousesTotal,
             'closed_count_month'    => $closedCount,
@@ -217,7 +232,13 @@ class AdminController extends Controller
 
 
         return view('dashboard.indexAdmin', compact(
-            'me','stats','charts','period','label', 'access'
+            'me',
+            'stats',
+            'charts',
+            'period',
+            'label',
+            'access',
+            'warehouseOptions'
         ));
     }
 
@@ -306,10 +327,59 @@ class AdminController extends Controller
             ],
         ]);
     }
+    public function topSelling(Request $request)
+    {
+        $selectedWarehouse = $request->warehouse_id;
+        $period = $request->get('period', 'month');
 
+        if ($period === 'day') {
+            $start = now()->startOfDay();
+            $end   = now()->endOfDay();
+            $label = now()->format('d F Y');
+        } elseif ($period === 'week') {
+            $end   = now()->endOfDay();
+            $start = now()->copy()->subDays(6)->startOfDay();
+            $label = $start->format('d M') . ' - ' . $end->format('d M Y');
+        } else {
+            $month = (int) $request->get('month', now()->month);
+            $year  = (int) $request->get('year', now()->year);
+            $start = Carbon::create($year, $month, 1)->startOfMonth();
+            $end   = Carbon::create($year, $month, 1)->endOfMonth();
+            $label = Carbon::create()->month($month)->format('F') . ' ' . $year;
+        }
+
+        $handoverTable = (new SalesHandover)->getTable();
+        $handoverDate  = Schema::hasColumn($handoverTable, 'handover_date')
+            ? 'sh.handover_date'
+            : 'sh.created_at';
+
+        $topSellingQuery = DB::table('sales_handover_items as shi')
+            ->join('sales_handovers as sh', 'sh.id', '=', 'shi.handover_id')
+            ->join('products as p', 'p.id', '=', 'shi.product_id')
+            ->where('sh.status', 'closed')
+            ->whereBetween($handoverDate, [$start, $end]);
+
+        if (!empty($selectedWarehouse)) {
+            $topSellingQuery->where('sh.warehouse_id', $selectedWarehouse);
+        }
+
+        $topSellingProducts = $topSellingQuery
+            ->selectRaw("
+                p.id,
+                p.name,
+                SUM(shi.qty_sold) as sold_qty,
+                SUM(shi.line_total_sold) as sold_amount
+            ")
+            ->groupBy('p.id', 'p.name')
+            ->orderByDesc('sold_amount')
+            ->limit(10)
+            ->get();
+
+        $totalTopRevenue = $topSellingProducts->sum('sold_amount');
+
+        return view('dashboard.partials.topSelling', compact('topSellingProducts', 'totalTopRevenue', 'label'));
+    }
 }
-
-
 
 
 

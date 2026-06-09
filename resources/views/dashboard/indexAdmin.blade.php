@@ -44,6 +44,139 @@
             opacity: .55;
             cursor: not-allowed;
         }
+
+        .admin-dashboard {
+            background-color: #f0f2f5 !important;
+        }
+
+        .layout-page .content-wrapper {
+            width: 100% !important;
+        }
+
+        .container-xxl,
+        .container-fluid {
+            max-width: 100% !important;
+        }
+
+        /* Kartu-kartu di dashboard */
+        .admin-dashboard .card {
+            border-radius: 12px !important;
+            border: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Baris "Main Metrics" biar rapi */
+        .admin-dashboard .metrics-row {
+            margin-bottom: 24px;
+        }
+
+        /* Card kecil yang menampilkan jumlah/total */
+        .admin-dashboard .stat-card {
+            height: 100%;
+            display: flex;
+            align-items: center;
+        }
+
+        /* Header kartu (judul) */
+        .admin-dashboard .stat-card .card-header {
+            border-bottom: none;
+            background: transparent;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        /* Body kartu (isi) */
+        .admin-dashboard .stat-card .card-body {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        /* Baris "Procurement Pipeline" */
+        .admin-dashboard .pipeline-section {
+            margin-bottom: 24px;
+        }
+
+        .admin-dashboard .pipeline-section .card-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        /* Kartu-kartu di pipeline (Pending Proc, Pending CEO, dll) */
+        .admin-dashboard .pipeline-card {
+            height: 100%;
+            padding: 12px;
+        }
+
+        /* Bagian bawah kartu pipeline (tombol & info) */
+        .admin-dashboard .pipeline-card-footer {
+            margin-top: auto;
+            padding-top: 12px;
+            border-top: 1px solid #e9ecef;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        /* Status badge di pipeline */
+        .admin-dashboard .status-badge {
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        /* Visual untuk setiap status pipeline */
+        .admin-dashboard .status-pending-proc {
+            background-color: #fff7ed;
+            color: #ea580c;
+        }
+
+        .admin-dashboard .status-pending-ceo {
+            background-color: #fef3c7;
+            color: #f59e0b;
+        }
+
+        .admin-dashboard .status-approved {
+            background-color: #d1fae5;
+            color: #059669;
+        }
+
+        .admin-dashboard .status-restock {
+            background-color: #ede9fe;
+            color: #6366f1;
+        }
+
+        /* Visual untuk angka di pipeline */
+        .admin-dashboard .pipeline-count {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        /* Line chart */
+        .admin-dashboard .chart-card {
+            border-radius: 12px !important;
+            border: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+
+        /* Responsive adjustment */
+        @media (max-width: 768px) {
+            .admin-dashboard .stat-card {
+                min-height: 100px;
+            }
+
+            .admin-dashboard .pipeline-card-footer {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .admin-dashboard .status-badge {
+                align-self: flex-start;
+            }
+        }
     </style>
 
     <div class="container-fluid flex-grow-1 container-p-y admin-dashboard px-3 px-lg-4">
@@ -68,7 +201,8 @@
                 @if (request('period', 'month') === 'month')
                     <select name="month" class="form-select form-select-sm" onchange="this.form.submit()">
                         @foreach (range(1, 12) as $m)
-                            <option value="{{ $m }}" {{ request('month', now()->month) == $m ? 'selected' : '' }}>
+                            <option value="{{ $m }}"
+                                {{ request('month', now()->month) == $m ? 'selected' : '' }}>
                                 {{ \Carbon\Carbon::create()->month($m)->format('F') }}
                             </option>
                         @endforeach
@@ -120,11 +254,21 @@
                 <div class="card h-100">
                     <div class="card-body d-flex align-items-center">
                         <div class="avatar flex-shrink-0 me-3">
-                            <span class="avatar-initial rounded bg-label-primary">U</span>
+                            <span class="avatar-initial rounded bg-label-primary">S</span>
                         </div>
                         <div>
-                            <h5 class="mb-0">{{ number_format((int) ($stats['users_total'] ?? 0), 0, ',', '.') }}</h5>
-                            <small class="text-muted">Total Users</small>
+                            <h5 class="mb-0">
+                                Rp {{ number_format((int) ($stats['stock_value'] ?? 0), 0, ',', '.') }}
+                            </h5>
+
+                            <small class="text-muted d-block">
+                                ≈ {{ number_format(($stats['stock_value'] ?? 0) / 1000000000, 2) }}
+                                Miliar Rupiah
+                            </small>
+
+                            <small class="text-muted d-block">
+                                Inventory Value (WH + Sales)
+                            </small>
                         </div>
                     </div>
                 </div>
@@ -307,15 +451,42 @@
 
             <div class="col-12 col-xl-3">
                 <div class="card h-100">
-                    <div class="card-header">
-                        <div class="fw-bold">Transactions</div>
-                        <div class="text-muted small">Closed / hari (12 hari terakhir)</div>
+
+                    <div class="card-header pb-2">
+
+                        <div class="fw-bold">
+                            Top 10 Best Selling Product
+                        </div>
+
+                        <div class="text-muted small mb-2">
+                            By Revenue
+                        </div>
+
+                        <form id="top-selling-form">
+                            <select name="warehouse_id" id="top-selling-warehouse" class="form-select form-select-sm">
+
+                                <option value="">
+                                    All WH
+                                </option>
+
+                                @foreach ($warehouseOptions as $wh)
+                                    <option value="{{ $wh->id }}"
+                                        {{ request('warehouse_id') == $wh->id ? 'selected' : '' }}>
+                                        {{ $wh->warehouse_name }}
+                                    </option>
+                                @endforeach
+
+                            </select>
+                        </form>
+
                     </div>
-                    <div class="card-body">
-                        <div class="fw-bold mb-2">
-                            {{ number_format((int) ($stats['closed_count_month'] ?? 0), 0, ',', '.') }}</div>
-                        <div id="closedDailyChart" style="height:280px;"></div>
+
+                    <div class="card-body pt-2" id="top-selling-container">
+                        <div class="text-center py-4 text-muted small">
+                            Loading...
+                        </div>
                     </div>
+
                 </div>
             </div>
         </div>
@@ -327,15 +498,47 @@
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 
     <script>
+        // Fetch Top Selling Data
+        function fetchTopSelling() {
+            const warehouseId = document.getElementById('top-selling-warehouse').value;
+            const container = document.getElementById('top-selling-container');
+
+            const params = new URLSearchParams(window.location.search);
+            params.set('warehouse_id', warehouseId);
+
+            container.innerHTML = '<div class="text-center py-4 text-muted small">Loading...</div>';
+
+            fetch(`{{ route('admin.dashboard.top_selling') }}?${params.toString()}`, {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'text/html'
+                    }
+                })
+                .then(response => response.text())
+                .then(html => {
+                    container.innerHTML = html;
+                })
+                .catch(error => {
+                    console.error('Error fetching top selling products:', error);
+                    container.innerHTML = '<div class="text-danger small py-2">Failed to load data.</div>';
+                });
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
+
+            // Initial load for Top Selling
+            fetchTopSelling();
+
+            // Listen for dropdown changes
+            document.getElementById('top-selling-warehouse').addEventListener('change', function() {
+                fetchTopSelling();
+            });
+
             const yearlyLabels = @json($charts['yearly']['labels'] ?? []);
             const yearlySeries = @json($charts['yearly']['series'] ?? []);
 
             const statusLabels = @json($charts['status']['labels'] ?? []);
             const statusSeries = @json($charts['status']['series'] ?? []);
-
-            const dailyLabels = @json($charts['daily']['labels'] ?? []);
-            const dailySeries = @json($charts['daily']['series'] ?? []);
 
             if (typeof ApexCharts === 'undefined') return;
 
@@ -442,60 +645,6 @@
                             y: {
                                 formatter: v => new Intl.NumberFormat('id-ID').format(Math.round(
                                     v || 0)) + ' handover'
-                            }
-                        }
-                    }).render();
-                }
-
-                // === DAILY BAR ===
-                const dailyEl = document.getElementById('closedDailyChart');
-                if (dailyEl) {
-                    new ApexCharts(dailyEl, {
-                        chart: {
-                            type: 'bar',
-                            height: 280,
-                            toolbar: {
-                                show: false
-                            },
-                            animations: {
-                                enabled: true,
-                                easing: 'easeinout',
-                                speed: 800,
-                                animateGradually: {
-                                    enabled: true,
-                                    delay: 60
-                                },
-                                dynamicAnimation: {
-                                    enabled: true,
-                                    speed: 450
-                                }
-                            }
-                        },
-                        series: [{
-                            name: 'Closed',
-                            data: dailySeries
-                        }],
-                        xaxis: {
-                            categories: dailyLabels
-                        },
-                        plotOptions: {
-                            bar: {
-                                columnWidth: '55%',
-                                borderRadius: 6,
-                                // ✅ ini bikin transisi bar lebih halus
-                                endingShape: 'rounded'
-                            }
-                        },
-                        dataLabels: {
-                            enabled: false
-                        },
-                        tooltip: {
-                            shared: true,
-                            intersect: false
-                        },
-                        yaxis: {
-                            labels: {
-                                formatter: v => Math.round(v || 0)
                             }
                         }
                     }).render();
