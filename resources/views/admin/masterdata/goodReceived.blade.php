@@ -153,6 +153,10 @@
                   $poRef = $rr->purchaseOrder?->po_code;
                   $rrRef = $rr->request?->code ?? ('RS-'.$rr->request_id);
                   $sourceLabel = $poRef ? ($poRef . ' / ' . $rrRef) : $rrRef;
+              } elseif($rr->gr_type == 'gr_transfer') {
+                  $sourceLabel = $rr->warehouseTransfer?->transfer_code ?? '-';
+              } elseif($rr->gr_type == 'gr_return') {
+                  $sourceLabel = $rr->salesReturn?->return_code ?? $rr->salesReturn?->code ?? '-';
               }
 
               $recDate = optional($rr->received_at)->format('d/m/Y H:i') ?? '-';

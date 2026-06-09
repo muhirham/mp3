@@ -40,7 +40,7 @@ class GoodReceivedController extends Controller
         $isSuperadmin    = $roles->contains('slug', 'superadmin');
 
         // Query Utama dari RestockReceipt
-        $query = RestockReceipt::with(['purchaseOrder', 'supplier', 'warehouse', 'product', 'photos', 'receiver'])
+        $query = RestockReceipt::with(['purchaseOrder', 'supplier', 'warehouse', 'product', 'photos', 'receiver', 'warehouseTransfer', 'salesReturn', 'request'])
             ->select('code', 'gr_type', 'purchase_order_id', 'warehouse_id', 'supplier_id', 'received_by', 'received_at')
             ->selectRaw('MAX(request_id) as request_id, SUM(qty_good) as total_good, SUM(qty_damaged) as total_damaged, COUNT(id) as total_items')
             ->groupBy('code', 'gr_type', 'purchase_order_id', 'warehouse_id', 'supplier_id', 'received_by', 'received_at');

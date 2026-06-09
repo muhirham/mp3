@@ -33,14 +33,19 @@ class WarehouseSettlementController extends Controller
         // Search Filter (ID / Code)
         if ($request->filled('search')) {
             $search = $request->search;
-            // Clean prefix and leading zeros (e.g. SET-00001 -> 1)
             $cleanSearch = ltrim(str_replace(['SET-', 'set-', 'STL-', 'stl-', '#'], '', $search), '0');
-            
-            if (is_numeric($cleanSearch)) {
-                $query->where('id', $cleanSearch);
-            } else {
-                $query->where('id', 'LIKE', "%" . str_replace(['SET-', 'set-', 'STL-', 'stl-', '#'], '', $search) . "%");
-            }
+
+            $query->where(function ($q) use ($search, $cleanSearch) {
+                if (is_numeric($cleanSearch) && $cleanSearch !== '') {
+                    $q->where('id', $cleanSearch);
+                }
+
+                $q->orWhereHas('warehouse', function ($wh) use ($search) {
+                    $wh->where('warehouse_name', 'LIKE', "%{$search}%");
+                })->orWhereHas('admin', function ($ad) use ($search) {
+                    $ad->where('name', 'LIKE', "%{$search}%");
+                });
+            });
         }
 
         // Filters (Warehouse, Date)

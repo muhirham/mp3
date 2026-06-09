@@ -245,10 +245,15 @@
                     if(!$product) continue;
                     
                     // Filter receipts khusus untuk item ini (Product, Request ID, dan Warehouse ID yang sama)
-                    $itemReceipts = $receipts->filter(function($r) use ($item) {
-                        return $r->product_id == $item->product_id && 
-                               ($r->warehouse_id ?: null) == ($item->warehouse_id ?: null) &&
-                               ($r->request_id ?: null) == ($item->request_id ?: null);
+                    $itemReceipts = $receipts->filter(function($r) use ($item, $first) {
+                        if ($r->product_id != $item->product_id) return false;
+                        
+                        if ($first->gr_type === 'po') {
+                            return ($r->warehouse_id ?? null) == ($item->warehouse_id ?? null) &&
+                                   ($r->request_id ?? null) == ($item->request_id ?? null);
+                        }
+                        
+                        return true;
                     });
                     
                     $qtyGood = $itemReceipts->sum('qty_good');

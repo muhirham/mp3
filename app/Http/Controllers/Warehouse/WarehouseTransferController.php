@@ -40,6 +40,24 @@ class WarehouseTransferController extends Controller
         return $prefix . str_pad($n, 4, '0', STR_PAD_LEFT);
     }
 
+    protected function nextReceiptCode(): string
+    {
+        $prefix = 'GR-' . now()->format('ymd') . '-';
+
+        $last = DB::table('restock_receipts')
+            ->where('code', 'like', $prefix . '%')
+            ->orderByDesc('id')
+            ->value('code');
+
+        $n = 1;
+        if ($last) {
+            $lastSeq = (int) substr($last, -4);
+            $n       = $lastSeq + 1;
+        }
+
+        return $prefix . str_pad($n, 4, '0', STR_PAD_LEFT);
+    }
+
     public function index()
     {
         $me = auth()->user();
@@ -392,7 +410,7 @@ class WarehouseTransferController extends Controller
         DB::transaction(function () use ($request, $transfer) {
 
             $firstReceiptId = null;
-            $grCode = 'GR-WT-' . now()->format('Ymd') . '-' . strtoupper(Str::random(5));
+            $grCode = $this->nextReceiptCode();
 
             foreach ($transfer->items as $item) {
 

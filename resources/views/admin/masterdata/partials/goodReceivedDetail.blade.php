@@ -10,7 +10,8 @@
 
         foreach ($photosAll as $p) {
             $tag = strtolower(trim($p->type ?? ($p->kind ?? ($p->caption ?? ''))));
-            $isDamaged = strpos($tag, 'dam') !== false || strpos($tag, 'bad') !== false || strpos($tag, 'rusak') !== false;
+            $isDamaged =
+                strpos($tag, 'dam') !== false || strpos($tag, 'bad') !== false || strpos($tag, 'rusak') !== false;
 
             if ($isDamaged) {
                 $damagedPhotos->push($p);
@@ -23,7 +24,7 @@
             $goodPhotos = $photosAll;
         }
 
-        $typeLabel = match($first->gr_type) {
+        $typeLabel = match ($first->gr_type) {
             'po' => ['text' => 'PURCHASE ORDER', 'color' => 'primary'],
             'request_stock' => ['text' => 'REQUEST STOCK', 'color' => 'warning'],
             'gr_transfer' => ['text' => 'WAREHOUSE TRANSFER', 'color' => 'info'],
@@ -37,23 +38,33 @@
         // Source Ref
         $sourceRef = $first->code;
         if($first->gr_type == 'po' && $po) {
-            $sourceRef = $po->po_code;
+            $sourceRef = $po->po_code . ' / ' . $first->code;
         } elseif($first->gr_type == 'request_stock' && $first->request) {
-            $sourceRef = $first->request->code;
+            $sourceRef = $first->request->code . ' / ' . $first->code;
         } elseif($first->gr_type == 'gr_transfer' && $first->warehouseTransfer) {
-            $sourceRef = $first->warehouseTransfer->code;
+            $sourceRef = $first->warehouseTransfer->transfer_code . ' / ' . $first->code;
+        } elseif($first->gr_type == 'gr_return' && $first->salesReturn) {
+            $sourceRef = ($first->salesReturn->return_code ?? $first->salesReturn->code ?? '-') . ' / ' . $first->code;
         }
 
         // Hitung Subtotal Berdasarkan Barang Bagus (Actual Payable)
-        $subtotal = $displayItems->sum(function($item) use ($receipts) {
-             // ✅ Filter presisi: cocokkan produk, gudang, dan request
-             $itemGood = $receipts->filter(function($r) use ($item) {
-                 return $r->product_id == $item->product_id && 
-                        ($r->warehouse_id ?: null) == ($item->warehouse_id ?: null) &&
-                        ($r->request_id ?: null) == ($item->request_id ?: null);
-             })->sum('qty_good');
-             
-             return (int)$itemGood * (float)($item->unit_price ?? 0);
+        $subtotal = $displayItems->sum(function ($item) use ($receipts, $first) {
+            $itemGood = $receipts
+                ->filter(function ($r) use ($item, $first) {
+                    if ($r->product_id != $item->product_id) {
+                        return false;
+                    }
+
+                    if ($first->gr_type === 'po') {
+                        return ($r->warehouse_id ?? null) == ($item->warehouse_id ?? null) &&
+                            ($r->request_id ?? null) == ($item->request_id ?? null);
+                    }
+
+                    return true;
+                })
+                ->sum('qty_good');
+
+            return (int) $itemGood * (float) ($item->unit_price ?? 0);
         });
         $discountTotal = $po ? (float) ($po->discount_total ?? 0) : 0;
         $grandTotal = $subtotal - $discountTotal;
@@ -66,9 +77,10 @@
     <div class="modal-header border-0 pb-1 d-flex justify-content-between align-items-center">
         <h5 class="modal-title fw-bold">
             Goods Received Details
-            <span class="badge bg-label-{{ $typeLabel['color'] }} ms-2" style="font-size: 0.7rem;">{{ $typeLabel['text'] }}</span>
+            <span class="badge bg-label-{{ $typeLabel['color'] }} ms-2"
+                style="font-size: 0.7rem;">{{ $typeLabel['text'] }}</span>
         </h5>
-        
+
         <div class="d-flex align-items-center gap-3">
             @php
                 $printUrl = route('goodreceived.print', ['code' => $first->code]);
@@ -79,7 +91,8 @@
             <a href="{{ $printUrl }}" target="_blank" class="btn btn-sm btn-outline-secondary">
                 <i class="bx bx-printer me-1"></i> Print GR
             </a>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" style="margin: 0;"></button>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"
+                style="margin: 0;"></button>
         </div>
     </div>
 
@@ -111,7 +124,8 @@
                     @endphp
                     <tr>
                         <th class="ps-0" style="width:140px;">Supplier / Entity</th>
-                        <td class="ps-0">{{ $first->supplier?->name ?? ($po->supplier?->name ?? $fallbackSupplier) }}</td>
+                        <td class="ps-0">{{ $first->supplier?->name ?? ($po->supplier?->name ?? $fallbackSupplier) }}
+                        </td>
                     </tr>
                     <tr>
                         <th class="ps-0">Total Items</th>
@@ -169,12 +183,19 @@
                         @php
                             $price = $item->unit_price ?? 0;
                             // ✅ Filter presisi per baris item
-                            $itemReceipts = $receipts->filter(function($r) use ($item) {
-                                return $r->product_id == $item->product_id && 
-                                       ($r->warehouse_id ?: null) == ($item->warehouse_id ?: null) &&
-                                       ($r->request_id ?: null) == ($item->request_id ?: null);
+                            $itemReceipts = $receipts->filter(function ($r) use ($item, $first) {
+                                if ($r->product_id != $item->product_id) {
+                                    return false;
+                                }
+
+                                if ($first->gr_type === 'po') {
+                                    return ($r->warehouse_id ?? null) == ($item->warehouse_id ?? null) &&
+                                        ($r->request_id ?? null) == ($item->request_id ?? null);
+                                }
+
+                                return true;
                             });
-                            
+
                             $itemGood = $itemReceipts->sum('qty_good');
                             $itemDamaged = $itemReceipts->sum('qty_damaged');
                             $subtotalItem = (int) $itemGood * (float) $price;

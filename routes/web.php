@@ -64,6 +64,7 @@ Route::middleware(['auth', 'active'])->group(function () {
 
     // ===== Dashboard (cukup auth, TIDAK pakai menu:xxx) =====
     Route::get('/admin',     [AdminController::class, 'index'])->name('admin.dashboard');
+    Route::get('/admin/top-selling', [AdminController::class, 'topSelling'])->name('admin.dashboard.top_selling');
     Route::get('/warehouse', [WarehouseDashboardController::class, 'index'])->name('warehouse.dashboard');
     Route::get('/warehouse/dashboard/kpi', [WarehouseDashboardController::class, 'kpiAjax'])->name('wh.dashboard.kpi');
     Route::get('/warehouse/dashboard/inout', [WarehouseDashboardController::class, 'inoutAjax'])
